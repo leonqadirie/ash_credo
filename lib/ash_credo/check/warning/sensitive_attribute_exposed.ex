@@ -19,13 +19,13 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
       ]
     ]
 
-  alias AshCredo.Check.Helpers
+  alias AshCredo.Introspection
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Helpers.ash_resource?(source_file) do
+    if Introspection.ash_resource?(source_file) do
       sensitive_names = Params.get(params, :sensitive_names, __MODULE__)
-      attrs_ast = Helpers.find_dsl_section(source_file, :attributes)
+      attrs_ast = Introspection.find_dsl_section(source_file, :attributes)
       check_sensitive_attrs(attrs_ast, sensitive_names, source_file, params)
     else
       []
@@ -38,9 +38,9 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
     issue_meta = IssueMeta.for(source_file, params)
 
     attrs_ast
-    |> Helpers.find_entities(:attribute)
+    |> Introspection.find_entities(:attribute)
     |> Enum.filter(&sensitive_name?(&1, sensitive_names))
-    |> Enum.reject(&Helpers.entity_has_opt?(&1, :sensitive?, true))
+    |> Enum.reject(&Introspection.entity_has_opt?(&1, :sensitive?, true))
     |> Enum.map(fn {_name, meta, [attr_name | _]} ->
       format_issue(issue_meta,
         message: "Attribute `#{attr_name}` looks sensitive but is not marked `sensitive?: true`.",

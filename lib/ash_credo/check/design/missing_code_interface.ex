@@ -15,15 +15,15 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
       """
     ]
 
-  alias AshCredo.Check.Helpers
+  alias AshCredo.Introspection
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Helpers.ash_resource?(source_file) do
-      actions_ast = Helpers.find_dsl_section(source_file, :actions)
-      has_code_interface = Helpers.find_dsl_section(source_file, :code_interface) != nil
+    if Introspection.ash_resource?(source_file) do
+      actions_ast = Introspection.find_dsl_section(source_file, :actions)
+      has_code_interface = Introspection.find_dsl_section(source_file, :code_interface) != nil
 
-      if Helpers.actions_defined?(actions_ast) and not has_code_interface do
+      if Introspection.actions_defined?(actions_ast) and not has_code_interface do
         issue_meta = IssueMeta.for(source_file, params)
 
         [

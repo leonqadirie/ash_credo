@@ -20,14 +20,14 @@ defmodule AshCredo.Check.Design.MissingIdentity do
       ]
     ]
 
-  alias AshCredo.Check.Helpers
+  alias AshCredo.Introspection
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Helpers.ash_resource?(source_file) do
+    if Introspection.ash_resource?(source_file) do
       candidates = Params.get(params, :identity_candidates, __MODULE__)
-      attrs_ast = Helpers.find_dsl_section(source_file, :attributes)
-      identities_ast = Helpers.find_dsl_section(source_file, :identities)
+      attrs_ast = Introspection.find_dsl_section(source_file, :attributes)
+      identities_ast = Introspection.find_dsl_section(source_file, :identities)
       check_identities(attrs_ast, identities_ast, candidates, source_file, params)
     else
       []
@@ -41,9 +41,9 @@ defmodule AshCredo.Check.Design.MissingIdentity do
     identity_fields = collect_identity_fields(identities_ast)
 
     attrs_ast
-    |> Helpers.find_entities(:attribute)
-    |> Enum.filter(fn attr -> Helpers.entity_name(attr) in candidates end)
-    |> Enum.reject(fn attr -> Helpers.entity_name(attr) in identity_fields end)
+    |> Introspection.find_entities(:attribute)
+    |> Enum.filter(fn attr -> Introspection.entity_name(attr) in candidates end)
+    |> Enum.reject(fn attr -> Introspection.entity_name(attr) in identity_fields end)
     |> Enum.map(fn {_, meta, [name | _]} ->
       format_issue(issue_meta,
         message: "Attribute `#{name}` likely needs a uniqueness identity.",
@@ -57,7 +57,7 @@ defmodule AshCredo.Check.Design.MissingIdentity do
 
   defp collect_identity_fields(identities_ast) do
     identities_ast
-    |> Helpers.find_entities(:identity)
+    |> Introspection.find_entities(:identity)
     |> Enum.flat_map(fn
       {:identity, _, [_name, fields | _]} when is_list(fields) -> fields
       _ -> []

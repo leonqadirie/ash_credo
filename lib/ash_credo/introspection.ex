@@ -1,4 +1,4 @@
-defmodule AshCredo.Check.Helpers do
+defmodule AshCredo.Introspection do
   @moduledoc "Utilities for inspecting Ash DSL constructs in source AST."
 
   @action_entities ~w(create read update destroy action)a

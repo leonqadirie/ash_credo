@@ -16,14 +16,14 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
       """
     ]
 
-  alias AshCredo.Check.Helpers
+  alias AshCredo.Introspection
 
   @action_types ~w(create read update destroy)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Helpers.ash_resource?(source_file) do
-      actions_ast = Helpers.find_dsl_section(source_file, :actions)
+    if Introspection.ash_resource?(source_file) do
+      actions_ast = Introspection.find_dsl_section(source_file, :actions)
       check_primary_actions(actions_ast, source_file, params)
     else
       []
@@ -37,7 +37,7 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
 
     @action_types
     |> Enum.flat_map(fn type ->
-      actions = Helpers.find_entities(actions_ast, type)
+      actions = Introspection.find_entities(actions_ast, type)
       types_missing_primary(type, actions)
     end)
     |> Enum.map(fn {type, actions} ->
@@ -59,6 +59,6 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
   end
 
   defp has_primary_opt?(entity_ast) do
-    Helpers.entity_has_opt?(entity_ast, :primary?, true)
+    Introspection.entity_has_opt?(entity_ast, :primary?, true)
   end
 end

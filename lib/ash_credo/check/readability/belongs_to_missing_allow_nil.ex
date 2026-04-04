@@ -13,12 +13,12 @@ defmodule AshCredo.Check.Readability.BelongsToMissingAllowNil do
       """
     ]
 
-  alias AshCredo.Check.Helpers
+  alias AshCredo.Introspection
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Helpers.ash_resource?(source_file) do
-      rels_ast = Helpers.find_dsl_section(source_file, :relationships)
+    if Introspection.ash_resource?(source_file) do
+      rels_ast = Introspection.find_dsl_section(source_file, :relationships)
       check_belongs_to(rels_ast, source_file, params)
     else
       []
@@ -31,7 +31,7 @@ defmodule AshCredo.Check.Readability.BelongsToMissingAllowNil do
     issue_meta = IssueMeta.for(source_file, params)
 
     rels_ast
-    |> Helpers.find_entities(:belongs_to)
+    |> Introspection.find_entities(:belongs_to)
     |> Enum.reject(&has_allow_nil_opt?/1)
     |> Enum.map(fn {_, meta, [name | _]} ->
       format_issue(issue_meta,
@@ -43,6 +43,6 @@ defmodule AshCredo.Check.Readability.BelongsToMissingAllowNil do
   end
 
   defp has_allow_nil_opt?(entity_ast) do
-    Helpers.entity_has_opt_key?(entity_ast, :allow_nil?)
+    Introspection.entity_has_opt_key?(entity_ast, :allow_nil?)
   end
 end

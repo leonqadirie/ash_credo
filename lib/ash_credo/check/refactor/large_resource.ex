@@ -15,11 +15,11 @@ defmodule AshCredo.Check.Refactor.LargeResource do
       ]
     ]
 
-  alias AshCredo.Check.Helpers
+  alias AshCredo.Introspection
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Helpers.ash_resource?(source_file) do
+    if Introspection.ash_resource?(source_file) do
       max = Params.get(params, :max_lines, __MODULE__)
       line_count = source_file |> SourceFile.lines() |> length()
 

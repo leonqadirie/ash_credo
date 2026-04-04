@@ -12,13 +12,13 @@ defmodule AshCredo.Check.Warning.MissingDomain do
       """
     ]
 
-  alias AshCredo.Check.Helpers
+  alias AshCredo.Introspection
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    case Helpers.use_opts(source_file, [:Ash, :Resource]) do
+    case Introspection.use_opts(source_file, [:Ash, :Resource]) do
       opts when is_list(opts) ->
-        if Keyword.has_key?(opts, :domain) or Helpers.embedded_resource?(source_file) do
+        if Keyword.has_key?(opts, :domain) or Introspection.embedded_resource?(source_file) do
           []
         else
           issue_meta = IssueMeta.for(source_file, params)
@@ -27,7 +27,7 @@ defmodule AshCredo.Check.Warning.MissingDomain do
             format_issue(issue_meta,
               message: "Resource is missing a `domain:` option in `use Ash.Resource`.",
               trigger: "use Ash.Resource",
-              line_no: Helpers.find_use_line(source_file, [:Ash, :Resource])
+              line_no: Introspection.find_use_line(source_file, [:Ash, :Resource])
             )
           ]
         end

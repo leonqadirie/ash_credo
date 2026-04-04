@@ -14,12 +14,12 @@ defmodule AshCredo.Check.Warning.EmptyDomain do
       """
     ]
 
-  alias AshCredo.Check.Helpers
+  alias AshCredo.Introspection
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Helpers.ash_domain?(source_file) do
-      resources_ast = Helpers.find_dsl_section(source_file, :resources)
+    if Introspection.ash_domain?(source_file) do
+      resources_ast = Introspection.find_dsl_section(source_file, :resources)
 
       cond do
         is_nil(resources_ast) ->
@@ -29,18 +29,18 @@ defmodule AshCredo.Check.Warning.EmptyDomain do
             format_issue(issue_meta,
               message: "Domain has no `resources` block.",
               trigger: "use Ash.Domain",
-              line_no: Helpers.find_use_line(source_file, [:Ash, :Domain]) || 1
+              line_no: Introspection.find_use_line(source_file, [:Ash, :Domain]) || 1
             )
           ]
 
-        Helpers.section_body(resources_ast) == [] ->
+        Introspection.section_body(resources_ast) == [] ->
           issue_meta = IssueMeta.for(source_file, params)
 
           [
             format_issue(issue_meta,
               message: "Domain has an empty `resources` block.",
               trigger: "resources",
-              line_no: Helpers.section_line(resources_ast)
+              line_no: Introspection.section_line(resources_ast)
             )
           ]
 

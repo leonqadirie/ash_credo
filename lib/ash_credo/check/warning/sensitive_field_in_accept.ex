@@ -23,15 +23,15 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
       ]
     ]
 
-  alias AshCredo.Check.Helpers
+  alias AshCredo.Introspection
 
   @writable_action_types ~w(create update)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Helpers.ash_resource?(source_file) do
+    if Introspection.ash_resource?(source_file) do
       dangerous = Params.get(params, :dangerous_fields, __MODULE__)
-      actions_ast = Helpers.find_dsl_section(source_file, :actions)
+      actions_ast = Introspection.find_dsl_section(source_file, :actions)
       check_actions(actions_ast, dangerous, source_file, params)
     else
       []
@@ -45,7 +45,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
 
     action_issues =
       @writable_action_types
-      |> Enum.flat_map(&Helpers.find_entities(actions_ast, &1))
+      |> Enum.flat_map(&Introspection.find_entities(actions_ast, &1))
       |> Enum.flat_map(&find_dangerous_accepts(&1, dangerous, issue_meta))
 
     defaults_issues = find_dangerous_defaults(actions_ast, dangerous, issue_meta)
@@ -56,13 +56,13 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
 
   defp find_dangerous_accepts(entity_ast, dangerous, issue_meta) do
     body_fields =
-      case Helpers.find_in_body(entity_ast, :accept) do
+      case Introspection.find_in_body(entity_ast, :accept) do
         {:accept, meta, [fields]} when is_list(fields) -> {fields, meta}
         _ -> nil
       end
 
     inline_fields =
-      case Keyword.get(Helpers.entity_opts(entity_ast), :accept) do
+      case Keyword.get(Introspection.entity_opts(entity_ast), :accept) do
         fields when is_list(fields) ->
           {_, meta, _} = entity_ast
           {fields, meta}
@@ -89,13 +89,13 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
 
   defp find_dangerous_defaults(actions_ast, dangerous, issue_meta) do
     actions_ast
-    |> Helpers.find_entities(:defaults)
+    |> Introspection.find_entities(:defaults)
     |> Enum.flat_map(&dangerous_fields_in_default(&1, dangerous, issue_meta))
   end
 
   defp dangerous_fields_in_default({:defaults, meta, _} = defaults_ast, dangerous, issue_meta) do
     defaults_ast
-    |> Helpers.default_action_entries()
+    |> Introspection.default_action_entries()
     |> Enum.flat_map(fn
       {type, fields} when type in @writable_action_types and is_list(fields) ->
         fields
@@ -115,7 +115,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
   end
 
   defp find_dangerous_default_accept(actions_ast, dangerous, issue_meta) do
-    case Helpers.find_in_body(actions_ast, :default_accept) do
+    case Introspection.find_in_body(actions_ast, :default_accept) do
       {:default_accept, meta, [fields]} when is_list(fields) ->
         fields
         |> Enum.filter(&(&1 in dangerous))

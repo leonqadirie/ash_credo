@@ -17,15 +17,15 @@ defmodule AshCredo.Check.Warning.MissingPrimaryKey do
       """
     ]
 
-  alias AshCredo.Check.Helpers
+  alias AshCredo.Introspection
 
   @primary_key_entities ~w(uuid_primary_key uuid_v7_primary_key integer_primary_key)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Helpers.ash_resource?(source_file) and Helpers.has_data_layer?(source_file) do
-      attrs_ast = Helpers.find_dsl_section(source_file, :attributes)
-      rels_ast = Helpers.find_dsl_section(source_file, :relationships)
+    if Introspection.ash_resource?(source_file) and Introspection.has_data_layer?(source_file) do
+      attrs_ast = Introspection.find_dsl_section(source_file, :attributes)
+      rels_ast = Introspection.find_dsl_section(source_file, :relationships)
       check_for_primary_key(attrs_ast, rels_ast, source_file, params)
     else
       []
@@ -43,8 +43,8 @@ defmodule AshCredo.Check.Warning.MissingPrimaryKey do
           message: "Resource is missing a primary key.",
           trigger: "attributes",
           line_no:
-            Helpers.section_line(attrs_ast) ||
-              Helpers.find_use_line(source_file, [:Ash, :Resource]) || 1
+            Introspection.section_line(attrs_ast) ||
+              Introspection.find_use_line(source_file, [:Ash, :Resource]) || 1
         )
       ]
     end
@@ -53,22 +53,22 @@ defmodule AshCredo.Check.Warning.MissingPrimaryKey do
   defp has_pk_entity?(nil), do: false
 
   defp has_pk_entity?(attrs_ast) do
-    Enum.any?(@primary_key_entities, &Helpers.has_entity?(attrs_ast, &1))
+    Enum.any?(@primary_key_entities, &Introspection.has_entity?(attrs_ast, &1))
   end
 
   defp has_pk_attribute?(nil), do: false
 
   defp has_pk_attribute?(attrs_ast) do
     attrs_ast
-    |> Helpers.find_entities(:attribute)
-    |> Enum.any?(&Helpers.entity_has_opt?(&1, :primary_key?, true))
+    |> Introspection.find_entities(:attribute)
+    |> Enum.any?(&Introspection.entity_has_opt?(&1, :primary_key?, true))
   end
 
   defp has_pk_relationship?(nil), do: false
 
   defp has_pk_relationship?(rels_ast) do
     rels_ast
-    |> Helpers.find_entities(:belongs_to)
-    |> Enum.any?(&Helpers.entity_has_opt?(&1, :primary_key?, true))
+    |> Introspection.find_entities(:belongs_to)
+    |> Enum.any?(&Introspection.entity_has_opt?(&1, :primary_key?, true))
   end
 end

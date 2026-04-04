@@ -13,12 +13,12 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
       """
     ]
 
-  alias AshCredo.Check.Helpers
+  alias AshCredo.Introspection
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Helpers.ash_resource?(source_file) and Helpers.has_data_layer?(source_file) do
-      attrs_ast = Helpers.find_dsl_section(source_file, :attributes)
+    if Introspection.ash_resource?(source_file) and Introspection.has_data_layer?(source_file) do
+      attrs_ast = Introspection.find_dsl_section(source_file, :attributes)
       check_for_timestamps(attrs_ast, source_file, params)
     else
       []
@@ -32,17 +32,17 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
       format_issue(issue_meta,
         message: "Resource is missing timestamps.",
         trigger: "attributes",
-        line_no: Helpers.find_use_line(source_file, [:Ash, :Resource]) || 1
+        line_no: Introspection.find_use_line(source_file, [:Ash, :Resource]) || 1
       )
     ]
   end
 
   defp check_for_timestamps(attrs_ast, source_file, params) do
-    has_timestamps = Helpers.has_entity?(attrs_ast, :timestamps)
+    has_timestamps = Introspection.has_entity?(attrs_ast, :timestamps)
 
     has_manual_timestamps =
-      Helpers.has_entity?(attrs_ast, :create_timestamp) and
-        Helpers.has_entity?(attrs_ast, :update_timestamp)
+      Introspection.has_entity?(attrs_ast, :create_timestamp) and
+        Introspection.has_entity?(attrs_ast, :update_timestamp)
 
     if has_timestamps or has_manual_timestamps do
       []
@@ -53,7 +53,7 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
         format_issue(issue_meta,
           message: "Resource is missing timestamps.",
           trigger: "attributes",
-          line_no: Helpers.section_line(attrs_ast)
+          line_no: Introspection.section_line(attrs_ast)
         )
       ]
     end

@@ -21,17 +21,17 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
       """
     ]
 
-  alias AshCredo.Check.Helpers
+  alias AshCredo.Introspection
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Helpers.ash_resource?(source_file) do
+    if Introspection.ash_resource?(source_file) do
       authorizer_line = find_authorizer_line(source_file)
 
-      policies_ast = Helpers.find_dsl_section(source_file, :policies)
+      policies_ast = Introspection.find_dsl_section(source_file, :policies)
 
       has_policies =
-        Helpers.find_all_policy_entities(policies_ast) != []
+        Introspection.find_all_policy_entities(policies_ast) != []
 
       if authorizer_line != nil and not has_policies do
         issue_meta = IssueMeta.for(source_file, params)
