@@ -50,23 +50,23 @@ mix credo
 
 | Check | Category | Priority | Description |
 |---|---|---|---|
-| `SensitiveAttributeExposed` | Warning | High | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
 | `AuthorizerWithoutPolicies` | Warning | High | Detects resources with `Ash.Policy.Authorizer` but no policies defined |
-| `OverlyPermissivePolicy` | Warning | High | Flags unscoped `authorize_if always()` policies |
-| `WildcardAcceptOnAction` | Warning | High | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
-| `SensitiveFieldInAccept` | Warning | High | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
-| `PinnedTimeInExpression` | Warning | High | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
 | `MissingChangeWrapper` | Warning | High | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions |
 | `MissingPrimaryKey` | Warning | High | Ensures resources with data layers have a primary key |
+| `OverlyPermissivePolicy` | Warning | High | Flags unscoped `authorize_if always()` policies |
+| `PinnedTimeInExpression` | Warning | High | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
+| `SensitiveAttributeExposed` | Warning | High | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
+| `SensitiveFieldInAccept` | Warning | High | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
+| `WildcardAcceptOnAction` | Warning | High | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
+| `EmptyDomain` | Warning | Normal | Flags domains with no resources registered |
 | `MissingDomain` | Warning | Normal | Ensures non-embedded resources set the `domain:` option |
 | `NoActions` | Warning | Normal | Flags resources with data layers but no actions defined |
-| `EmptyDomain` | Warning | Normal | Flags domains with no resources registered |
-| `MissingTimestamps` | Design | Normal | Suggests adding `timestamps()` to persisted resources |
-| `MissingPrimaryAction` | Design | Normal | Flags missing `primary?: true` when multiple actions of the same type exist |
-| `MissingIdentity` | Design | Normal | Suggests identities for attributes like `email`, `username`, `slug` |
-| `BelongsToMissingAllowNil` | Readability | Normal | Flags `belongs_to` without explicit `allow_nil?` |
 | `MissingCodeInterface` | Design | Low | Suggests adding a `code_interface` for resources with actions |
+| `MissingIdentity` | Design | Normal | Suggests identities for attributes like `email`, `username`, `slug` |
+| `MissingPrimaryAction` | Design | Normal | Flags missing `primary?: true` when multiple actions of the same type exist |
+| `MissingTimestamps` | Design | Normal | Suggests adding `timestamps()` to persisted resources |
 | `ActionMissingDescription` | Readability | Low | Flags actions without a `description` |
+| `BelongsToMissingAllowNil` | Readability | Normal | Flags `belongs_to` without explicit `allow_nil?` |
 | `LargeResource` | Refactor | Low | Flags resource files exceeding 400 lines |
 
 ## Configuration
@@ -111,10 +111,10 @@ The following checks accept custom parameters:
 
 | Check | Parameter | Default | Description |
 |---|---|---|---|
+| `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
 | `Refactor.LargeResource` | `max_lines` | `400` | Maximum line count before triggering |
 | `Warning.SensitiveAttributeExposed` | `sensitive_names` | `~w(password hashed_password password_hash token secret api_key private_key ssn)a` | Attribute names to flag when not marked `sensitive?: true` |
 | `Warning.SensitiveFieldInAccept` | `dangerous_fields` | `~w(is_admin admin permissions api_key secret_key)a` | Field names to flag when found in `accept` lists |
-| `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
 
 ## Contributing
 
