@@ -24,22 +24,26 @@ defmodule AshCredo do
         name: "default",
         checks: %{
           extra: [
-            {AshCredo.Check.Ash.MissingPrimaryKey, []},
-            {AshCredo.Check.Ash.MissingTimestamps, []},
-            {AshCredo.Check.Ash.SensitiveAttributeExposed, []},
-            {AshCredo.Check.Ash.AuthorizerWithoutPolicies, []},
-            {AshCredo.Check.Ash.MissingPrimaryAction, []},
-            {AshCredo.Check.Ash.OverlyPermissivePolicy, []},
-            {AshCredo.Check.Ash.WildcardAcceptOnAction, []},
-            {AshCredo.Check.Ash.SensitiveFieldInAccept, []},
-            {AshCredo.Check.Ash.MissingDomain, []},
-            {AshCredo.Check.Ash.NoActions, []},
-            {AshCredo.Check.Ash.EmptyDomain, []},
-            {AshCredo.Check.Ash.MissingIdentity, []},
-            {AshCredo.Check.Ash.BelongsToMissingAllowNil, []},
-            {AshCredo.Check.Ash.MissingCodeInterface, []},
-            {AshCredo.Check.Ash.LargeResource, []},
-            {AshCredo.Check.Ash.ActionMissingDescription, []}
+            # Warning
+            {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
+            {AshCredo.Check.Warning.EmptyDomain, []},
+            {AshCredo.Check.Warning.MissingDomain, []},
+            {AshCredo.Check.Warning.MissingPrimaryKey, []},
+            {AshCredo.Check.Warning.NoActions, []},
+            {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
+            {AshCredo.Check.Warning.SensitiveAttributeExposed, []},
+            {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
+            {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
+            # Design
+            {AshCredo.Check.Design.MissingCodeInterface, []},
+            {AshCredo.Check.Design.MissingIdentity, []},
+            {AshCredo.Check.Design.MissingPrimaryAction, []},
+            {AshCredo.Check.Design.MissingTimestamps, []},
+            # Readability
+            {AshCredo.Check.Readability.ActionMissingDescription, []},
+            {AshCredo.Check.Readability.BelongsToMissingAllowNil, []},
+            # Refactor
+            {AshCredo.Check.Refactor.LargeResource, []}
           ]
         }
       }

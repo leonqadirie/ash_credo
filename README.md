@@ -50,11 +50,11 @@ mix credo
 
 | Check | Category | Priority | Description |
 |---|---|---|---|
-| `SensitiveAttributeExposed` | Security | High | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
-| `AuthorizerWithoutPolicies` | Security | High | Detects resources with `Ash.Policy.Authorizer` but no policies defined |
-| `OverlyPermissivePolicy` | Security | High | Flags unscoped `authorize_if always()` policies |
-| `WildcardAcceptOnAction` | Security | High | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
-| `SensitiveFieldInAccept` | Security | High | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
+| `SensitiveAttributeExposed` | Warning | High | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
+| `AuthorizerWithoutPolicies` | Warning | High | Detects resources with `Ash.Policy.Authorizer` but no policies defined |
+| `OverlyPermissivePolicy` | Warning | High | Flags unscoped `authorize_if always()` policies |
+| `WildcardAcceptOnAction` | Warning | High | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
+| `SensitiveFieldInAccept` | Warning | High | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
 | `MissingPrimaryKey` | Warning | High | Ensures resources with data layers have a primary key |
 | `MissingDomain` | Warning | Normal | Ensures non-embedded resources set the `domain:` option |
 | `NoActions` | Warning | Normal | Flags resources with data layers but no actions defined |
@@ -80,17 +80,17 @@ Checks are registered under the `extra` category. You can disable individual che
       checks: %{
         extra: [
           # Disable a check
-          {AshCredo.Check.Ash.MissingCodeInterface, false},
+          {AshCredo.Check.Design.MissingCodeInterface, false},
 
           # Customise parameters
-          {AshCredo.Check.Ash.LargeResource, [max_lines: 250]},
-          {AshCredo.Check.Ash.SensitiveAttributeExposed, [
+          {AshCredo.Check.Refactor.LargeResource, [max_lines: 250]},
+          {AshCredo.Check.Warning.SensitiveAttributeExposed, [
             sensitive_names: ~w(password token secret api_key)a
           ]},
-          {AshCredo.Check.Ash.SensitiveFieldInAccept, [
+          {AshCredo.Check.Warning.SensitiveFieldInAccept, [
             dangerous_fields: ~w(is_admin role permissions)a
           ]},
-          {AshCredo.Check.Ash.MissingIdentity, [
+          {AshCredo.Check.Design.MissingIdentity, [
             identity_candidates: ~w(email username slug)a
           ]}
         ]
