@@ -103,16 +103,16 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
-  describe "find_entities/2" do
+  describe "entities/2" do
     test "finds all attribute entities" do
       sf = source_file(@ash_resource)
       attrs = Introspection.find_dsl_section(sf, :attributes)
-      attributes = Introspection.find_entities(attrs, :attribute)
+      attributes = Introspection.entities(attrs, :attribute)
       assert length(attributes) == 2
     end
 
     test "returns empty list for nil section" do
-      assert [] == Introspection.find_entities(nil, :attribute)
+      assert [] == Introspection.entities(nil, :attribute)
     end
   end
 
@@ -152,7 +152,7 @@ defmodule AshCredo.IntrospectionTest do
     test "extracts inline keyword opts" do
       sf = source_file(@ash_resource)
       attrs = Introspection.find_dsl_section(sf, :attributes)
-      [title | _] = Introspection.find_entities(attrs, :attribute)
+      [title | _] = Introspection.entities(attrs, :attribute)
       opts = Introspection.entity_opts(title)
       assert Keyword.has_key?(opts, :public?)
     end
@@ -171,7 +171,7 @@ defmodule AshCredo.IntrospectionTest do
     test "detects inline opt value" do
       sf = source_file(@ash_resource)
       attrs = Introspection.find_dsl_section(sf, :attributes)
-      [title | _] = Introspection.find_entities(attrs, :attribute)
+      [title | _] = Introspection.entities(attrs, :attribute)
       assert Introspection.entity_has_opt?(title, :public?, true)
       refute Introspection.entity_has_opt?(title, :public?, false)
     end
@@ -179,7 +179,7 @@ defmodule AshCredo.IntrospectionTest do
     test "detects opt in do block" do
       sf = source_file(@ash_resource)
       actions = Introspection.find_dsl_section(sf, :actions)
-      [create] = Introspection.find_entities(actions, :create)
+      [create] = Introspection.entities(actions, :create)
       assert Introspection.entity_has_opt?(create, :primary?, true)
     end
   end
@@ -188,7 +188,7 @@ defmodule AshCredo.IntrospectionTest do
     test "detects inline opt key" do
       sf = source_file(@ash_resource)
       attrs = Introspection.find_dsl_section(sf, :attributes)
-      [title | _] = Introspection.find_entities(attrs, :attribute)
+      [title | _] = Introspection.entities(attrs, :attribute)
       assert Introspection.entity_has_opt_key?(title, :public?)
       refute Introspection.entity_has_opt_key?(title, :sensitive?)
     end
@@ -196,7 +196,7 @@ defmodule AshCredo.IntrospectionTest do
     test "detects opt key in do block" do
       sf = source_file(@ash_resource)
       actions = Introspection.find_dsl_section(sf, :actions)
-      [create] = Introspection.find_entities(actions, :create)
+      [create] = Introspection.entities(actions, :create)
       assert Introspection.entity_has_opt_key?(create, :primary?)
     end
   end
@@ -205,7 +205,7 @@ defmodule AshCredo.IntrospectionTest do
     test "extracts atom name from entity" do
       sf = source_file(@ash_resource)
       actions = Introspection.find_dsl_section(sf, :actions)
-      [create] = Introspection.find_entities(actions, :create)
+      [create] = Introspection.entities(actions, :create)
       assert :create == Introspection.entity_name(create)
     end
 
@@ -218,14 +218,14 @@ defmodule AshCredo.IntrospectionTest do
     test "finds call inside do block" do
       sf = source_file(@ash_resource)
       actions = Introspection.find_dsl_section(sf, :actions)
-      [create] = Introspection.find_entities(actions, :create)
+      [create] = Introspection.entities(actions, :create)
       assert {:accept, _, _} = Introspection.find_in_body(create, :accept)
     end
 
     test "returns nil when call not found" do
       sf = source_file(@ash_resource)
       actions = Introspection.find_dsl_section(sf, :actions)
-      [create] = Introspection.find_entities(actions, :create)
+      [create] = Introspection.entities(actions, :create)
       assert nil == Introspection.find_in_body(create, :description)
     end
 
@@ -302,7 +302,7 @@ defmodule AshCredo.IntrospectionTest do
 
       sf = source_file(source)
       actions = Introspection.find_dsl_section(sf, :actions)
-      [defaults] = Introspection.find_entities(actions, :defaults)
+      [defaults] = Introspection.entities(actions, :defaults)
       entries = Introspection.default_action_entries(defaults)
       assert :read in entries
       assert {:create, :*} in entries
@@ -327,13 +327,13 @@ defmodule AshCredo.IntrospectionTest do
 
       sf = source_file(source)
       actions = Introspection.find_dsl_section(sf, :actions)
-      [defaults] = Introspection.find_entities(actions, :defaults)
+      [defaults] = Introspection.entities(actions, :defaults)
       assert Introspection.default_action_has_value?(defaults, :create, :*)
       refute Introspection.default_action_has_value?(defaults, :update, :*)
     end
   end
 
-  describe "find_all_policy_entities/1" do
+  describe "policy_entities/1" do
     test "finds top-level policy and bypass" do
       source = """
       defmodule Foo do
@@ -353,7 +353,7 @@ defmodule AshCredo.IntrospectionTest do
 
       sf = source_file(source)
       policies = Introspection.find_dsl_section(sf, :policies)
-      entities = Introspection.find_all_policy_entities(policies)
+      entities = Introspection.policy_entities(policies)
       assert length(entities) == 2
     end
 
@@ -374,12 +374,12 @@ defmodule AshCredo.IntrospectionTest do
 
       sf = source_file(source)
       policies = Introspection.find_dsl_section(sf, :policies)
-      entities = Introspection.find_all_policy_entities(policies)
+      entities = Introspection.policy_entities(policies)
       assert length(entities) == 1
     end
 
     test "returns empty list for nil" do
-      assert [] == Introspection.find_all_policy_entities(nil)
+      assert [] == Introspection.policy_entities(nil)
     end
   end
 
@@ -387,7 +387,7 @@ defmodule AshCredo.IntrospectionTest do
     test "extracts body statements from entity with do block" do
       sf = source_file(@ash_resource)
       actions = Introspection.find_dsl_section(sf, :actions)
-      [create] = Introspection.find_entities(actions, :create)
+      [create] = Introspection.entities(actions, :create)
       body = Introspection.entity_body(create)
       assert is_list(body)
       refute Enum.empty?(body)

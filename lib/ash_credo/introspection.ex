@@ -99,13 +99,13 @@ defmodule AshCredo.Introspection do
   def has_entity?(nil, _), do: false
 
   @doc "Returns all entity AST nodes of a given name within a section."
-  def find_entities({_section, _, [[do: body]]}, entity_name) do
+  def entities({_section, _, [[do: body]]}, entity_name) do
     body
     |> flatten_block()
     |> Enum.filter(&match?({^entity_name, _, _}, &1))
   end
 
-  def find_entities(nil, _), do: []
+  def entities(nil, _), do: []
 
   @doc "Returns the line number of a section's opening."
   def section_line({_name, meta, _}), do: meta[:line]
@@ -152,7 +152,7 @@ defmodule AshCredo.Introspection do
   @doc "Returns true if an `actions` section defines any actions, explicitly or via defaults."
   def actions_defined?(actions_ast) do
     Enum.any?(@action_entities, &has_entity?(actions_ast, &1)) or
-      Enum.any?(find_entities(actions_ast, :defaults), &(default_action_entries(&1) != []))
+      Enum.any?(entities(actions_ast, :defaults), &(default_action_entries(&1) != []))
   end
 
   @doc "Extracts the action entries declared in a `defaults [...]` call."
@@ -170,13 +170,13 @@ defmodule AshCredo.Introspection do
   end
 
   @doc "Returns all `policy` and `bypass` entities from a policies section, including inside `policy_group`."
-  def find_all_policy_entities(policies_ast) do
+  def policy_entities(policies_ast) do
     top_level =
-      find_entities(policies_ast, :policy) ++ find_entities(policies_ast, :bypass)
+      entities(policies_ast, :policy) ++ entities(policies_ast, :bypass)
 
     nested =
       policies_ast
-      |> find_entities(:policy_group)
+      |> entities(:policy_group)
       |> Enum.flat_map(fn group ->
         group_body = entity_body(group)
         filter_entities(group_body, :policy) ++ filter_entities(group_body, :bypass)

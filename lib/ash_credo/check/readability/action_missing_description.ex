@@ -35,7 +35,7 @@ defmodule AshCredo.Check.Readability.ActionMissingDescription do
     issue_meta = IssueMeta.for(source_file, params)
 
     @action_types
-    |> Enum.flat_map(&Introspection.find_entities(actions_ast, &1))
+    |> Enum.flat_map(&Introspection.entities(actions_ast, &1))
     |> Enum.reject(&has_description?/1)
     |> Enum.map(fn {type, meta, _} = entity ->
       name = Introspection.entity_name(entity)

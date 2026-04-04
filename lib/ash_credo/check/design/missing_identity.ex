@@ -41,7 +41,7 @@ defmodule AshCredo.Check.Design.MissingIdentity do
     identity_fields = collect_identity_fields(identities_ast)
 
     attrs_ast
-    |> Introspection.find_entities(:attribute)
+    |> Introspection.entities(:attribute)
     |> Enum.filter(fn attr -> Introspection.entity_name(attr) in candidates end)
     |> Enum.reject(fn attr -> Introspection.entity_name(attr) in identity_fields end)
     |> Enum.map(fn {_, meta, [name | _]} ->
@@ -57,7 +57,7 @@ defmodule AshCredo.Check.Design.MissingIdentity do
 
   defp collect_identity_fields(identities_ast) do
     identities_ast
-    |> Introspection.find_entities(:identity)
+    |> Introspection.entities(:identity)
     |> Enum.flat_map(fn
       {:identity, _, [_name, fields | _]} when is_list(fields) -> fields
       _ -> []

@@ -60,7 +60,7 @@ defmodule AshCredo.Check.Warning.MissingPrimaryKey do
 
   defp has_pk_attribute?(attrs_ast) do
     attrs_ast
-    |> Introspection.find_entities(:attribute)
+    |> Introspection.entities(:attribute)
     |> Enum.any?(&Introspection.entity_has_opt?(&1, :primary_key?, true))
   end
 
@@ -68,7 +68,7 @@ defmodule AshCredo.Check.Warning.MissingPrimaryKey do
 
   defp has_pk_relationship?(rels_ast) do
     rels_ast
-    |> Introspection.find_entities(:belongs_to)
+    |> Introspection.entities(:belongs_to)
     |> Enum.any?(&Introspection.entity_has_opt?(&1, :primary_key?, true))
   end
 end

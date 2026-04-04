@@ -52,7 +52,7 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
 
   defp explicit_action_issues(actions_ast, issue_meta) do
     @writable_action_types
-    |> Enum.flat_map(&Introspection.find_entities(actions_ast, &1))
+    |> Enum.flat_map(&Introspection.entities(actions_ast, &1))
     |> Enum.filter(&has_wildcard_accept?/1)
     |> Enum.map(fn {type, meta, _} = entity ->
       format_issue(issue_meta,
@@ -66,7 +66,7 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
 
   defp default_action_issues(actions_ast, issue_meta) do
     actions_ast
-    |> Introspection.find_entities(:defaults)
+    |> Introspection.entities(:defaults)
     |> Enum.flat_map(&wildcard_default_actions/1)
     |> Enum.map(fn {type, meta} ->
       format_issue(issue_meta,

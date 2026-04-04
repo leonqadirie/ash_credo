@@ -31,7 +31,7 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
       policies_ast = Introspection.find_dsl_section(source_file, :policies)
 
       has_policies =
-        Introspection.find_all_policy_entities(policies_ast) != []
+        Introspection.policy_entities(policies_ast) != []
 
       if authorizer_line != nil and not has_policies do
         issue_meta = IssueMeta.for(source_file, params)

@@ -38,7 +38,7 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
     issue_meta = IssueMeta.for(source_file, params)
 
     policies_ast
-    |> Introspection.find_all_policy_entities()
+    |> Introspection.policy_entities()
     |> Enum.filter(&has_authorize_if_always?/1)
     |> Enum.reject(&scoped_policy?/1)
     |> Enum.map(fn {kind, meta, _} ->

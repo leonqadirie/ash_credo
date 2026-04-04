@@ -31,7 +31,7 @@ defmodule AshCredo.Check.Readability.BelongsToMissingAllowNil do
     issue_meta = IssueMeta.for(source_file, params)
 
     rels_ast
-    |> Introspection.find_entities(:belongs_to)
+    |> Introspection.entities(:belongs_to)
     |> Enum.reject(&has_allow_nil_opt?/1)
     |> Enum.map(fn {_, meta, [name | _]} ->
       format_issue(issue_meta,

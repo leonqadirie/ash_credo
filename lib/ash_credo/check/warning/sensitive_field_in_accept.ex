@@ -45,7 +45,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
 
     action_issues =
       @writable_action_types
-      |> Enum.flat_map(&Introspection.find_entities(actions_ast, &1))
+      |> Enum.flat_map(&Introspection.entities(actions_ast, &1))
       |> Enum.flat_map(&find_dangerous_accepts(&1, dangerous, issue_meta))
 
     defaults_issues = find_dangerous_defaults(actions_ast, dangerous, issue_meta)
@@ -89,7 +89,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
 
   defp find_dangerous_defaults(actions_ast, dangerous, issue_meta) do
     actions_ast
-    |> Introspection.find_entities(:defaults)
+    |> Introspection.entities(:defaults)
     |> Enum.flat_map(&dangerous_fields_in_default(&1, dangerous, issue_meta))
   end
 

@@ -37,7 +37,7 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
 
     @action_types
     |> Enum.flat_map(fn type ->
-      actions = Introspection.find_entities(actions_ast, type)
+      actions = Introspection.entities(actions_ast, type)
       types_missing_primary(type, actions)
     end)
     |> Enum.map(fn {type, actions} ->

@@ -38,7 +38,7 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
     issue_meta = IssueMeta.for(source_file, params)
 
     attrs_ast
-    |> Introspection.find_entities(:attribute)
+    |> Introspection.entities(:attribute)
     |> Enum.filter(&sensitive_name?(&1, sensitive_names))
     |> Enum.reject(&Introspection.entity_has_opt?(&1, :sensitive?, true))
     |> Enum.map(fn {_name, meta, [attr_name | _]} ->
