@@ -45,6 +45,6 @@ defmodule AshCredo.MixProject do
   end
 
   defp docs do
-    [main: "readme", source_ref: "v#{@version}", extras: ["README.md"]]
+    [main: "readme", source_ref: "v#{@version}", extras: ["README.md", "LICENSE"]]
   end
 end
