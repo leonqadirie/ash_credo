@@ -5,7 +5,7 @@ Unofficial static code analysis checks for the [Ash Framework](https://ash-hq.or
 AshCredo detects common anti-patterns, security pitfalls, and missing best practices in your Ash resources and domains by analysing unexpanded source AST.
 
 > [!WARNING]
-> This project is experimental, not yet released on Hex, and might break frequently. Install directly from GitHub.
+> This project is experimental and might break frequently.
 
 ## Installation
 
