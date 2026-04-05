@@ -143,6 +143,99 @@ defmodule AshCredo.Introspection do
 
   def module_line_count(_), do: nil
 
+  @doc "Returns top-level alias mappings in a module body, optionally only those declared before a given line."
+  def module_aliases(module_ast, opts \\ [])
+
+  def module_aliases({:defmodule, _, _} = module_ast, opts) do
+    before_line = Keyword.get(opts, :before_line)
+
+    Enum.reduce(module_body(module_ast), [], fn
+      {:alias, meta, _} = alias_ast, aliases ->
+        if alias_before?(meta[:line], before_line) do
+          alias_entries(alias_ast) ++ aliases
+        else
+          aliases
+        end
+
+      _stmt, aliases ->
+        aliases
+    end)
+  end
+
+  def module_aliases(_, _opts), do: []
+
+  @doc "Expands module alias segments using alias mappings returned by module_aliases/2."
+  def expand_alias(segments, aliases) when is_list(segments) and is_list(aliases) do
+    matches =
+      Enum.filter(aliases, fn
+        {alias_segments, _target_segments} -> List.starts_with?(segments, alias_segments)
+        _ -> false
+      end)
+
+    case Enum.max_by(
+           matches,
+           fn {alias_segments, _target_segments} -> length(alias_segments) end,
+           fn -> nil end
+         ) do
+      {alias_segments, target_segments} ->
+        target_segments ++ Enum.drop(segments, length(alias_segments))
+
+      nil ->
+        segments
+    end
+  end
+
+  def expand_alias(other, _aliases), do: other
+
+  defp alias_before?(_alias_line, nil), do: true
+
+  defp alias_before?(alias_line, before_line)
+       when is_integer(alias_line) and is_integer(before_line), do: alias_line < before_line
+
+  defp alias_before?(_alias_line, _before_line), do: false
+
+  defp alias_entries({:alias, _, [{:__aliases__, _, target_segments}]}) do
+    [{default_alias(target_segments), target_segments}]
+  end
+
+  defp alias_entries({:alias, _, [{:__aliases__, _, target_segments}, opts]})
+       when is_list(opts) do
+    case Keyword.get(opts, :as) do
+      {:__aliases__, _, alias_segments} -> [{alias_segments, target_segments}]
+      _ -> [{default_alias(target_segments), target_segments}]
+    end
+  end
+
+  defp alias_entries(
+         {:alias, _, [{{:., _, [{:__aliases__, _, prefix_segments}, :{}]}, _, suffix_aliases}]}
+       )
+       when is_list(suffix_aliases) do
+    grouped_alias_entries(prefix_segments, suffix_aliases)
+  end
+
+  defp alias_entries(
+         {:alias, _,
+          [{{:., _, [{:__aliases__, _, prefix_segments}, :{}]}, _, suffix_aliases}, opts]}
+       )
+       when is_list(suffix_aliases) and is_list(opts) do
+    grouped_alias_entries(prefix_segments, suffix_aliases)
+  end
+
+  defp alias_entries(_), do: []
+
+  defp grouped_alias_entries(prefix_segments, suffix_aliases) do
+    Enum.flat_map(suffix_aliases, fn
+      {:__aliases__, _, suffix_segments} ->
+        target_segments = prefix_segments ++ suffix_segments
+        [{default_alias(target_segments), target_segments}]
+
+      _ ->
+        []
+    end)
+  end
+
+  defp default_alias(target_segments), do: [List.last(target_segments)]
+
   @doc "Extracts keyword options from an entity AST call."
   def entity_opts({_name, _meta, args}) when is_list(args) do
     args

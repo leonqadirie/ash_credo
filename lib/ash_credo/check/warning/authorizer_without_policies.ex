@@ -23,6 +23,8 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
 
   alias AshCredo.Introspection
 
+  @policy_authorizer [:Ash, :Policy, :Authorizer]
+
   @impl true
   def run(%SourceFile{} = source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
@@ -56,17 +58,22 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
       opts when is_list(opts) ->
         opts
         |> Keyword.get(:authorizers)
-        |> authorizer_line()
+        |> authorizer_line(module_ast)
 
       _ ->
         nil
     end
   end
 
-  defp authorizer_line(authorizers) when is_list(authorizers) do
-    Enum.find_value(authorizers, &authorizer_line/1)
+  defp authorizer_line(authorizers, module_ast) when is_list(authorizers) do
+    Enum.find_value(authorizers, &authorizer_line(&1, module_ast))
   end
 
-  defp authorizer_line({:__aliases__, meta, [:Ash, :Policy, :Authorizer]}), do: meta[:line]
-  defp authorizer_line(_), do: nil
+  defp authorizer_line({:__aliases__, meta, segments}, module_ast) do
+    aliases = Introspection.module_aliases(module_ast, before_line: meta[:line])
+
+    if Introspection.expand_alias(segments, aliases) == @policy_authorizer, do: meta[:line]
+  end
+
+  defp authorizer_line(_, _), do: nil
 end

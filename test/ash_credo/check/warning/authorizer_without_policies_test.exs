@@ -122,6 +122,63 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPoliciesTest do
     assert [] = run_check(AuthorizerWithoutPolicies, source)
   end
 
+  test "reports issue when authorizer is referenced through a local alias" do
+    source = """
+    defmodule MyApp.Post do
+      alias Ash.Policy.Authorizer
+
+      use Ash.Resource,
+        domain: MyApp.Blog,
+        authorizers: [Authorizer]
+
+      attributes do
+        uuid_primary_key :id
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizerWithoutPolicies, source)
+    assert issue.message =~ "no policies defined"
+  end
+
+  test "reports issue when authorizer is referenced through an explicit alias" do
+    source = """
+    defmodule MyApp.Post do
+      alias Ash.Policy.Authorizer, as: PolicyAuthorizer
+
+      use Ash.Resource,
+        domain: MyApp.Blog,
+        authorizers: [PolicyAuthorizer]
+
+      attributes do
+        uuid_primary_key :id
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizerWithoutPolicies, source)
+    assert issue.message =~ "no policies defined"
+  end
+
+  test "reports issue when authorizer is referenced through a grouped alias" do
+    source = """
+    defmodule MyApp.Post do
+      alias Ash.Policy.{Authorizer, Check}
+
+      use Ash.Resource,
+        domain: MyApp.Blog,
+        authorizers: [Authorizer]
+
+      attributes do
+        uuid_primary_key :id
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizerWithoutPolicies, source)
+    assert issue.message =~ "no policies defined"
+  end
+
   test "does not match Ash.Policy.Authorizer references in regular function bodies" do
     source = """
     defmodule MyApp.Post do

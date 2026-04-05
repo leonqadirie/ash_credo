@@ -213,6 +213,64 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "module_aliases/2" do
+    test "returns top-level aliases declared before the given line" do
+      source = """
+      defmodule MyApp.Post do
+        alias Ash.Policy.Authorizer
+        alias Ash.Policy.{Bypass, Check}
+
+        use Ash.Resource, authorizers: [Authorizer, Bypass]
+      end
+      """
+
+      [resource] = Introspection.resource_modules(source_file(source))
+      aliases = Introspection.module_aliases(resource, before_line: 5)
+
+      assert {[:Authorizer], [:Ash, :Policy, :Authorizer]} in aliases
+      assert {[:Bypass], [:Ash, :Policy, :Bypass]} in aliases
+      assert {[:Check], [:Ash, :Policy, :Check]} in aliases
+    end
+
+    test "ignores aliases declared inside nested modules" do
+      source = """
+      defmodule MyApp.Post do
+        alias Ash.Policy.Authorizer
+
+        defmodule Draft do
+          alias Ash.Policy.Check, as: DraftCheck
+        end
+
+        use Ash.Resource, authorizers: [Authorizer]
+      end
+      """
+
+      [resource] = Introspection.resource_modules(source_file(source))
+      aliases = Introspection.module_aliases(resource, before_line: 8)
+
+      assert {[:Authorizer], [:Ash, :Policy, :Authorizer]} in aliases
+
+      refute Enum.any?(aliases, fn {alias_segments, _target_segments} ->
+               alias_segments == [:DraftCheck]
+             end)
+    end
+  end
+
+  describe "expand_alias/2" do
+    test "expands explicit and prefix aliases" do
+      aliases = [
+        {[:PolicyAuthorizer], [:Ash, :Policy, :Authorizer]},
+        {[:Policy], [:Ash, :Policy]}
+      ]
+
+      assert [:Ash, :Policy, :Authorizer] ==
+               Introspection.expand_alias([:PolicyAuthorizer], aliases)
+
+      assert [:Ash, :Policy, :Authorizer] ==
+               Introspection.expand_alias([:Policy, :Authorizer], aliases)
+    end
+  end
+
   describe "entity_opts/1" do
     test "extracts inline keyword opts" do
       sf = source_file(@ash_resource)
