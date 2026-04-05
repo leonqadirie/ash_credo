@@ -38,29 +38,22 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
   def run(%SourceFile{} = source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
 
-    Credo.Code.prewalk(
-      source_file,
-      fn
-        {_call, meta, args} = ast, acc when is_list(args) ->
-          if Introspection.ash_api_call?(ast) and has_authorize_false?(args) do
-            issue =
-              format_issue(issue_meta,
-                message:
-                  "`authorize?: false` bypasses authorization. Use `actor: %{system: :context_name}` with a bypass policy instead.",
-                trigger: "authorize?: false",
-                line_no: meta[:line]
-              )
-
-            {ast, [issue | acc]}
-          else
-            {ast, acc}
-          end
-
-        ast, acc ->
-          {ast, acc}
-      end,
-      []
-    )
+    source_file
+    |> Introspection.ash_api_calls()
+    |> Enum.flat_map(fn {_call, meta, args} ->
+      if has_authorize_false?(args) do
+        [
+          format_issue(issue_meta,
+            message:
+              "`authorize?: false` bypasses authorization. Use `actor: %{system: :context_name}` with a bypass policy instead.",
+            trigger: "authorize?: false",
+            line_no: meta[:line]
+          )
+        ]
+      else
+        []
+      end
+    end)
   end
 
   defp has_authorize_false?(args) do
