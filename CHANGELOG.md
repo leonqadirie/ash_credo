@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Remove number in readme (#4)
 - Update changelog
 - Update changelog
+- Update changelog
 
 ### Features
 
