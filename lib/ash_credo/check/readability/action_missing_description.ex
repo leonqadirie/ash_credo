@@ -21,19 +21,20 @@ defmodule AshCredo.Check.Readability.ActionMissingDescription do
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Introspection.ash_resource?(source_file) do
-      actions_ast = Introspection.find_dsl_section(source_file, :actions)
-      check_descriptions(actions_ast, source_file, params)
-    else
-      []
-    end
-  end
-
-  defp check_descriptions(nil, _source_file, _params), do: []
-
-  defp check_descriptions(actions_ast, source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
 
+    source_file
+    |> Introspection.resource_modules()
+    |> Enum.flat_map(fn module_ast ->
+      module_ast
+      |> Introspection.find_dsl_section(:actions)
+      |> check_descriptions(issue_meta)
+    end)
+  end
+
+  defp check_descriptions(nil, _issue_meta), do: []
+
+  defp check_descriptions(actions_ast, issue_meta) do
     @action_types
     |> Enum.flat_map(&Introspection.entities(actions_ast, &1))
     |> Enum.reject(&has_description?/1)

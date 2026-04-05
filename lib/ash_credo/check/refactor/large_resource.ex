@@ -19,26 +19,28 @@ defmodule AshCredo.Check.Refactor.LargeResource do
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Introspection.ash_resource?(source_file) do
-      max = Params.get(params, :max_lines, __MODULE__)
-      line_count = source_file |> SourceFile.lines() |> length()
+    max = Params.get(params, :max_lines, __MODULE__)
+    issue_meta = IssueMeta.for(source_file, params)
 
-      if line_count > max do
-        issue_meta = IssueMeta.for(source_file, params)
+    source_file
+    |> Introspection.resource_modules()
+    |> Enum.flat_map(&resource_size_issues(&1, max, issue_meta))
+  end
 
+  defp resource_size_issues(module_ast, max, issue_meta) do
+    case Introspection.module_line_count(module_ast) do
+      line_count when is_integer(line_count) and line_count > max ->
         [
           format_issue(issue_meta,
             message:
               "Resource is #{line_count} lines (limit: #{max}). Consider splitting with fragments.",
             trigger: "#{line_count} lines",
-            line_no: 1
+            line_no: Introspection.find_use_line(module_ast, [:Ash, :Resource]) || 1
           )
         ]
-      else
+
+      _ ->
         []
-      end
-    else
-      []
     end
   end
 end

@@ -18,37 +18,37 @@ defmodule AshCredo.Check.Warning.EmptyDomain do
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Introspection.ash_domain?(source_file) do
-      resources_ast = Introspection.find_dsl_section(source_file, :resources)
+    issue_meta = IssueMeta.for(source_file, params)
 
-      cond do
-        is_nil(resources_ast) ->
-          issue_meta = IssueMeta.for(source_file, params)
+    source_file
+    |> Introspection.domain_modules()
+    |> Enum.flat_map(&empty_domain_issues(&1, issue_meta))
+  end
 
-          [
-            format_issue(issue_meta,
-              message: "Domain has no `resources` block.",
-              trigger: "use Ash.Domain",
-              line_no: Introspection.find_use_line(source_file, [:Ash, :Domain]) || 1
-            )
-          ]
+  defp empty_domain_issues(module_ast, issue_meta) do
+    resources_ast = Introspection.find_dsl_section(module_ast, :resources)
 
-        Introspection.section_body(resources_ast) == [] ->
-          issue_meta = IssueMeta.for(source_file, params)
+    cond do
+      is_nil(resources_ast) ->
+        [
+          format_issue(issue_meta,
+            message: "Domain has no `resources` block.",
+            trigger: "use Ash.Domain",
+            line_no: Introspection.find_use_line(module_ast, [:Ash, :Domain]) || 1
+          )
+        ]
 
-          [
-            format_issue(issue_meta,
-              message: "Domain has an empty `resources` block.",
-              trigger: "resources",
-              line_no: Introspection.section_line(resources_ast)
-            )
-          ]
+      Introspection.section_body(resources_ast) == [] ->
+        [
+          format_issue(issue_meta,
+            message: "Domain has an empty `resources` block.",
+            trigger: "resources",
+            line_no: Introspection.section_line(resources_ast)
+          )
+        ]
 
-        true ->
-          []
-      end
-    else
-      []
+      true ->
+        []
     end
   end
 end

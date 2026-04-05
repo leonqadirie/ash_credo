@@ -19,23 +19,27 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Introspection.ash_resource?(source_file) do
-      actions_ast = Introspection.find_dsl_section(source_file, :actions)
-      has_code_interface = Introspection.find_dsl_section(source_file, :code_interface) != nil
+    issue_meta = IssueMeta.for(source_file, params)
 
-      if Introspection.actions_defined?(actions_ast) and not has_code_interface do
-        issue_meta = IssueMeta.for(source_file, params)
+    source_file
+    |> Introspection.resource_modules()
+    |> Enum.flat_map(&missing_code_interface_issues(&1, issue_meta))
+  end
 
-        [
-          format_issue(issue_meta,
-            message: "Resource has actions but no `code_interface` block.",
-            trigger: "actions",
-            line_no: 1
-          )
-        ]
-      else
-        []
-      end
+  defp missing_code_interface_issues(module_ast, issue_meta) do
+    actions_ast = Introspection.find_dsl_section(module_ast, :actions)
+    has_code_interface = Introspection.find_dsl_section(module_ast, :code_interface) != nil
+
+    if Introspection.actions_defined?(actions_ast) and not has_code_interface do
+      [
+        format_issue(issue_meta,
+          message: "Resource has actions but no `code_interface` block.",
+          trigger: "actions",
+          line_no:
+            Introspection.section_line(actions_ast) ||
+              Introspection.find_use_line(module_ast, [:Ash, :Resource]) || 1
+        )
+      ]
     else
       []
     end

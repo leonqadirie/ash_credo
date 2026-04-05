@@ -55,6 +55,33 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "resource_modules/1" do
+    test "returns resource modules in file order" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog, data_layer: AshPostgres.DataLayer
+
+        attributes do
+          uuid_primary_key :id
+        end
+
+        defmodule Draft do
+          use Ash.Resource, domain: MyApp.Blog
+
+          actions do
+            read :read
+          end
+        end
+      end
+      """
+
+      [outer, inner] = Introspection.resource_modules(source_file(source))
+
+      assert Introspection.has_data_layer?(outer)
+      refute Introspection.has_data_layer?(inner)
+    end
+  end
+
   describe "ash_domain?/1" do
     test "returns true for Ash.Domain modules" do
       assert Introspection.ash_domain?(source_file(@ash_domain))
@@ -81,6 +108,27 @@ defmodule AshCredo.IntrospectionTest do
     test "returns nil for missing section" do
       sf = source_file(@ash_resource)
       assert nil == Introspection.find_dsl_section(sf, :policies)
+    end
+
+    test "only inspects the given module body" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+
+        defmodule Draft do
+          use Ash.Resource, domain: MyApp.Blog
+
+          actions do
+            read :read
+          end
+        end
+      end
+      """
+
+      [outer, inner] = Introspection.resource_modules(source_file(source))
+
+      assert nil == Introspection.find_dsl_section(outer, :actions)
+      assert {:actions, _, _} = Introspection.find_dsl_section(inner, :actions)
     end
   end
 
@@ -134,6 +182,23 @@ defmodule AshCredo.IntrospectionTest do
       sf = source_file(source)
       assert [] == Introspection.use_opts(sf, [:Ash, :Resource])
     end
+
+    test "extracts opts from the specific module only" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog, data_layer: AshPostgres.DataLayer
+
+        defmodule Draft do
+          use Ash.Resource, domain: MyApp.Blog
+        end
+      end
+      """
+
+      [outer, inner] = Introspection.resource_modules(source_file(source))
+
+      assert Introspection.has_data_layer?(outer)
+      refute Introspection.has_data_layer?(inner)
+    end
   end
 
   describe "section_line/1" do
@@ -148,6 +213,64 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "module_aliases/2" do
+    test "returns top-level aliases declared before the given line" do
+      source = """
+      defmodule MyApp.Post do
+        alias Ash.Policy.Authorizer
+        alias Ash.Policy.{Bypass, Check}
+
+        use Ash.Resource, authorizers: [Authorizer, Bypass]
+      end
+      """
+
+      [resource] = Introspection.resource_modules(source_file(source))
+      aliases = Introspection.module_aliases(resource, before_line: 5)
+
+      assert {[:Authorizer], [:Ash, :Policy, :Authorizer]} in aliases
+      assert {[:Bypass], [:Ash, :Policy, :Bypass]} in aliases
+      assert {[:Check], [:Ash, :Policy, :Check]} in aliases
+    end
+
+    test "ignores aliases declared inside nested modules" do
+      source = """
+      defmodule MyApp.Post do
+        alias Ash.Policy.Authorizer
+
+        defmodule Draft do
+          alias Ash.Policy.Check, as: DraftCheck
+        end
+
+        use Ash.Resource, authorizers: [Authorizer]
+      end
+      """
+
+      [resource] = Introspection.resource_modules(source_file(source))
+      aliases = Introspection.module_aliases(resource, before_line: 8)
+
+      assert {[:Authorizer], [:Ash, :Policy, :Authorizer]} in aliases
+
+      refute Enum.any?(aliases, fn {alias_segments, _target_segments} ->
+               alias_segments == [:DraftCheck]
+             end)
+    end
+  end
+
+  describe "expand_alias/2" do
+    test "expands explicit and prefix aliases" do
+      aliases = [
+        {[:PolicyAuthorizer], [:Ash, :Policy, :Authorizer]},
+        {[:Policy], [:Ash, :Policy]}
+      ]
+
+      assert [:Ash, :Policy, :Authorizer] ==
+               Introspection.expand_alias([:PolicyAuthorizer], aliases)
+
+      assert [:Ash, :Policy, :Authorizer] ==
+               Introspection.expand_alias([:Policy, :Authorizer], aliases)
+    end
+  end
+
   describe "entity_opts/1" do
     test "extracts inline keyword opts" do
       sf = source_file(@ash_resource)
@@ -155,6 +278,20 @@ defmodule AshCredo.IntrospectionTest do
       [title | _] = Introspection.entities(attrs, :attribute)
       opts = Introspection.entity_opts(title)
       assert Keyword.has_key?(opts, :public?)
+    end
+
+    test "extracts inline opts when entity also has a do block" do
+      ast =
+        {:create, [line: 1], [:create, [primary?: true], [do: {:accept, [], [[:title]]}]]}
+
+      assert [primary?: true] == Introspection.entity_opts(ast)
+    end
+
+    test "extracts inline opts from merged do syntax" do
+      ast =
+        {:create, [line: 1], [:create, [primary?: true, do: {:accept, [], [[:title]]}]]}
+
+      assert [primary?: true] == Introspection.entity_opts(ast)
     end
 
     test "returns empty list for entity without opts" do
@@ -174,6 +311,13 @@ defmodule AshCredo.IntrospectionTest do
       [title | _] = Introspection.entities(attrs, :attribute)
       assert Introspection.entity_has_opt?(title, :public?, true)
       refute Introspection.entity_has_opt?(title, :public?, false)
+    end
+
+    test "detects inline opt value when entity also has a do block" do
+      ast =
+        {:create, [line: 1], [:create, [primary?: true], [do: {:accept, [], [[:title]]}]]}
+
+      assert Introspection.entity_has_opt?(ast, :primary?, true)
     end
 
     test "detects opt in do block" do

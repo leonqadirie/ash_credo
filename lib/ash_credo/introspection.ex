@@ -3,20 +3,17 @@ defmodule AshCredo.Introspection do
 
   @action_entities ~w(create read update destroy action)a
 
-  @doc "Returns true if the source file contains `use Ash.Resource`."
-  def ash_resource?(source_file) do
-    Credo.Code.prewalk(
-      source_file,
-      fn
-        {:use, _, [{:__aliases__, _, [:Ash, :Resource]} | _]} = ast, _acc ->
-          {ast, true}
+  @doc "Returns all modules in the source file that directly `use Ash.Resource`."
+  def resource_modules(source_file), do: modules_using(source_file, [:Ash, :Resource])
 
-        ast, acc ->
-          {ast, acc}
-      end,
-      false
-    )
-  end
+  @doc "Returns all modules in the source file that directly `use Ash.Domain`."
+  def domain_modules(source_file), do: modules_using(source_file, [:Ash, :Domain])
+
+  @doc "Returns true if the source file or module contains `use Ash.Resource`."
+  def ash_resource?({:defmodule, _, _} = module_ast),
+    do: module_uses?(module_ast, [:Ash, :Resource])
+
+  def ash_resource?(source_file), do: resource_modules(source_file) != []
 
   @doc "Returns true if the AST node is a call to an `Ash.*` module (e.g. `Ash.read!/2`)."
   def ash_api_call?({{:., _, [{:__aliases__, _, [:Ash | _]}, _fun]}, _meta, _args}), do: true
@@ -37,35 +34,32 @@ defmodule AshCredo.Introspection do
     )
   end
 
-  @doc "Returns true if the source file contains `use Ash.Domain`."
-  def ash_domain?(source_file) do
-    Credo.Code.prewalk(
-      source_file,
-      fn
-        {:use, _, [{:__aliases__, _, [:Ash, :Domain]} | _]} = ast, _acc ->
-          {ast, true}
-
-        ast, acc ->
-          {ast, acc}
-      end,
-      false
-    )
-  end
+  @doc "Returns true if the source file or module contains `use Ash.Domain`."
+  def ash_domain?({:defmodule, _, _} = module_ast), do: module_uses?(module_ast, [:Ash, :Domain])
+  def ash_domain?(source_file), do: domain_modules(source_file) != []
 
   @doc "Returns the value of the resource's `data_layer` option, if present."
-  def resource_data_layer(source_file) do
-    case use_opts(source_file, [:Ash, :Resource]) do
+  def resource_data_layer({:defmodule, _, _} = module_ast) do
+    case use_opts(module_ast, [:Ash, :Resource]) do
       opts when is_list(opts) -> Keyword.get(opts, :data_layer)
       _ -> nil
     end
   end
 
+  def resource_data_layer(source_file) do
+    case first_module_using(source_file, [:Ash, :Resource]) do
+      nil -> nil
+      module_ast -> resource_data_layer(module_ast)
+    end
+  end
+
   @doc "Returns true if the resource uses `data_layer: :embedded`."
-  def embedded_resource?(source_file), do: resource_data_layer(source_file) == :embedded
+  def embedded_resource?(resource_or_source),
+    do: resource_data_layer(resource_or_source) == :embedded
 
   @doc "Returns true if the resource declares a non-embedded data layer in `use Ash.Resource`."
-  def has_data_layer?(source_file) do
-    case resource_data_layer(source_file) do
+  def has_data_layer?(resource_or_source) do
+    case resource_data_layer(resource_or_source) do
       nil -> false
       :embedded -> false
       _ -> true
@@ -73,36 +67,38 @@ defmodule AshCredo.Introspection do
   end
 
   @doc "Extracts keyword options from a `use` call matching the given module aliases."
+  def use_opts({:defmodule, _, _} = module_ast, module_aliases) do
+    Enum.find_value(module_body(module_ast), nil, fn
+      {:use, _, [{:__aliases__, _, ^module_aliases}, opts]} when is_list(opts) ->
+        opts
+
+      {:use, _, [{:__aliases__, _, ^module_aliases}]} ->
+        []
+
+      _ ->
+        nil
+    end)
+  end
+
   def use_opts(source_file, module_aliases) do
-    Credo.Code.prewalk(
-      source_file,
-      fn
-        {:use, _, [{:__aliases__, _, ^module_aliases}, opts]} = ast, _acc when is_list(opts) ->
-          {ast, opts}
-
-        {:use, _, [{:__aliases__, _, ^module_aliases}]} = ast, _acc ->
-          {ast, []}
-
-        ast, acc ->
-          {ast, acc}
-      end,
-      nil
-    )
+    case first_module_using(source_file, module_aliases) do
+      nil -> nil
+      module_ast -> use_opts(module_ast, module_aliases)
+    end
   end
 
   @doc "Finds the AST node for a top-level DSL section (e.g. :attributes)."
-  def find_dsl_section(source_file, section_name) do
-    Credo.Code.prewalk(
-      source_file,
-      fn
-        {^section_name, _meta, [[do: _body]]} = ast, nil ->
-          {ast, ast}
+  def find_dsl_section({:defmodule, _, _} = module_ast, section_name) do
+    Enum.find(module_body(module_ast), fn
+      {^section_name, _meta, [[do: _body]]} -> true
+      _ -> false
+    end)
+  end
 
-        ast, acc ->
-          {ast, acc}
-      end,
-      nil
-    )
+  def find_dsl_section(source_file, section_name) do
+    source_file
+    |> all_modules()
+    |> Enum.find_value(&find_dsl_section(&1, section_name))
   end
 
   @doc "Checks if an entity call exists inside a section AST node."
@@ -130,15 +126,137 @@ defmodule AshCredo.Introspection do
   def section_line({_name, meta, _}), do: meta[:line]
   def section_line(_), do: nil
 
-  @doc "Extracts keyword options from an entity AST call."
-  def entity_opts({_name, _meta, args}) when is_list(args) do
-    case List.last(args) do
-      [{_key, _val} | _] = kw -> Keyword.delete(kw, :do)
-      _ -> []
+  @doc "Returns the flattened list of top-level statements inside a module body."
+  def module_body({:defmodule, _, [_name, [do: body]]}), do: flatten_block(body)
+  def module_body(_), do: []
+
+  @doc "Returns the line span of a module AST, if end metadata is available."
+  def module_line_count({:defmodule, meta, _}) do
+    with start_line when is_integer(start_line) <- meta[:line],
+         end_meta when is_list(end_meta) <- meta[:end],
+         end_line when is_integer(end_line) <- end_meta[:line] do
+      end_line - start_line + 1
+    else
+      _ -> nil
     end
   end
 
+  def module_line_count(_), do: nil
+
+  @doc "Returns top-level alias mappings in a module body, optionally only those declared before a given line."
+  def module_aliases(module_ast, opts \\ [])
+
+  def module_aliases({:defmodule, _, _} = module_ast, opts) do
+    before_line = Keyword.get(opts, :before_line)
+
+    Enum.reduce(module_body(module_ast), [], fn
+      {:alias, meta, _} = alias_ast, aliases ->
+        if alias_before?(meta[:line], before_line) do
+          alias_entries(alias_ast) ++ aliases
+        else
+          aliases
+        end
+
+      _stmt, aliases ->
+        aliases
+    end)
+  end
+
+  def module_aliases(_, _opts), do: []
+
+  @doc "Expands module alias segments using alias mappings returned by module_aliases/2."
+  def expand_alias(segments, aliases) when is_list(segments) and is_list(aliases) do
+    matches =
+      Enum.filter(aliases, fn
+        {alias_segments, _target_segments} -> List.starts_with?(segments, alias_segments)
+        _ -> false
+      end)
+
+    case Enum.max_by(
+           matches,
+           fn {alias_segments, _target_segments} -> length(alias_segments) end,
+           fn -> nil end
+         ) do
+      {alias_segments, target_segments} ->
+        target_segments ++ Enum.drop(segments, length(alias_segments))
+
+      nil ->
+        segments
+    end
+  end
+
+  def expand_alias(other, _aliases), do: other
+
+  defp alias_before?(_alias_line, nil), do: true
+
+  defp alias_before?(alias_line, before_line)
+       when is_integer(alias_line) and is_integer(before_line), do: alias_line < before_line
+
+  defp alias_before?(_alias_line, _before_line), do: false
+
+  defp alias_entries({:alias, _, [{:__aliases__, _, target_segments}]}) do
+    [{default_alias(target_segments), target_segments}]
+  end
+
+  defp alias_entries({:alias, _, [{:__aliases__, _, target_segments}, opts]})
+       when is_list(opts) do
+    case Keyword.get(opts, :as) do
+      {:__aliases__, _, alias_segments} -> [{alias_segments, target_segments}]
+      _ -> [{default_alias(target_segments), target_segments}]
+    end
+  end
+
+  defp alias_entries(
+         {:alias, _, [{{:., _, [{:__aliases__, _, prefix_segments}, :{}]}, _, suffix_aliases}]}
+       )
+       when is_list(suffix_aliases) do
+    grouped_alias_entries(prefix_segments, suffix_aliases)
+  end
+
+  defp alias_entries(
+         {:alias, _,
+          [{{:., _, [{:__aliases__, _, prefix_segments}, :{}]}, _, suffix_aliases}, opts]}
+       )
+       when is_list(suffix_aliases) and is_list(opts) do
+    grouped_alias_entries(prefix_segments, suffix_aliases)
+  end
+
+  defp alias_entries(_), do: []
+
+  defp grouped_alias_entries(prefix_segments, suffix_aliases) do
+    Enum.flat_map(suffix_aliases, fn
+      {:__aliases__, _, suffix_segments} ->
+        target_segments = prefix_segments ++ suffix_segments
+        [{default_alias(target_segments), target_segments}]
+
+      _ ->
+        []
+    end)
+  end
+
+  defp default_alias(target_segments), do: [List.last(target_segments)]
+
+  @doc "Extracts keyword options from an entity AST call."
+  def entity_opts({_name, _meta, args}) when is_list(args) do
+    args
+    |> Enum.reverse()
+    |> Enum.find_value([], &extract_entity_opts/1)
+  end
+
   def entity_opts(_), do: []
+
+  defp extract_entity_opts(kw) when is_list(kw) do
+    if Keyword.keyword?(kw), do: drop_do_opt(kw)
+  end
+
+  defp extract_entity_opts(_), do: nil
+
+  defp drop_do_opt(kw) do
+    case Keyword.delete(kw, :do) do
+      [] -> nil
+      opts -> opts
+    end
+  end
 
   @doc "Checks if a keyword option is set to a specific value in an entity's opts or do block."
   def entity_has_opt?(entity_ast, key, value) do
@@ -238,21 +356,55 @@ defmodule AshCredo.Introspection do
   def entity_name(_), do: nil
 
   @doc "Returns the line number of a `use` call for the given module aliases."
-  def find_use_line(source_file, module_aliases) do
-    Credo.Code.prewalk(
-      source_file,
-      fn
-        {:use, meta, [{:__aliases__, _, ^module_aliases} | _]} = ast, nil ->
-          {ast, meta[:line]}
+  def find_use_line({:defmodule, _, _} = module_ast, module_aliases) do
+    Enum.find_value(module_body(module_ast), fn
+      {:use, meta, [{:__aliases__, _, ^module_aliases} | _]} -> meta[:line]
+      _ -> nil
+    end)
+  end
 
-        ast, acc ->
-          {ast, acc}
-      end,
-      nil
-    )
+  def find_use_line(source_file, module_aliases) do
+    case first_module_using(source_file, module_aliases) do
+      nil -> nil
+      module_ast -> find_use_line(module_ast, module_aliases)
+    end
   end
 
   @doc false
   def flatten_block({:__block__, _, stmts}), do: stmts
   def flatten_block(other), do: [other]
+
+  defp modules_using(source_file, module_aliases) do
+    source_file
+    |> all_modules()
+    |> Enum.filter(&module_uses?(&1, module_aliases))
+  end
+
+  defp first_module_using(source_file, module_aliases) do
+    source_file
+    |> modules_using(module_aliases)
+    |> List.first()
+  end
+
+  defp all_modules(source_file) do
+    source_file
+    |> Credo.Code.prewalk(
+      fn
+        {:defmodule, _, [_name, [do: _body]]} = ast, acc ->
+          {ast, [ast | acc]}
+
+        ast, acc ->
+          {ast, acc}
+      end,
+      []
+    )
+    |> Enum.reverse()
+  end
+
+  defp module_uses?(module_ast, module_aliases) do
+    Enum.any?(module_body(module_ast), fn
+      {:use, _, [{:__aliases__, _, ^module_aliases} | _]} -> true
+      _ -> false
+    end)
+  end
 end

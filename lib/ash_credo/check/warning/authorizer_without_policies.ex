@@ -23,46 +23,57 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
 
   alias AshCredo.Introspection
 
+  @policy_authorizer [:Ash, :Policy, :Authorizer]
+
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Introspection.ash_resource?(source_file) do
-      authorizer_line = find_authorizer_line(source_file)
+    issue_meta = IssueMeta.for(source_file, params)
 
-      policies_ast = Introspection.find_dsl_section(source_file, :policies)
+    source_file
+    |> Introspection.resource_modules()
+    |> Enum.flat_map(&authorizer_without_policies_issues(&1, issue_meta))
+  end
 
-      has_policies =
-        Introspection.policy_entities(policies_ast) != []
+  defp authorizer_without_policies_issues(module_ast, issue_meta) do
+    authorizer_line = find_authorizer_line(module_ast)
+    policies_ast = Introspection.find_dsl_section(module_ast, :policies)
+    has_policies = Introspection.policy_entities(policies_ast) != []
 
-      if authorizer_line != nil and not has_policies do
-        issue_meta = IssueMeta.for(source_file, params)
-
-        [
-          format_issue(issue_meta,
-            message:
-              "Resource has Ash.Policy.Authorizer but no policies defined. All actions will be denied.",
-            trigger: "Ash.Policy.Authorizer",
-            line_no: authorizer_line
-          )
-        ]
-      else
-        []
-      end
+    if authorizer_line != nil and not has_policies do
+      [
+        format_issue(issue_meta,
+          message:
+            "Resource has Ash.Policy.Authorizer but no policies defined. All actions will be denied.",
+          trigger: "Ash.Policy.Authorizer",
+          line_no: authorizer_line
+        )
+      ]
     else
       []
     end
   end
 
-  defp find_authorizer_line(source_file) do
-    Credo.Code.prewalk(
-      source_file,
-      fn
-        {:__aliases__, meta, [:Ash, :Policy, :Authorizer]} = ast, nil ->
-          {ast, meta[:line]}
+  defp find_authorizer_line(module_ast) do
+    case Introspection.use_opts(module_ast, [:Ash, :Resource]) do
+      opts when is_list(opts) ->
+        opts
+        |> Keyword.get(:authorizers)
+        |> authorizer_line(module_ast)
 
-        ast, acc ->
-          {ast, acc}
-      end,
-      nil
-    )
+      _ ->
+        nil
+    end
   end
+
+  defp authorizer_line(authorizers, module_ast) when is_list(authorizers) do
+    Enum.find_value(authorizers, &authorizer_line(&1, module_ast))
+  end
+
+  defp authorizer_line({:__aliases__, meta, segments}, module_ast) do
+    aliases = Introspection.module_aliases(module_ast, before_line: meta[:line])
+
+    if Introspection.expand_alias(segments, aliases) == @policy_authorizer, do: meta[:line]
+  end
+
+  defp authorizer_line(_, _), do: nil
 end

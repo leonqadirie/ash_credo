@@ -35,23 +35,11 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Introspection.ash_resource?(source_file) do
-      issue_meta = IssueMeta.for(source_file, params)
+    issue_meta = IssueMeta.for(source_file, params)
 
-      Credo.Code.prewalk(
-        source_file,
-        fn
-          {:expr, _meta, [body]} = ast, acc ->
-            {ast, find_pinned_time_calls(body, issue_meta) ++ acc}
-
-          ast, acc ->
-            {ast, acc}
-        end,
-        []
-      )
-    else
-      []
-    end
+    source_file
+    |> Introspection.resource_modules()
+    |> Enum.flat_map(&module_expr_issues(&1, issue_meta))
   end
 
   defp find_pinned_time_calls(ast, issue_meta) do
@@ -76,6 +64,26 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
 
               {node, [issue | acc]}
           end
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    issues
+  end
+
+  defp module_expr_issues(module_ast, issue_meta) do
+    module_ast
+    |> Introspection.module_body()
+    |> Enum.reject(&match?({:defmodule, _, _}, &1))
+    |> Enum.flat_map(&expr_issues(&1, issue_meta))
+  end
+
+  defp expr_issues(ast, issue_meta) do
+    {_, issues} =
+      Macro.prewalk(ast, [], fn
+        {:expr, _meta, [body]} = node, acc ->
+          {node, find_pinned_time_calls(body, issue_meta) ++ acc}
 
         node, acc ->
           {node, acc}

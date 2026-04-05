@@ -46,6 +46,26 @@ defmodule AshCredo.Check.Design.MissingPrimaryActionTest do
     assert [] = run_check(MissingPrimaryAction, source)
   end
 
+  test "no issue when primary action is declared inline alongside a do block" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        create :create, primary?: true do
+          accept [:title]
+        end
+
+        create :import do
+          accept [:title, :body]
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(MissingPrimaryAction, source)
+  end
+
   test "no issue when only one action of each type" do
     source = """
     defmodule MyApp.Post do

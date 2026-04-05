@@ -23,20 +23,21 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Introspection.ash_resource?(source_file) do
-      sensitive_names = Params.get(params, :sensitive_names, __MODULE__)
-      attrs_ast = Introspection.find_dsl_section(source_file, :attributes)
-      check_sensitive_attrs(attrs_ast, sensitive_names, source_file, params)
-    else
-      []
-    end
-  end
-
-  defp check_sensitive_attrs(nil, _names, _source_file, _params), do: []
-
-  defp check_sensitive_attrs(attrs_ast, sensitive_names, source_file, params) do
+    sensitive_names = Params.get(params, :sensitive_names, __MODULE__)
     issue_meta = IssueMeta.for(source_file, params)
 
+    source_file
+    |> Introspection.resource_modules()
+    |> Enum.flat_map(fn module_ast ->
+      module_ast
+      |> Introspection.find_dsl_section(:attributes)
+      |> check_sensitive_attrs(sensitive_names, issue_meta)
+    end)
+  end
+
+  defp check_sensitive_attrs(nil, _names, _issue_meta), do: []
+
+  defp check_sensitive_attrs(attrs_ast, sensitive_names, issue_meta) do
     attrs_ast
     |> Introspection.entities(:attribute)
     |> Enum.filter(&sensitive_name?(&1, sensitive_names))
