@@ -45,8 +45,8 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
 
   defp check_actions(actions_ast, dangerous, issue_meta) do
     action_issues =
-      @writable_action_types
-      |> Enum.flat_map(&Introspection.entities(actions_ast, &1))
+      actions_ast
+      |> Introspection.action_entities(@writable_action_types)
       |> Enum.flat_map(&find_dangerous_accepts(&1, dangerous, issue_meta))
 
     defaults_issues = find_dangerous_defaults(actions_ast, dangerous, issue_meta)
@@ -56,35 +56,27 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
   end
 
   defp find_dangerous_accepts(entity_ast, dangerous, issue_meta) do
-    body_fields =
-      case Introspection.find_in_body(entity_ast, :accept) do
-        {:accept, meta, [fields]} when is_list(fields) -> {fields, meta}
-        _ -> nil
-      end
+    entity_ast
+    |> Introspection.option_occurrences(:accept)
+    |> Enum.flat_map(fn
+      {fields, line_no} when is_list(fields) ->
+        dangerous_accept_issues(fields, line_no, dangerous, issue_meta, "Action accepts")
 
-    inline_fields =
-      case Keyword.get(Introspection.entity_opts(entity_ast), :accept) do
-        fields when is_list(fields) ->
-          {_, meta, _} = entity_ast
-          {fields, meta}
+      _ ->
+        []
+    end)
+  end
 
-        _ ->
-          nil
-      end
-
-    [body_fields, inline_fields]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.flat_map(fn {fields, meta} ->
-      fields
-      |> Enum.filter(&(&1 in dangerous))
-      |> Enum.map(fn field ->
-        format_issue(issue_meta,
-          message:
-            "Action accepts `#{field}` which could allow privilege escalation. Use a `change` instead.",
-          trigger: "#{field}",
-          line_no: meta[:line]
-        )
-      end)
+  defp dangerous_accept_issues(fields, line_no, dangerous, issue_meta, prefix) do
+    fields
+    |> Enum.filter(&(&1 in dangerous))
+    |> Enum.map(fn field ->
+      format_issue(issue_meta,
+        message:
+          "#{prefix} `#{field}` which could allow privilege escalation. Use a `change` instead.",
+        trigger: "#{field}",
+        line_no: line_no
+      )
     end)
   end
 
@@ -116,21 +108,20 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
   end
 
   defp find_dangerous_default_accept(actions_ast, dangerous, issue_meta) do
-    case Introspection.find_in_body(actions_ast, :default_accept) do
-      {:default_accept, meta, [fields]} when is_list(fields) ->
-        fields
-        |> Enum.filter(&(&1 in dangerous))
-        |> Enum.map(fn field ->
-          format_issue(issue_meta,
-            message:
-              "`default_accept` includes `#{field}` which could allow privilege escalation. Use a `change` instead.",
-            trigger: "#{field}",
-            line_no: meta[:line]
-          )
-        end)
+    actions_ast
+    |> Introspection.option_occurrences(:default_accept)
+    |> Enum.flat_map(fn
+      {fields, line_no} when is_list(fields) ->
+        dangerous_accept_issues(
+          fields,
+          line_no,
+          dangerous,
+          issue_meta,
+          "`default_accept` includes"
+        )
 
       _ ->
         []
-    end
+    end)
   end
 end

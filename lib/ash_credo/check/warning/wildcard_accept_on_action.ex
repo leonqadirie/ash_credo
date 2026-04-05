@@ -41,19 +41,14 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
   end
 
   defp has_wildcard_accept?(entity_ast) do
-    in_body =
-      case Introspection.find_in_body(entity_ast, :accept) do
-        {:accept, _, [:*]} -> true
-        {:accept, _, [[:*]]} -> true
-        _ -> false
-      end
-
-    in_body or Keyword.get(Introspection.entity_opts(entity_ast), :accept) in [:*, [:*]]
+    entity_ast
+    |> Introspection.option_values(:accept)
+    |> Enum.any?(&wildcard_accept_value?/1)
   end
 
   defp explicit_action_issues(actions_ast, issue_meta) do
-    @writable_action_types
-    |> Enum.flat_map(&Introspection.entities(actions_ast, &1))
+    actions_ast
+    |> Introspection.action_entities(@writable_action_types)
     |> Enum.filter(&has_wildcard_accept?/1)
     |> Enum.map(fn {type, meta, _} = entity ->
       format_issue(issue_meta,
@@ -80,30 +75,17 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
   end
 
   defp default_accept_issues(actions_ast, issue_meta) do
-    case Introspection.find_in_body(actions_ast, :default_accept) do
-      {:default_accept, meta, [:*]} ->
-        [
-          format_issue(issue_meta,
-            message:
-              "`default_accept :*` accepts all public attributes on every action. Explicitly list accepted attributes.",
-            trigger: "default_accept :*",
-            line_no: meta[:line]
-          )
-        ]
-
-      {:default_accept, meta, [[:*]]} ->
-        [
-          format_issue(issue_meta,
-            message:
-              "`default_accept :*` accepts all public attributes on every action. Explicitly list accepted attributes.",
-            trigger: "default_accept :*",
-            line_no: meta[:line]
-          )
-        ]
-
-      _ ->
-        []
-    end
+    actions_ast
+    |> Introspection.option_occurrences(:default_accept)
+    |> Enum.filter(fn {value, _line_no} -> wildcard_accept_value?(value) end)
+    |> Enum.map(fn {_value, line_no} ->
+      format_issue(issue_meta,
+        message:
+          "`default_accept :*` accepts all public attributes on every action. Explicitly list accepted attributes.",
+        trigger: "default_accept :*",
+        line_no: line_no
+      )
+    end)
   end
 
   defp wildcard_default_actions({:defaults, meta, _} = defaults_ast) do
@@ -111,4 +93,6 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
     |> Enum.filter(&Introspection.default_action_has_value?(defaults_ast, &1, :*))
     |> Enum.map(&{&1, meta})
   end
+
+  defp wildcard_accept_value?(value), do: value in [:*, [:*]]
 end

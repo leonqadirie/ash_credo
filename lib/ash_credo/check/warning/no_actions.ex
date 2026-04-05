@@ -29,15 +29,17 @@ defmodule AshCredo.Check.Warning.NoActions do
   end
 
   defp no_action_issues(module_ast, issue_meta) do
-    if Introspection.has_data_layer?(module_ast) do
-      actions_ast = Introspection.find_dsl_section(module_ast, :actions)
+    context = Introspection.resource_context(module_ast)
+
+    if Introspection.has_data_layer?(context) do
+      actions_ast = Introspection.find_dsl_section(context, :actions)
 
       if Introspection.actions_defined?(actions_ast) do
         []
       else
         line_no =
           Introspection.section_line(actions_ast) ||
-            Introspection.find_use_line(module_ast, [:Ash, :Resource]) || 1
+            context.use_line || 1
 
         [
           format_issue(issue_meta,

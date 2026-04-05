@@ -64,8 +64,8 @@ defmodule AshCredo.Check.Warning.MissingChangeWrapper do
   defp check_actions(nil, _issue_meta), do: []
 
   defp check_actions(actions_ast, issue_meta) do
-    @action_types
-    |> Enum.flat_map(&Introspection.entities(actions_ast, &1))
+    actions_ast
+    |> Introspection.action_entities(@action_types)
     |> Enum.flat_map(&find_naked_changes(&1, issue_meta))
   end
 
