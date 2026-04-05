@@ -69,16 +69,16 @@ mix credo --strict
 | Check | Category | Priority | Description |
 |---|---|---|---|
 | `AuthorizerWithoutPolicies` | Warning | High | Detects resources with `Ash.Policy.Authorizer` but no policies defined |
+| `EmptyDomain` | Warning | Normal | Flags domains with no resources registered |
 | `MissingChangeWrapper` | Warning | High | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions |
+| `MissingDomain` | Warning | Normal | Ensures non-embedded resources set the `domain:` option |
 | `MissingPrimaryKey` | Warning | High | Ensures resources with data layers have a primary key |
+| `NoActions` | Warning | Normal | Flags resources with data layers but no actions defined |
 | `OverlyPermissivePolicy` | Warning | High | Flags unscoped `authorize_if always()` policies |
 | `PinnedTimeInExpression` | Warning | High | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
 | `SensitiveAttributeExposed` | Warning | High | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
 | `SensitiveFieldInAccept` | Warning | High | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
 | `WildcardAcceptOnAction` | Warning | High | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
-| `EmptyDomain` | Warning | Normal | Flags domains with no resources registered |
-| `MissingDomain` | Warning | Normal | Ensures non-embedded resources set the `domain:` option |
-| `NoActions` | Warning | Normal | Flags resources with data layers but no actions defined |
 | `MissingCodeInterface` | Design | Low | Suggests adding a `code_interface` for resources with actions |
 | `MissingIdentity` | Design | Normal | Suggests identities for attributes like `email`, `username`, `slug` |
 | `MissingPrimaryAction` | Design | Normal | Flags missing `primary?: true` when multiple actions of the same type exist |
