@@ -25,28 +25,28 @@ defmodule AshCredo do
         checks: %{
           extra: [
             # Warning
-            {AshCredo.Check.Warning.AuthorizeFalse, []},
-            {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
-            {AshCredo.Check.Warning.EmptyDomain, []},
+            {AshCredo.Check.Warning.AuthorizeFalse, false},
+            {AshCredo.Check.Warning.AuthorizerWithoutPolicies, false},
+            {AshCredo.Check.Warning.EmptyDomain, false},
             {AshCredo.Check.Warning.MissingChangeWrapper, []},
-            {AshCredo.Check.Warning.MissingDomain, []},
-            {AshCredo.Check.Warning.MissingPrimaryKey, []},
-            {AshCredo.Check.Warning.NoActions, []},
-            {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
-            {AshCredo.Check.Warning.PinnedTimeInExpression, []},
-            {AshCredo.Check.Warning.SensitiveAttributeExposed, []},
-            {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
-            {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
+            {AshCredo.Check.Warning.MissingDomain, false},
+            {AshCredo.Check.Warning.MissingPrimaryKey, false},
+            {AshCredo.Check.Warning.NoActions, false},
+            {AshCredo.Check.Warning.OverlyPermissivePolicy, false},
+            {AshCredo.Check.Warning.PinnedTimeInExpression, false},
+            {AshCredo.Check.Warning.SensitiveAttributeExposed, false},
+            {AshCredo.Check.Warning.SensitiveFieldInAccept, false},
+            {AshCredo.Check.Warning.WildcardAcceptOnAction, false},
             # Design
-            {AshCredo.Check.Design.MissingCodeInterface, []},
-            {AshCredo.Check.Design.MissingIdentity, []},
-            {AshCredo.Check.Design.MissingPrimaryAction, []},
-            {AshCredo.Check.Design.MissingTimestamps, []},
+            {AshCredo.Check.Design.MissingCodeInterface, false},
+            {AshCredo.Check.Design.MissingIdentity, false},
+            {AshCredo.Check.Design.MissingPrimaryAction, false},
+            {AshCredo.Check.Design.MissingTimestamps, false},
             # Readability
-            {AshCredo.Check.Readability.ActionMissingDescription, []},
-            {AshCredo.Check.Readability.BelongsToMissingAllowNil, []},
+            {AshCredo.Check.Readability.ActionMissingDescription, false},
+            {AshCredo.Check.Readability.BelongsToMissingAllowNil, false},
             # Refactor
-            {AshCredo.Check.Refactor.LargeResource, []}
+            {AshCredo.Check.Refactor.LargeResource, false}
           ]
         }
       }
