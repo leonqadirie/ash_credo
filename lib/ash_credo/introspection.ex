@@ -22,6 +22,21 @@ defmodule AshCredo.Introspection do
   def ash_api_call?({{:., _, [{:__aliases__, _, [:Ash | _]}, _fun]}, _meta, _args}), do: true
   def ash_api_call?(_), do: false
 
+  @doc "Returns all `Ash.*` API call AST nodes found in the source file."
+  def ash_api_calls(source_file) do
+    Credo.Code.prewalk(
+      source_file,
+      fn
+        {_call, _meta, args} = ast, acc when is_list(args) ->
+          if ash_api_call?(ast), do: {ast, [ast | acc]}, else: {ast, acc}
+
+        ast, acc ->
+          {ast, acc}
+      end,
+      []
+    )
+  end
+
   @doc "Returns true if the source file contains `use Ash.Domain`."
   def ash_domain?(source_file) do
     Credo.Code.prewalk(
