@@ -9,6 +9,8 @@ AshCredo detects common anti-patterns, security pitfalls, and missing best pract
 
 ## Installation
 
+AshCredo requires [Credo](https://hexdocs.pm/credo) to already be installed in your project.
+
 Add `ash_credo` to your list of dependencies in `mix.exs`:
 
 ```elixir
