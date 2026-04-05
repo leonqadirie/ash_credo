@@ -85,6 +85,23 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
     assert issue.message =~ "accept :*"
   end
 
+  test "reports issue for inline accept: :* on create with a do block" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        create :create, accept: :* do
+          description "Create a post"
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(WildcardAcceptOnAction, source)
+    assert issue.message =~ "accept :*"
+  end
+
   test "reports issue for default_accept :*" do
     source = """
     defmodule MyApp.Post do

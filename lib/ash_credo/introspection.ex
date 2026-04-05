@@ -132,10 +132,22 @@ defmodule AshCredo.Introspection do
 
   @doc "Extracts keyword options from an entity AST call."
   def entity_opts({_name, _meta, args}) when is_list(args) do
-    case List.last(args) do
-      [{_key, _val} | _] = kw -> Keyword.delete(kw, :do)
-      _ -> []
-    end
+    args
+    |> Enum.reverse()
+    |> Enum.find_value([], fn
+      kw when is_list(kw) ->
+        if Keyword.keyword?(kw) do
+          case Keyword.delete(kw, :do) do
+            [] -> nil
+            opts -> opts
+          end
+        else
+          nil
+        end
+
+      _ ->
+        nil
+    end)
   end
 
   def entity_opts(_), do: []

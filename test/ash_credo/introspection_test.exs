@@ -157,6 +157,20 @@ defmodule AshCredo.IntrospectionTest do
       assert Keyword.has_key?(opts, :public?)
     end
 
+    test "extracts inline opts when entity also has a do block" do
+      ast =
+        {:create, [line: 1], [:create, [primary?: true], [do: {:accept, [], [[:title]]}]]}
+
+      assert [primary?: true] == Introspection.entity_opts(ast)
+    end
+
+    test "extracts inline opts from merged do syntax" do
+      ast =
+        {:create, [line: 1], [:create, [primary?: true, do: {:accept, [], [[:title]]}]]}
+
+      assert [primary?: true] == Introspection.entity_opts(ast)
+    end
+
     test "returns empty list for entity without opts" do
       assert [] == Introspection.entity_opts({:timestamps, [line: 1], []})
     end
@@ -174,6 +188,13 @@ defmodule AshCredo.IntrospectionTest do
       [title | _] = Introspection.entities(attrs, :attribute)
       assert Introspection.entity_has_opt?(title, :public?, true)
       refute Introspection.entity_has_opt?(title, :public?, false)
+    end
+
+    test "detects inline opt value when entity also has a do block" do
+      ast =
+        {:create, [line: 1], [:create, [primary?: true], [do: {:accept, [], [[:title]]}]]}
+
+      assert Introspection.entity_has_opt?(ast, :primary?, true)
     end
 
     test "detects opt in do block" do

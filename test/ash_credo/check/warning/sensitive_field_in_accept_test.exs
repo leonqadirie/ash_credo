@@ -56,6 +56,23 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAcceptTest do
     assert issue.message =~ "is_admin"
   end
 
+  test "reports issue for inline accept with dangerous fields and a do block" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource, domain: MyApp.Accounts
+
+      actions do
+        update :update, accept: [:name, :is_admin] do
+          description "Update a user"
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(SensitiveFieldInAccept, source)
+    assert issue.message =~ "is_admin"
+  end
+
   test "reports issue for dangerous fields in defaults" do
     source = """
     defmodule MyApp.User do
