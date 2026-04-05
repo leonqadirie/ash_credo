@@ -18,6 +18,10 @@ defmodule AshCredo.Introspection do
     )
   end
 
+  @doc "Returns true if the AST node is a call to an `Ash.*` module (e.g. `Ash.read!/2`)."
+  def ash_api_call?({{:., _, [{:__aliases__, _, [:Ash | _]}, _fun]}, _meta, _args}), do: true
+  def ash_api_call?(_), do: false
+
   @doc "Returns true if the source file contains `use Ash.Domain`."
   def ash_domain?(source_file) do
     Credo.Code.prewalk(

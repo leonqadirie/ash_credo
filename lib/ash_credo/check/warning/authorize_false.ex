@@ -27,6 +27,8 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
       """
     ]
 
+  alias AshCredo.Introspection
+
   @impl true
   def run(%SourceFile{} = source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
@@ -35,7 +37,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
       source_file,
       fn
         {_call, meta, args} = ast, acc when is_list(args) ->
-          if has_authorize_false?(args) do
+          if Introspection.ash_api_call?(ast) and has_authorize_false?(args) do
             issue =
               format_issue(issue_meta,
                 message:
