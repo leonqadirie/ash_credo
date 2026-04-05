@@ -134,23 +134,23 @@ defmodule AshCredo.Introspection do
   def entity_opts({_name, _meta, args}) when is_list(args) do
     args
     |> Enum.reverse()
-    |> Enum.find_value([], fn
-      kw when is_list(kw) ->
-        if Keyword.keyword?(kw) do
-          case Keyword.delete(kw, :do) do
-            [] -> nil
-            opts -> opts
-          end
-        else
-          nil
-        end
-
-      _ ->
-        nil
-    end)
+    |> Enum.find_value([], &extract_entity_opts/1)
   end
 
   def entity_opts(_), do: []
+
+  defp extract_entity_opts(kw) when is_list(kw) do
+    if Keyword.keyword?(kw), do: drop_do_opt(kw)
+  end
+
+  defp extract_entity_opts(_), do: nil
+
+  defp drop_do_opt(kw) do
+    case Keyword.delete(kw, :do) do
+      [] -> nil
+      opts -> opts
+    end
+  end
 
   @doc "Checks if a keyword option is set to a specific value in an entity's opts or do block."
   def entity_has_opt?(entity_ast, key, value) do

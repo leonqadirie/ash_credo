@@ -75,6 +75,23 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPoliciesTest do
     assert issue.message =~ "no policies defined"
   end
 
+  test "reports issue when Ash.Policy.Authorizer appears alongside other authorizers" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource,
+        domain: MyApp.Blog,
+        authorizers: [SomeOtherAuthorizer, Ash.Policy.Authorizer]
+
+      attributes do
+        uuid_primary_key :id
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizerWithoutPolicies, source)
+    assert issue.message =~ "no policies defined"
+  end
+
   test "no issue when no authorizer" do
     source = """
     defmodule MyApp.Post do
@@ -83,6 +100,34 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPoliciesTest do
       attributes do
         uuid_primary_key :id
       end
+    end
+    """
+
+    assert [] = run_check(AuthorizerWithoutPolicies, source)
+  end
+
+  test "does not match alias declarations outside the authorizers option" do
+    source = """
+    defmodule MyApp.Post do
+      alias Ash.Policy.Authorizer
+
+      use Ash.Resource, domain: MyApp.Blog
+
+      attributes do
+        uuid_primary_key :id
+      end
+    end
+    """
+
+    assert [] = run_check(AuthorizerWithoutPolicies, source)
+  end
+
+  test "does not match Ash.Policy.Authorizer references in regular function bodies" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      def helper, do: Ash.Policy.Authorizer
     end
     """
 

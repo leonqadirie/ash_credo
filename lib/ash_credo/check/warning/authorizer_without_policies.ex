@@ -53,16 +53,21 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
   end
 
   defp find_authorizer_line(source_file) do
-    Credo.Code.prewalk(
-      source_file,
-      fn
-        {:__aliases__, meta, [:Ash, :Policy, :Authorizer]} = ast, nil ->
-          {ast, meta[:line]}
+    case Introspection.use_opts(source_file, [:Ash, :Resource]) do
+      opts when is_list(opts) ->
+        opts
+        |> Keyword.get(:authorizers)
+        |> authorizer_line()
 
-        ast, acc ->
-          {ast, acc}
-      end,
-      nil
-    )
+      _ ->
+        nil
+    end
   end
+
+  defp authorizer_line(authorizers) when is_list(authorizers) do
+    Enum.find_value(authorizers, &authorizer_line/1)
+  end
+
+  defp authorizer_line({:__aliases__, meta, [:Ash, :Policy, :Authorizer]}), do: meta[:line]
+  defp authorizer_line(_), do: nil
 end
