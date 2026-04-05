@@ -58,6 +58,12 @@ That's it. All 18 checks are enabled by default. Run Credo as usual:
 mix credo
 ```
 
+To also include low-priority checks (such as `MissingCodeInterface`, `ActionMissingDescription`, and `LargeResource`), use strict mode:
+
+```bash
+mix credo --strict
+```
+
 ## Checks
 
 | Check | Category | Priority | Description |
