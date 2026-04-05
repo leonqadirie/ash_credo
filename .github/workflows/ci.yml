@@ -50,12 +50,7 @@ jobs:
         if: steps.version.outputs.bumped == 'true'
         run: |
           version=$(grep '@version "' mix.exs | sed 's/.*@version "\(.*\)"/\1/')
-          previous_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -n "$previous_tag" ]; then
-            git cliff "$previous_tag"..HEAD --tag "v$version" --prepend CHANGELOG.md
-          else
-            git cliff --tag "v$version" -o CHANGELOG.md
-          fi
+          git cliff --tag "v$version" -o CHANGELOG.md
 
       - name: Commit changelog
         if: steps.version.outputs.bumped == 'true'
