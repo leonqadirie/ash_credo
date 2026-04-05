@@ -1,6 +1,20 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.2.1] - 2026-04-05
+
+### Documentation
+
+- Remove number in readme (#4)
+
+### Features
+
+- Add AuthorizeFalse check: flag authorize?: false usage  (#7)
+
+### Testing
+
+- Enforce check registry completeness and alphabetical order (#6)
+
 ## [0.2.0] - 2026-04-05
 
 ### Added
