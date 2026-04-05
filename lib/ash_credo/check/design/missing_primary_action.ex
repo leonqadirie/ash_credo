@@ -38,8 +38,9 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
   defp check_primary_actions(actions_ast, issue_meta) do
     @action_types
     |> Enum.flat_map(fn type ->
-      actions = Introspection.entities(actions_ast, type)
-      types_missing_primary(type, actions)
+      actions_ast
+      |> Introspection.action_entities([type])
+      |> types_missing_primary(type)
     end)
     |> Enum.map(fn {type, actions} ->
       first = hd(actions)
@@ -53,9 +54,9 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
     end)
   end
 
-  defp types_missing_primary(_type, actions) when length(actions) <= 1, do: []
+  defp types_missing_primary(actions, _type) when length(actions) <= 1, do: []
 
-  defp types_missing_primary(type, actions) do
+  defp types_missing_primary(actions, type) do
     if Enum.any?(actions, &has_primary_opt?/1), do: [], else: [{type, actions}]
   end
 

@@ -39,6 +39,10 @@ defmodule AshCredo.Introspection do
   def ash_domain?(source_file), do: domain_modules(source_file) != []
 
   @doc "Returns the value of the resource's `data_layer` option, if present."
+  def resource_data_layer(%{use_opts: opts}) when is_list(opts) do
+    Keyword.get(opts, :data_layer)
+  end
+
   def resource_data_layer({:defmodule, _, _} = module_ast) do
     case use_opts(module_ast, [:Ash, :Resource]) do
       opts when is_list(opts) -> Keyword.get(opts, :data_layer)
@@ -88,6 +92,10 @@ defmodule AshCredo.Introspection do
   end
 
   @doc "Finds the AST node for a top-level DSL section (e.g. :attributes)."
+  def find_dsl_section(%{module_ast: module_ast}, section_name) do
+    find_dsl_section(module_ast, section_name)
+  end
+
   def find_dsl_section({:defmodule, _, _} = module_ast, section_name) do
     Enum.find(module_body(module_ast), fn
       {^section_name, _meta, [[do: _body]]} -> true
@@ -122,6 +130,11 @@ defmodule AshCredo.Introspection do
 
   def entities(nil, _), do: []
 
+  @doc "Returns all explicit action entity AST nodes within an `actions` section."
+  def action_entities(actions_ast, action_types \\ @action_entities) do
+    Enum.flat_map(action_types, &entities(actions_ast, &1))
+  end
+
   @doc "Returns the line number of a section's opening."
   def section_line({_name, meta, _}), do: meta[:line]
   def section_line(_), do: nil
@@ -142,6 +155,18 @@ defmodule AshCredo.Introspection do
   end
 
   def module_line_count(_), do: nil
+
+  @doc "Returns shared resource metadata for a resource module."
+  def resource_context({:defmodule, _, _} = module_ast) do
+    %{
+      module_ast: module_ast,
+      aliases: module_aliases(module_ast),
+      use_line: find_use_line(module_ast, [:Ash, :Resource]),
+      use_opts: normalized_use_opts(module_ast)
+    }
+  end
+
+  def resource_context(_), do: nil
 
   @doc "Returns top-level alias mappings in a module body, optionally only those declared before a given line."
   def module_aliases(module_ast, opts \\ [])
@@ -186,6 +211,28 @@ defmodule AshCredo.Introspection do
   end
 
   def expand_alias(other, _aliases), do: other
+
+  @doc "Resolves a module reference within a module or resource context."
+  def resolved_module_ref(ref_or_segments, module_or_context, opts \\ [])
+
+  def resolved_module_ref({:__aliases__, meta, segments}, module_or_context, opts) do
+    resolved_module_ref(
+      segments,
+      module_or_context,
+      Keyword.put_new(opts, :before_line, meta[:line])
+    )
+  end
+
+  def resolved_module_ref(segments, module_or_context, opts) when is_list(segments) do
+    expand_alias(segments, context_aliases(module_or_context, opts))
+  end
+
+  def resolved_module_ref(other, _module_or_context, _opts), do: other
+
+  @doc "Returns true if a module reference resolves to the given module segments."
+  def module_ref?(ref_or_segments, module_or_context, target_segments, opts \\ []) do
+    resolved_module_ref(ref_or_segments, module_or_context, opts) == target_segments
+  end
 
   defp alias_before?(_alias_line, nil), do: true
 
@@ -236,6 +283,25 @@ defmodule AshCredo.Introspection do
 
   defp default_alias(target_segments), do: [List.last(target_segments)]
 
+  defp normalized_use_opts(module_ast) do
+    case use_opts(module_ast, [:Ash, :Resource]) do
+      opts when is_list(opts) -> opts
+      _ -> []
+    end
+  end
+
+  defp context_aliases(%{module_ast: module_ast, aliases: aliases}, opts) do
+    case Keyword.get(opts, :before_line) do
+      nil -> aliases
+      _ -> module_aliases(module_ast, opts)
+    end
+  end
+
+  defp context_aliases({:defmodule, _, _} = module_ast, opts),
+    do: module_aliases(module_ast, opts)
+
+  defp context_aliases(_, _opts), do: []
+
   @doc "Extracts keyword options from an entity AST call."
   def entity_opts({_name, _meta, args}) when is_list(args) do
     args
@@ -258,25 +324,46 @@ defmodule AshCredo.Introspection do
     end
   end
 
+  @doc "Returns normalized option values with line numbers from inline opts and `do` blocks."
+  def option_occurrences({_name, meta, _args} = ast, key) do
+    inline = inline_option_occurrences(ast, key, meta[:line])
+    body = body_option_occurrences(ast, key)
+
+    inline ++ body
+  end
+
+  def option_occurrences(_, _), do: []
+
+  @doc "Returns normalized option values from inline opts and `do` blocks."
+  def option_values(ast, key) do
+    Enum.map(option_occurrences(ast, key), &elem(&1, 0))
+  end
+
+  defp inline_option_occurrences(ast, key, line) do
+    case Keyword.fetch(entity_opts(ast), key) do
+      {:ok, value} -> [{value, line}]
+      :error -> []
+    end
+  end
+
+  defp body_option_occurrences(ast, key) do
+    ast
+    |> entity_body()
+    |> Enum.flat_map(&body_option_occurrence(&1, key))
+  end
+
+  defp body_option_occurrence({key, meta, [value]}, key), do: [{value, meta[:line]}]
+  defp body_option_occurrence({key, meta, args}, key), do: [{args, meta[:line]}]
+  defp body_option_occurrence(_, _), do: []
+
   @doc "Checks if a keyword option is set to a specific value in an entity's opts or do block."
   def entity_has_opt?(entity_ast, key, value) do
-    in_inline_opts?(entity_ast, key, value) or in_body_opts?(entity_ast, key, value)
+    Enum.any?(option_values(entity_ast, key), &(&1 == value))
   end
 
   @doc "Checks if a keyword option is declared inline or inside the entity's do block."
   def entity_has_opt_key?(entity_ast, key) do
-    Keyword.has_key?(entity_opts(entity_ast), key) or find_in_body(entity_ast, key) != nil
-  end
-
-  defp in_inline_opts?(entity_ast, key, value) do
-    Keyword.get(entity_opts(entity_ast), key) == value
-  end
-
-  defp in_body_opts?(entity_ast, key, value) do
-    case find_in_body(entity_ast, key) do
-      {^key, _, [^value]} -> true
-      _ -> false
-    end
+    option_occurrences(entity_ast, key) != []
   end
 
   @doc "Returns the flattened list of statements inside a section body."
@@ -288,7 +375,7 @@ defmodule AshCredo.Introspection do
 
   @doc "Returns true if an `actions` section defines any actions, explicitly or via defaults."
   def actions_defined?(actions_ast) do
-    Enum.any?(@action_entities, &has_entity?(actions_ast, &1)) or
+    action_entities(actions_ast) != [] or
       Enum.any?(entities(actions_ast, :defaults), &(default_action_entries(&1) != []))
   end
 

@@ -27,8 +27,9 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
   end
 
   defp missing_code_interface_issues(module_ast, issue_meta) do
-    actions_ast = Introspection.find_dsl_section(module_ast, :actions)
-    has_code_interface = Introspection.find_dsl_section(module_ast, :code_interface) != nil
+    context = Introspection.resource_context(module_ast)
+    actions_ast = Introspection.find_dsl_section(context, :actions)
+    has_code_interface = Introspection.find_dsl_section(context, :code_interface) != nil
 
     if Introspection.actions_defined?(actions_ast) and not has_code_interface do
       [
@@ -37,7 +38,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
           trigger: "actions",
           line_no:
             Introspection.section_line(actions_ast) ||
-              Introspection.find_use_line(module_ast, [:Ash, :Resource]) || 1
+              context.use_line || 1
         )
       ]
     else

@@ -35,8 +35,9 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
   end
 
   defp authorizer_without_policies_issues(module_ast, issue_meta) do
-    authorizer_line = find_authorizer_line(module_ast)
-    policies_ast = Introspection.find_dsl_section(module_ast, :policies)
+    context = Introspection.resource_context(module_ast)
+    authorizer_line = find_authorizer_line(context)
+    policies_ast = Introspection.find_dsl_section(context, :policies)
     has_policies = Introspection.policy_entities(policies_ast) != []
 
     if authorizer_line != nil and not has_policies do
@@ -53,26 +54,20 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
     end
   end
 
-  defp find_authorizer_line(module_ast) do
-    case Introspection.use_opts(module_ast, [:Ash, :Resource]) do
-      opts when is_list(opts) ->
-        opts
-        |> Keyword.get(:authorizers)
-        |> authorizer_line(module_ast)
-
-      _ ->
-        nil
-    end
+  defp find_authorizer_line(%{use_opts: opts} = context) when is_list(opts) do
+    opts
+    |> Keyword.get(:authorizers)
+    |> authorizer_line(context)
   end
 
-  defp authorizer_line(authorizers, module_ast) when is_list(authorizers) do
-    Enum.find_value(authorizers, &authorizer_line(&1, module_ast))
+  defp find_authorizer_line(_), do: nil
+
+  defp authorizer_line(authorizers, context) when is_list(authorizers) do
+    Enum.find_value(authorizers, &authorizer_line(&1, context))
   end
 
-  defp authorizer_line({:__aliases__, meta, segments}, module_ast) do
-    aliases = Introspection.module_aliases(module_ast, before_line: meta[:line])
-
-    if Introspection.expand_alias(segments, aliases) == @policy_authorizer, do: meta[:line]
+  defp authorizer_line({:__aliases__, meta, _segments} = ref_ast, context) do
+    if Introspection.module_ref?(ref_ast, context, @policy_authorizer), do: meta[:line]
   end
 
   defp authorizer_line(_, _), do: nil

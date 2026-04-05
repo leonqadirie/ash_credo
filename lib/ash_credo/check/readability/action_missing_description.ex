@@ -35,8 +35,8 @@ defmodule AshCredo.Check.Readability.ActionMissingDescription do
   defp check_descriptions(nil, _issue_meta), do: []
 
   defp check_descriptions(actions_ast, issue_meta) do
-    @action_types
-    |> Enum.flat_map(&Introspection.entities(actions_ast, &1))
+    actions_ast
+    |> Introspection.action_entities(@action_types)
     |> Enum.reject(&has_description?/1)
     |> Enum.map(fn {type, meta, _} = entity ->
       name = Introspection.entity_name(entity)
@@ -50,7 +50,6 @@ defmodule AshCredo.Check.Readability.ActionMissingDescription do
   end
 
   defp has_description?(entity_ast) do
-    Introspection.find_in_body(entity_ast, :description) != nil or
-      Keyword.has_key?(Introspection.entity_opts(entity_ast), :description)
+    Introspection.entity_has_opt_key?(entity_ast, :description)
   end
 end
