@@ -25,6 +25,7 @@ defmodule AshCredo do
         checks: %{
           extra: [
             # Warning
+            {AshCredo.Check.Warning.AuthorizeFalse, []},
             {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
             {AshCredo.Check.Warning.EmptyDomain, []},
             {AshCredo.Check.Warning.MissingChangeWrapper, []},
@@ -33,7 +34,6 @@ defmodule AshCredo do
             {AshCredo.Check.Warning.NoActions, []},
             {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
             {AshCredo.Check.Warning.PinnedTimeInExpression, []},
-            {AshCredo.Check.Warning.AuthorizeFalse, []},
             {AshCredo.Check.Warning.SensitiveAttributeExposed, []},
             {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
             {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
