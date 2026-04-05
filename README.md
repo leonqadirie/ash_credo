@@ -52,45 +52,39 @@ Register the plugin in your `.credo.exs` configuration:
 }
 ```
 
-That's it. All checks are enabled by default. Run Credo as usual:
+That's it. Only `MissingChangeWrapper` is enabled by default. All other checks are opt-in — enable them individually in your `.credo.exs` (see [Configuration](#configuration)). Run Credo as usual:
 
 ```bash
 mix credo
 ```
 
-To also include low-priority checks (such as `MissingCodeInterface`, `ActionMissingDescription`, and `LargeResource`), use strict mode:
-
-```bash
-mix credo --strict
-```
-
 ## Checks
 
-| Check | Category | Priority | Description |
-|---|---|---|---|
-| `AuthorizeFalse` | Warning | High | Flags `authorize?: false` in Ash API calls — use system actors with bypass policies instead |
-| `AuthorizerWithoutPolicies` | Warning | High | Detects resources with `Ash.Policy.Authorizer` but no policies defined |
-| `EmptyDomain` | Warning | Normal | Flags domains with no resources registered |
-| `MissingChangeWrapper` | Warning | High | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions |
-| `MissingDomain` | Warning | Normal | Ensures non-embedded resources set the `domain:` option |
-| `MissingPrimaryKey` | Warning | High | Ensures resources with data layers have a primary key |
-| `NoActions` | Warning | Normal | Flags resources with data layers but no actions defined |
-| `OverlyPermissivePolicy` | Warning | High | Flags unscoped `authorize_if always()` policies |
-| `PinnedTimeInExpression` | Warning | High | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
-| `SensitiveAttributeExposed` | Warning | High | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
-| `SensitiveFieldInAccept` | Warning | High | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
-| `WildcardAcceptOnAction` | Warning | High | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
-| `MissingCodeInterface` | Design | Low | Suggests adding a `code_interface` for resources with actions |
-| `MissingIdentity` | Design | Normal | Suggests identities for attributes like `email`, `username`, `slug` |
-| `MissingPrimaryAction` | Design | Normal | Flags missing `primary?: true` when multiple actions of the same type exist |
-| `MissingTimestamps` | Design | Normal | Suggests adding `timestamps()` to persisted resources |
-| `ActionMissingDescription` | Readability | Low | Flags actions without a `description` |
-| `BelongsToMissingAllowNil` | Readability | Normal | Flags `belongs_to` without explicit `allow_nil?` |
-| `LargeResource` | Refactor | Low | Flags resource files exceeding 400 lines |
+| Check | Category | Priority | Default | Description |
+|---|---|---|---|---|
+| `AuthorizeFalse` | Warning | High | No | Flags `authorize?: false` in Ash API calls — use system actors with bypass policies instead |
+| `AuthorizerWithoutPolicies` | Warning | High | No | Detects resources with `Ash.Policy.Authorizer` but no policies defined |
+| `EmptyDomain` | Warning | Normal | No | Flags domains with no resources registered |
+| `MissingChangeWrapper` | Warning | High | Yes | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions |
+| `MissingDomain` | Warning | Normal | No | Ensures non-embedded resources set the `domain:` option |
+| `MissingPrimaryKey` | Warning | High | No | Ensures resources with data layers have a primary key |
+| `NoActions` | Warning | Normal | No | Flags resources with data layers but no actions defined |
+| `OverlyPermissivePolicy` | Warning | High | No | Flags unscoped `authorize_if always()` policies |
+| `PinnedTimeInExpression` | Warning | High | No | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
+| `SensitiveAttributeExposed` | Warning | High | No | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
+| `SensitiveFieldInAccept` | Warning | High | No | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
+| `WildcardAcceptOnAction` | Warning | High | No | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
+| `MissingCodeInterface` | Design | Low | No | Suggests adding a `code_interface` for resources with actions |
+| `MissingIdentity` | Design | Normal | No | Suggests identities for attributes like `email`, `username`, `slug` |
+| `MissingPrimaryAction` | Design | Normal | No | Flags missing `primary?: true` when multiple actions of the same type exist |
+| `MissingTimestamps` | Design | Normal | No | Suggests adding `timestamps()` to persisted resources |
+| `ActionMissingDescription` | Readability | Low | No | Flags actions without a `description` |
+| `BelongsToMissingAllowNil` | Readability | Normal | No | Flags `belongs_to` without explicit `allow_nil?` |
+| `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |
 
 ## Configuration
 
-Checks are registered under the `extra` category. You can disable individual checks or customise their parameters in `.credo.exs`:
+Only `MissingChangeWrapper` is enabled by default. Enable additional checks by adding them to the `extra` section of your `.credo.exs`:
 
 ```elixir
 %{
@@ -100,19 +94,15 @@ Checks are registered under the `extra` category. You can disable individual che
       plugins: [{AshCredo, []}],
       checks: %{
         extra: [
-          # Disable a check
-          {AshCredo.Check.Design.MissingCodeInterface, false},
+          # Enable checks
+          {AshCredo.Check.Warning.AuthorizeFalse, []},
+          {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
+          {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
 
-          # Set priority (can also be false to disable)
-          {AshCredo.Check.Warning.NoActions, [priority: :low]},
-
-          # Customise parameters
+          # Enable with custom parameters
           {AshCredo.Check.Refactor.LargeResource, [max_lines: 250]},
           {AshCredo.Check.Warning.SensitiveAttributeExposed, [
             sensitive_names: ~w(password token secret api_key)a
-          ]},
-          {AshCredo.Check.Warning.SensitiveFieldInAccept, [
-            dangerous_fields: ~w(is_admin role permissions)a
           ]},
           {AshCredo.Check.Design.MissingIdentity, [
             identity_candidates: ~w(email username slug)a
@@ -120,6 +110,33 @@ Checks are registered under the `extra` category. You can disable individual che
         ]
       }
     }
+  ]
+}
+```
+
+To enable **all** checks at once:
+
+```elixir
+checks: %{
+  extra: [
+    {AshCredo.Check.Warning.AuthorizeFalse, []},
+    {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
+    {AshCredo.Check.Warning.EmptyDomain, []},
+    {AshCredo.Check.Warning.MissingDomain, []},
+    {AshCredo.Check.Warning.MissingPrimaryKey, []},
+    {AshCredo.Check.Warning.NoActions, []},
+    {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
+    {AshCredo.Check.Warning.PinnedTimeInExpression, []},
+    {AshCredo.Check.Warning.SensitiveAttributeExposed, []},
+    {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
+    {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
+    {AshCredo.Check.Design.MissingCodeInterface, []},
+    {AshCredo.Check.Design.MissingIdentity, []},
+    {AshCredo.Check.Design.MissingPrimaryAction, []},
+    {AshCredo.Check.Design.MissingTimestamps, []},
+    {AshCredo.Check.Readability.ActionMissingDescription, []},
+    {AshCredo.Check.Readability.BelongsToMissingAllowNil, []},
+    {AshCredo.Check.Refactor.LargeResource, []}
   ]
 }
 ```

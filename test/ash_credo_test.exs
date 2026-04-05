@@ -41,7 +41,7 @@ defmodule AshCredoTest do
 
       # Extract entries like {AshCredo.Check.Warning.NoActions, []}
       plugin_entries =
-        Regex.scan(~r/\{AshCredo\.Check\.(\w+)\.(\w+),\s*\[\]\}/, plugin_content)
+        Regex.scan(~r/\{AshCredo\.Check\.(\w+)\.(\w+),\s*(?:\[\]|false)\}/, plugin_content)
         |> Enum.map(fn [_full, category, name] -> {category, name} end)
 
       plugin_by_category =
