@@ -68,6 +68,7 @@ mix credo --strict
 
 | Check | Category | Priority | Description |
 |---|---|---|---|
+| `AuthorizeFalse` | Warning | High | Flags `authorize?: false` in Ash API calls — use system actors with bypass policies instead |
 | `AuthorizerWithoutPolicies` | Warning | High | Detects resources with `Ash.Policy.Authorizer` but no policies defined |
 | `EmptyDomain` | Warning | Normal | Flags domains with no resources registered |
 | `MissingChangeWrapper` | Warning | High | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions |

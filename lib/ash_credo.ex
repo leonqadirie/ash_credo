@@ -25,6 +25,7 @@ defmodule AshCredo do
         checks: %{
           extra: [
             # Warning
+            {AshCredo.Check.Warning.AuthorizeFalse, []},
             {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
             {AshCredo.Check.Warning.EmptyDomain, []},
             {AshCredo.Check.Warning.MissingChangeWrapper, []},
