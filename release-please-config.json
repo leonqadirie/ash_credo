@@ -1,7 +1,8 @@
 {
   "packages": {
     ".": {
-      "release-type": "elixir"
+      "release-type": "elixir",
+      "bump-minor-pre-major": true
     }
   }
 }
