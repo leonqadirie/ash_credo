@@ -52,7 +52,7 @@ Register the plugin in your `.credo.exs` configuration:
 }
 ```
 
-That's it. All 18 checks are enabled by default. Run Credo as usual:
+That's it. All checks are enabled by default. Run Credo as usual:
 
 ```bash
 mix credo
