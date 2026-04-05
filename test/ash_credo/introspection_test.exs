@@ -271,6 +271,126 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "resource_context/1" do
+    test "returns shared resource metadata" do
+      source = """
+      defmodule MyApp.Post do
+        alias Ash.Policy.Authorizer
+
+        use Ash.Resource,
+          domain: MyApp.Blog,
+          authorizers: [Authorizer]
+
+        actions do
+          read :read
+        end
+      end
+      """
+
+      [resource] = Introspection.resource_modules(source_file(source))
+      context = Introspection.resource_context(resource)
+
+      assert context.module_ast == resource
+      assert is_integer(context.use_line)
+      assert Keyword.has_key?(context.use_opts, :domain)
+      assert {[:Authorizer], [:Ash, :Policy, :Authorizer]} in context.aliases
+      assert {:actions, _, _} = Introspection.find_dsl_section(context, :actions)
+    end
+  end
+
+  describe "resolved_module_ref/3" do
+    test "resolves aliased module references from resource context" do
+      source = """
+      defmodule MyApp.Post do
+        alias Ash.Policy.Authorizer
+
+        use Ash.Resource,
+          domain: MyApp.Blog,
+          authorizers: [Authorizer]
+      end
+      """
+
+      [resource] = Introspection.resource_modules(source_file(source))
+      context = Introspection.resource_context(resource)
+      [authorizer] = Keyword.get(context.use_opts, :authorizers)
+
+      assert [:Ash, :Policy, :Authorizer] ==
+               Introspection.resolved_module_ref(authorizer, context)
+
+      assert Introspection.module_ref?(authorizer, context, [:Ash, :Policy, :Authorizer])
+    end
+
+    test "does not use aliases declared after the reference" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource,
+          domain: MyApp.Blog,
+          authorizers: [Authorizer]
+
+        alias Ash.Policy.Authorizer
+      end
+      """
+
+      [resource] = Introspection.resource_modules(source_file(source))
+      context = Introspection.resource_context(resource)
+      [authorizer] = Keyword.get(context.use_opts, :authorizers)
+
+      assert [:Authorizer] == Introspection.resolved_module_ref(authorizer, context)
+      refute Introspection.module_ref?(authorizer, context, [:Ash, :Policy, :Authorizer])
+    end
+  end
+
+  describe "action_entities/2" do
+    test "returns explicit actions for the requested types" do
+      source = """
+      defmodule Foo do
+        use Ash.Resource
+
+        actions do
+          read :read
+          create :create
+          action :custom
+        end
+      end
+      """
+
+      sf = source_file(source)
+      actions = Introspection.find_dsl_section(sf, :actions)
+
+      assert length(Introspection.action_entities(actions, [:read, :create])) == 2
+      assert length(Introspection.action_entities(actions)) == 3
+    end
+  end
+
+  describe "option_occurrences/2" do
+    test "returns normalized inline and body option values" do
+      ast =
+        {:create, [line: 1],
+         [:create, [accept: [:title]], [do: {:__block__, [], [{:primary?, [line: 2], [true]}]}]]}
+
+      assert [{[:title], 1}] == Introspection.option_occurrences(ast, :accept)
+      assert [{true, 2}] == Introspection.option_occurrences(ast, :primary?)
+    end
+
+    test "returns section option values from the do block" do
+      source = """
+      defmodule Foo do
+        use Ash.Resource
+
+        actions do
+          default_accept [:name]
+        end
+      end
+      """
+
+      sf = source_file(source)
+      actions = Introspection.find_dsl_section(sf, :actions)
+
+      assert [{[:name], line_no}] = Introspection.option_occurrences(actions, :default_accept)
+      assert is_integer(line_no)
+    end
+  end
+
   describe "entity_opts/1" do
     test "extracts inline keyword opts" do
       sf = source_file(@ash_resource)
@@ -570,6 +690,23 @@ defmodule AshCredo.IntrospectionTest do
       assert Introspection.has_data_layer?(source_file(source))
     end
 
+    test "works with resource context" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog, data_layer: AshPostgres.DataLayer
+      end
+      """
+
+      [resource] = Introspection.resource_modules(source_file(source))
+      context = Introspection.resource_context(resource)
+
+      assert {:__aliases__, _, [:AshPostgres, :DataLayer]} =
+               Introspection.resource_data_layer(context)
+
+      assert Introspection.has_data_layer?(context)
+      refute Introspection.embedded_resource?(context)
+    end
+
     test "returns false for embedded resources" do
       source = """
       defmodule MyApp.Post do
@@ -581,6 +718,20 @@ defmodule AshCredo.IntrospectionTest do
 
       refute Introspection.has_data_layer?(sf)
       assert Introspection.embedded_resource?(sf)
+    end
+
+    test "detects embedded resources from resource context" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, data_layer: :embedded
+      end
+      """
+
+      [resource] = Introspection.resource_modules(source_file(source))
+      context = Introspection.resource_context(resource)
+
+      refute Introspection.has_data_layer?(context)
+      assert Introspection.embedded_resource?(context)
     end
   end
 end
