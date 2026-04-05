@@ -24,20 +24,21 @@ defmodule AshCredo.Check.Design.MissingIdentity do
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Introspection.ash_resource?(source_file) do
-      candidates = Params.get(params, :identity_candidates, __MODULE__)
-      attrs_ast = Introspection.find_dsl_section(source_file, :attributes)
-      identities_ast = Introspection.find_dsl_section(source_file, :identities)
-      check_identities(attrs_ast, identities_ast, candidates, source_file, params)
-    else
-      []
-    end
+    candidates = Params.get(params, :identity_candidates, __MODULE__)
+    issue_meta = IssueMeta.for(source_file, params)
+
+    source_file
+    |> Introspection.resource_modules()
+    |> Enum.flat_map(fn module_ast ->
+      attrs_ast = Introspection.find_dsl_section(module_ast, :attributes)
+      identities_ast = Introspection.find_dsl_section(module_ast, :identities)
+      check_identities(attrs_ast, identities_ast, candidates, issue_meta)
+    end)
   end
 
-  defp check_identities(nil, _identities, _candidates, _sf, _params), do: []
+  defp check_identities(nil, _identities, _candidates, _issue_meta), do: []
 
-  defp check_identities(attrs_ast, identities_ast, candidates, source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
+  defp check_identities(attrs_ast, identities_ast, candidates, issue_meta) do
     identity_fields = collect_identity_fields(identities_ast)
 
     attrs_ast

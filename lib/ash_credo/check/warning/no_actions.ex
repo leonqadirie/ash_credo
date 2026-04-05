@@ -21,17 +21,23 @@ defmodule AshCredo.Check.Warning.NoActions do
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Introspection.ash_resource?(source_file) and Introspection.has_data_layer?(source_file) do
-      actions_ast = Introspection.find_dsl_section(source_file, :actions)
+    issue_meta = IssueMeta.for(source_file, params)
+
+    source_file
+    |> Introspection.resource_modules()
+    |> Enum.flat_map(&no_action_issues(&1, issue_meta))
+  end
+
+  defp no_action_issues(module_ast, issue_meta) do
+    if Introspection.has_data_layer?(module_ast) do
+      actions_ast = Introspection.find_dsl_section(module_ast, :actions)
 
       if Introspection.actions_defined?(actions_ast) do
         []
       else
-        issue_meta = IssueMeta.for(source_file, params)
-
         line_no =
           Introspection.section_line(actions_ast) ||
-            Introspection.find_use_line(source_file, [:Ash, :Resource]) || 1
+            Introspection.find_use_line(module_ast, [:Ash, :Resource]) || 1
 
         [
           format_issue(issue_meta,

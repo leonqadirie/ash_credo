@@ -67,6 +67,30 @@ defmodule AshCredo.Check.Warning.NoActionsTest do
     assert [] = run_check(NoActions, source)
   end
 
+  test "reports only the outer resource when nested resources define actions" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, data_layer: AshPostgres.DataLayer
+
+      attributes do
+        uuid_primary_key :id
+      end
+
+      defmodule Draft do
+        use Ash.Resource, domain: MyApp.Blog
+
+        actions do
+          read :read
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(NoActions, source)
+    assert issue.message =~ "no actions defined"
+    assert issue.line_no == 2
+  end
+
   test "ignores non-Ash modules" do
     source = """
     defmodule MyApp.Utils do

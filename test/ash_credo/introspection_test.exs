@@ -55,6 +55,33 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "resource_modules/1" do
+    test "returns resource modules in file order" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog, data_layer: AshPostgres.DataLayer
+
+        attributes do
+          uuid_primary_key :id
+        end
+
+        defmodule Draft do
+          use Ash.Resource, domain: MyApp.Blog
+
+          actions do
+            read :read
+          end
+        end
+      end
+      """
+
+      [outer, inner] = Introspection.resource_modules(source_file(source))
+
+      assert Introspection.has_data_layer?(outer)
+      refute Introspection.has_data_layer?(inner)
+    end
+  end
+
   describe "ash_domain?/1" do
     test "returns true for Ash.Domain modules" do
       assert Introspection.ash_domain?(source_file(@ash_domain))
@@ -81,6 +108,27 @@ defmodule AshCredo.IntrospectionTest do
     test "returns nil for missing section" do
       sf = source_file(@ash_resource)
       assert nil == Introspection.find_dsl_section(sf, :policies)
+    end
+
+    test "only inspects the given module body" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+
+        defmodule Draft do
+          use Ash.Resource, domain: MyApp.Blog
+
+          actions do
+            read :read
+          end
+        end
+      end
+      """
+
+      [outer, inner] = Introspection.resource_modules(source_file(source))
+
+      assert nil == Introspection.find_dsl_section(outer, :actions)
+      assert {:actions, _, _} = Introspection.find_dsl_section(inner, :actions)
     end
   end
 
@@ -133,6 +181,23 @@ defmodule AshCredo.IntrospectionTest do
 
       sf = source_file(source)
       assert [] == Introspection.use_opts(sf, [:Ash, :Resource])
+    end
+
+    test "extracts opts from the specific module only" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog, data_layer: AshPostgres.DataLayer
+
+        defmodule Draft do
+          use Ash.Resource, domain: MyApp.Blog
+        end
+      end
+      """
+
+      [outer, inner] = Introspection.resource_modules(source_file(source))
+
+      assert Introspection.has_data_layer?(outer)
+      refute Introspection.has_data_layer?(inner)
     end
   end
 

@@ -172,4 +172,18 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpressionTest do
 
     assert [] = run_check(PinnedTimeInExpression, source)
   end
+
+  test "ignores expr calls inside nested modules" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      defmodule Helpers do
+        def stale_expr, do: expr(inserted_at >= ^DateTime.utc_now())
+      end
+    end
+    """
+
+    assert [] = run_check(PinnedTimeInExpression, source)
+  end
 end

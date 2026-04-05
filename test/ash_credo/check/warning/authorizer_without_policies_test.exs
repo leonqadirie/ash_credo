@@ -134,6 +134,32 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPoliciesTest do
     assert [] = run_check(AuthorizerWithoutPolicies, source)
   end
 
+  test "checks policies within the same resource module only" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource,
+        domain: MyApp.Blog,
+        authorizers: [Ash.Policy.Authorizer]
+
+      defmodule Draft do
+        use Ash.Resource,
+          domain: MyApp.Blog,
+          authorizers: [Ash.Policy.Authorizer]
+
+        policies do
+          policy action_type(:read) do
+            authorize_if always()
+          end
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizerWithoutPolicies, source)
+    assert issue.message =~ "no policies defined"
+    assert issue.line_no == 4
+  end
+
   test "ignores non-Ash modules" do
     source = """
     defmodule MyApp.Utils do

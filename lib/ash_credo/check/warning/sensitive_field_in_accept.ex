@@ -29,20 +29,21 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Introspection.ash_resource?(source_file) do
-      dangerous = Params.get(params, :dangerous_fields, __MODULE__)
-      actions_ast = Introspection.find_dsl_section(source_file, :actions)
-      check_actions(actions_ast, dangerous, source_file, params)
-    else
-      []
-    end
-  end
-
-  defp check_actions(nil, _dangerous, _source_file, _params), do: []
-
-  defp check_actions(actions_ast, dangerous, source_file, params) do
+    dangerous = Params.get(params, :dangerous_fields, __MODULE__)
     issue_meta = IssueMeta.for(source_file, params)
 
+    source_file
+    |> Introspection.resource_modules()
+    |> Enum.flat_map(fn module_ast ->
+      module_ast
+      |> Introspection.find_dsl_section(:actions)
+      |> check_actions(dangerous, issue_meta)
+    end)
+  end
+
+  defp check_actions(nil, _dangerous, _issue_meta), do: []
+
+  defp check_actions(actions_ast, dangerous, issue_meta) do
     action_issues =
       @writable_action_types
       |> Enum.flat_map(&Introspection.entities(actions_ast, &1))

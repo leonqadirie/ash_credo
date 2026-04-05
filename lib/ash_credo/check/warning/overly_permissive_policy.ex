@@ -24,19 +24,20 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Introspection.ash_resource?(source_file) do
-      policies_ast = Introspection.find_dsl_section(source_file, :policies)
-      check_policies(policies_ast, source_file, params)
-    else
-      []
-    end
-  end
-
-  defp check_policies(nil, _source_file, _params), do: []
-
-  defp check_policies(policies_ast, source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
 
+    source_file
+    |> Introspection.resource_modules()
+    |> Enum.flat_map(fn module_ast ->
+      module_ast
+      |> Introspection.find_dsl_section(:policies)
+      |> check_policies(issue_meta)
+    end)
+  end
+
+  defp check_policies(nil, _issue_meta), do: []
+
+  defp check_policies(policies_ast, issue_meta) do
     policies_ast
     |> Introspection.policy_entities()
     |> Enum.filter(&has_authorize_if_always?/1)

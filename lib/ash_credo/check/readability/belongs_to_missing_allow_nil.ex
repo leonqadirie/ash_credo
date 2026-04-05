@@ -17,19 +17,20 @@ defmodule AshCredo.Check.Readability.BelongsToMissingAllowNil do
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    if Introspection.ash_resource?(source_file) do
-      rels_ast = Introspection.find_dsl_section(source_file, :relationships)
-      check_belongs_to(rels_ast, source_file, params)
-    else
-      []
-    end
-  end
-
-  defp check_belongs_to(nil, _source_file, _params), do: []
-
-  defp check_belongs_to(rels_ast, source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
 
+    source_file
+    |> Introspection.resource_modules()
+    |> Enum.flat_map(fn module_ast ->
+      module_ast
+      |> Introspection.find_dsl_section(:relationships)
+      |> check_belongs_to(issue_meta)
+    end)
+  end
+
+  defp check_belongs_to(nil, _issue_meta), do: []
+
+  defp check_belongs_to(rels_ast, issue_meta) do
     rels_ast
     |> Introspection.entities(:belongs_to)
     |> Enum.reject(&has_allow_nil_opt?/1)
