@@ -15,6 +15,49 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  changelog:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Check if version changed
+        id: version
+        run: |
+          if git diff origin/main -- mix.exs | grep -q '@version'; then
+            echo "bumped=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate changelog
+        if: steps.version.outputs.bumped == 'true'
+        uses: kenji-miyake/setup-git-cliff@v2
+
+      - name: Update CHANGELOG.md
+        if: steps.version.outputs.bumped == 'true'
+        run: |
+          version=$(grep '@version "' mix.exs | sed 's/.*@version "\(.*\)"/\1/')
+          previous_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$previous_tag" ]; then
+            git cliff "$previous_tag"..HEAD --tag "v$version" --prepend CHANGELOG.md
+          else
+            git cliff --tag "v$version" -o CHANGELOG.md
+          fi
+
+      - name: Commit changelog
+        if: steps.version.outputs.bumped == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --cached --quiet || git commit -m "doc: update changelog" && git push
+
   typos:
     runs-on: ubuntu-latest
     steps:
