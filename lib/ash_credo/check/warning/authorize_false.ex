@@ -24,6 +24,11 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
       use `scope: context` to inherit the caller's authorization context:
 
           Ash.get!(Resource, id, scope: context)
+
+      Note: this check only detects `authorize?: false` passed directly in a
+      function call. It cannot follow values through variables or configuration,
+      so a clean result does not guarantee the option is absent from your codebase.
+      Consider supplementing with `grep -r "authorize?: false"` for a full audit.
       """
     ]
 
