@@ -111,6 +111,81 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     assert issue.trigger == "authorize?: false"
   end
 
+  test "reports issue for inline authorize?: false on an action" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource
+
+      actions do
+        read :list, authorize?: false
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.trigger == "authorize?: false"
+  end
+
+  test "reports issue for authorize?: false in action do block" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource
+
+      actions do
+        create :create do
+          authorize? false
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.trigger == "authorize?: false"
+  end
+
+  test "reports issues for multiple actions with authorize?: false" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource
+
+      actions do
+        read :list, authorize?: false
+        create :create, authorize?: false
+      end
+    end
+    """
+
+    assert [_, _] = run_check(AuthorizeFalse, source)
+  end
+
+  test "no issue for action with authorize?: true" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource
+
+      actions do
+        read :list, authorize?: true
+      end
+    end
+    """
+
+    assert [] = run_check(AuthorizeFalse, source)
+  end
+
+  test "no issue for action without authorize? option" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource
+
+      actions do
+        read :list
+      end
+    end
+    """
+
+    assert [] = run_check(AuthorizeFalse, source)
+  end
+
   test "does not flag authorize?: false passed via a variable (known limitation)" do
     source = """
     defmodule MyApp.Accounts do

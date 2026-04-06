@@ -38,6 +38,11 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
   def run(%SourceFile{} = source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
 
+    call_authorize_false_issues(source_file, issue_meta) ++
+      action_authorize_false_issues(source_file, issue_meta)
+  end
+
+  defp call_authorize_false_issues(source_file, issue_meta) do
     source_file
     |> Introspection.ash_api_calls()
     |> Enum.flat_map(fn {_call, meta, args} ->
@@ -53,6 +58,31 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
       else
         []
       end
+    end)
+  end
+
+  defp action_authorize_false_issues(source_file, issue_meta) do
+    Introspection.flat_map_dsl_section(source_file, :actions, fn actions_ast ->
+      actions_ast
+      |> Introspection.action_entities()
+      |> Enum.flat_map(fn action ->
+        action
+        |> Introspection.option_occurrences(:authorize?)
+        |> Enum.flat_map(fn
+          {false, line} ->
+            [
+              format_issue(issue_meta,
+                message:
+                  "`authorize?: false` in action definition bypasses authorization. Use bypass policies instead.",
+                trigger: "authorize?: false",
+                line_no: line
+              )
+            ]
+
+          _ ->
+            []
+        end)
+      end)
     end)
   end
 
