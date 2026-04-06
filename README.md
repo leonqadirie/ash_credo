@@ -165,7 +165,7 @@ The following checks accept custom parameters:
 
 1. [Fork](https://github.com/leonqadirie/ash_credo/fork) the repository
 2. Create your feature branch (`git switch -c my-new-check`)
-3. Apply formatting and make sure tests and lints pass (`mix format`, `mix credo`, `mix test`)
+3. Apply formatting and make sure tests and lints pass (`mix format`, `mix test`, `mix lint`)
 4. Commit your changes
 5. Open a pull request — PR titles must follow the [Conventional Commits](https://www.conventionalcommits.org) format (e.g. `feat: add check for XY`, `fix: handle XY edge case`)
 

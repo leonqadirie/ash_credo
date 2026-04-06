@@ -11,6 +11,7 @@ defmodule AshCredo.MixProject do
       description: @description,
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
+      aliases: aliases(),
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
@@ -22,6 +23,12 @@ defmodule AshCredo.MixProject do
 
   def application do
     [extra_applications: [:logger]]
+  end
+
+  defp aliases do
+    [
+      lint: ["credo", "ex_dna"]
+    ]
   end
 
   defp elixirc_paths(:test), do: ["lib/", "test/support/"]

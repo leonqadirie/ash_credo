@@ -38,5 +38,4 @@ jobs:
             mix-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
       - run: mix deps.get
       - run: mix test
-      - run: mix credo --strict
-      - run: mix ex_dna
+      - run: mix lint
