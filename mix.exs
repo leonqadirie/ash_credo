@@ -33,6 +33,7 @@ defmodule AshCredo.MixProject do
       {:igniter, "~> 0.7", optional: true},
       {:ex_dna, "~> 1.2", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
+      {:ex_slop, "~> 0.1", only: [:dev, :test], runtime: false},
       {:quokka, "~> 2.12", only: [:dev, :test], runtime: false}
     ]
   end
