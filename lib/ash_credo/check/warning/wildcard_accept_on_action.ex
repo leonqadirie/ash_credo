@@ -23,12 +23,8 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
   def run(%SourceFile{} = source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
 
-    source_file
-    |> Introspection.resource_modules()
-    |> Enum.flat_map(fn module_ast ->
-      module_ast
-      |> Introspection.find_dsl_section(:actions)
-      |> check_actions(issue_meta)
+    Introspection.flat_map_dsl_section(source_file, :actions, fn actions_ast ->
+      check_actions(actions_ast, issue_meta)
     end)
   end
 

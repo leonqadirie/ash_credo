@@ -91,6 +91,15 @@ defmodule AshCredo.Introspection do
     end
   end
 
+  @doc "Iterates resource modules, finds a DSL section, and flat-maps results through `fun`."
+  def flat_map_dsl_section(source_file, section, fun) do
+    source_file
+    |> resource_modules()
+    |> Enum.flat_map(fn module_ast ->
+      module_ast |> find_dsl_section(section) |> fun.()
+    end)
+  end
+
   @doc "Finds the AST node for a top-level DSL section (e.g. :attributes)."
   def find_dsl_section(%{module_ast: module_ast}, section_name) do
     find_dsl_section(module_ast, section_name)
