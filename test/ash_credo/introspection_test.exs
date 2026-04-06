@@ -92,6 +92,145 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "ash_api_call?/2" do
+    test "matches direct Ash.* calls" do
+      ast = quote(do: Ash.read!(MyApp.User))
+      assert Introspection.ash_api_call?(ast)
+    end
+
+    test "matches Ash submodule calls" do
+      ast = quote(do: Ash.Query.for_read(MyApp.User, :list))
+      assert Introspection.ash_api_call?(ast)
+    end
+
+    test "does not match non-Ash calls" do
+      ast = quote(do: SomeOtherLib.run(query))
+      refute Introspection.ash_api_call?(ast)
+    end
+
+    test "resolves aliased Ash module" do
+      aliases = [{[:A], [:Ash]}]
+      ast = quote(do: A.read!(MyApp.User))
+      assert Introspection.ash_api_call?(ast, aliases)
+    end
+
+    test "resolves aliased Ash submodule" do
+      aliases = [{[:Q], [:Ash, :Query]}]
+      ast = quote(do: Q.for_read(MyApp.User, :list))
+      assert Introspection.ash_api_call?(ast, aliases)
+    end
+
+    test "does not match aliased non-Ash module" do
+      aliases = [{[:S], [:SomeOtherLib]}]
+      ast = quote(do: S.run(query))
+      refute Introspection.ash_api_call?(ast, aliases)
+    end
+  end
+
+  describe "ash_api_calls/1" do
+    test "finds top-level Ash calls" do
+      source = """
+      Ash.read!(MyApp.User)
+      """
+
+      calls = Introspection.ash_api_calls(source_file(source))
+      assert length(calls) == 1
+    end
+
+    test "finds direct Ash calls" do
+      source = """
+      defmodule MyApp.Accounts do
+        def list_users do
+          Ash.read!(MyApp.User)
+        end
+      end
+      """
+
+      calls = Introspection.ash_api_calls(source_file(source))
+      assert length(calls) == 1
+    end
+
+    test "finds aliased Ash calls" do
+      source = """
+      defmodule MyApp.Accounts do
+        alias Ash, as: A
+
+        def list_users do
+          A.read!(MyApp.User)
+        end
+      end
+      """
+
+      calls = Introspection.ash_api_calls(source_file(source))
+      assert length(calls) == 1
+    end
+
+    test "finds function-local aliases before the call site" do
+      source = """
+      defmodule MyApp.Accounts do
+        def list_users do
+          alias Ash, as: A
+          A.read!(MyApp.User)
+        end
+      end
+      """
+
+      calls = Introspection.ash_api_calls(source_file(source))
+      assert length(calls) == 1
+    end
+
+    test "respects alias order at the call site" do
+      source = """
+      defmodule MyApp.Accounts do
+        def before_alias do
+          A.read!(MyApp.User)
+        end
+
+        alias Ash, as: A
+
+        def after_alias do
+          A.read!(MyApp.User)
+        end
+      end
+      """
+
+      calls = Introspection.ash_api_calls(source_file(source))
+      assert length(calls) == 1
+    end
+
+    test "does not find non-Ash calls" do
+      source = """
+      defmodule MyApp.Accounts do
+        def do_thing do
+          SomeOtherLib.run(query)
+        end
+      end
+      """
+
+      calls = Introspection.ash_api_calls(source_file(source))
+      assert calls == []
+    end
+
+    test "does not double-count calls in nested modules" do
+      source = """
+      defmodule MyApp.Accounts do
+        def outer_call do
+          Ash.read!(MyApp.User)
+        end
+
+        defmodule Inner do
+          def inner_call do
+            Ash.create!(MyApp.Post)
+          end
+        end
+      end
+      """
+
+      calls = Introspection.ash_api_calls(source_file(source))
+      assert length(calls) == 2
+    end
+  end
+
   describe "find_dsl_section/2" do
     test "finds the attributes section" do
       sf = source_file(@ash_resource)
