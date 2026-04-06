@@ -1,6 +1,23 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.3.0](https://github.com/leonqadirie/ash_credo/compare/v0.2.0...v0.3.0) (2026-04-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* disable most rules by default ([#13](https://github.com/leonqadirie/ash_credo/issues/13))
+
+### Features
+
+* add AuthorizeFalse check: flag authorize?: false usage  ([#7](https://github.com/leonqadirie/ash_credo/issues/7)) ([c8e7aae](https://github.com/leonqadirie/ash_credo/commit/c8e7aaee9b1d5da219c1b3a16afc0e107c3150fc))
+* disable most rules by default ([#13](https://github.com/leonqadirie/ash_credo/issues/13)) ([723ba7e](https://github.com/leonqadirie/ash_credo/commit/723ba7ef6575d0bf9ba97159be90feb01df70a38))
+
+
+### Bug Fixes
+
+* edge cases with nested modules, inline opts, and alias resolution ([#17](https://github.com/leonqadirie/ash_credo/issues/17)) ([778a1ef](https://github.com/leonqadirie/ash_credo/commit/778a1efae70509f34a70a6a4f4ed52b7eb7fcdbd))
+
 ## [0.2.0] - 2026-04-05
 
 ### Added
@@ -44,4 +61,3 @@ All notable changes to this project will be documented in this file.
 ### Testing
 
 - Set up test infrastructure and remove placeholder test
-
