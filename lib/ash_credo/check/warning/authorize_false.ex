@@ -25,71 +25,55 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
 
           Ash.get!(Resource, id, scope: context)
 
-      Note: this check only detects `authorize?: false` passed directly in a
-      function call. It cannot follow values through variables or configuration,
-      so a clean result does not guarantee the option is absent from your codebase.
-      Consider supplementing with `grep -r "authorize?: false"` for a full audit.
+      **Note:** This check detects `authorize?: false` anywhere it appears as a literal in
+      the source — in Ash API calls, action DSL definitions, variable assignments,
+      keyword list construction, and wrapper functions. It cannot follow values
+      through non-literal expressions (e.g. config lookups or function return values).
       """
     ]
-
-  alias AshCredo.Introspection
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
 
-    call_authorize_false_issues(source_file, issue_meta) ++
-      action_authorize_false_issues(source_file, issue_meta)
-  end
-
-  defp call_authorize_false_issues(source_file, issue_meta) do
     source_file
-    |> Introspection.ash_api_calls()
-    |> Enum.flat_map(fn {_call, meta, args} ->
-      if has_authorize_false?(args) do
-        [
-          format_issue(issue_meta,
-            message:
-              "`authorize?: false` bypasses authorization. Use `actor: %{system: :context_name}` with a bypass policy instead.",
-            trigger: "authorize?: false",
-            line_no: meta[:line]
-          )
-        ]
-      else
-        []
-      end
+    |> find_authorize_false_lines()
+    |> Enum.map(fn line ->
+      format_issue(issue_meta,
+        message:
+          "`authorize?: false` bypasses authorization. Use system actors with bypass policies instead.",
+        trigger: "authorize?: false",
+        line_no: line
+      )
     end)
   end
 
-  defp action_authorize_false_issues(source_file, issue_meta) do
-    Introspection.flat_map_dsl_section(source_file, :actions, fn actions_ast ->
-      actions_ast
-      |> Introspection.action_entities()
-      |> Enum.flat_map(fn action ->
-        action
-        |> Introspection.option_occurrences(:authorize?)
-        |> Enum.flat_map(fn
-          {false, line} ->
-            [
-              format_issue(issue_meta,
-                message:
-                  "`authorize?: false` in action definition bypasses authorization. Use bypass policies instead.",
-                trigger: "authorize?: false",
-                line_no: line
-              )
-            ]
+  defp find_authorize_false_lines(source_file) do
+    Credo.Code.prewalk(
+      source_file,
+      fn
+        {:authorize?, meta, [false]} = ast, acc ->
+          {ast, [meta[:line] | acc]}
 
-          _ ->
-            []
-        end)
-      end)
-    end)
+        {_name, meta, args} = ast, acc when is_list(args) and is_list(meta) ->
+          if has_authorize_false?(args) do
+            {ast, [meta[:line] | acc]}
+          else
+            {ast, acc}
+          end
+
+        ast, acc ->
+          {ast, acc}
+      end,
+      []
+    )
+    |> Enum.uniq()
   end
 
   defp has_authorize_false?(args) do
     Enum.any?(args, fn
       {:authorize?, false} -> true
-      args when is_list(args) -> Keyword.get(args, :authorize?) == false
+      kwl when is_list(kwl) -> Keyword.get(kwl, :authorize?) == false
       _ -> false
     end)
   end

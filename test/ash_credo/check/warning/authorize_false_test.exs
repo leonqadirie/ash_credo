@@ -68,7 +68,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     assert [] = run_check(AuthorizeFalse, source)
   end
 
-  test "no issue for authorize?: false in non-Ash calls" do
+  test "reports issue for authorize?: false in non-Ash calls" do
     source = """
     defmodule MyApp.Accounts do
       def do_thing do
@@ -77,7 +77,8 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     end
     """
 
-    assert [] = run_check(AuthorizeFalse, source)
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.trigger == "authorize?: false"
   end
 
   test "reports issue for authorize?: false with aliased Ash module" do
@@ -186,7 +187,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     assert [] = run_check(AuthorizeFalse, source)
   end
 
-  test "does not flag authorize?: false passed via a variable (known limitation)" do
+  test "reports issue for authorize?: false in a variable assignment" do
     source = """
     defmodule MyApp.Accounts do
       def list_users do
@@ -196,7 +197,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     end
     """
 
-    # Static analysis cannot follow variable bindings.
-    assert [] = run_check(AuthorizeFalse, source)
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.trigger == "authorize?: false"
   end
 end
