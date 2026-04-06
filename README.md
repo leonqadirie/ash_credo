@@ -70,7 +70,7 @@ mix credo
 
 | Check | Category | Priority | Default | Description |
 |---|---|---|---|---|
-| `AuthorizeFalse` | Warning | High | No | Flags `authorize?: false` in Ash API calls — use system actors with bypass policies instead |
+| `AuthorizeFalse` | Warning | High | No | Flags literal `authorize?: false` in Ash calls, action DSL, and (by default) any other call site |
 | `AuthorizerWithoutPolicies` | Warning | High | No | Detects resources with `Ash.Policy.Authorizer` but no policies defined |
 | `EmptyDomain` | Warning | Normal | No | Flags domains with no resources registered |
 | `MissingChangeWrapper` | Warning | High | Yes | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions |
@@ -155,6 +155,7 @@ The following checks accept custom parameters:
 
 | Check | Parameter | Default | Description |
 |---|---|---|---|
+| `Warning.AuthorizeFalse` | `include_non_ash_calls` | `true` | When `false`, only checks Ash API calls and action DSL definitions |
 | `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
 | `Refactor.LargeResource` | `max_lines` | `400` | Maximum line count before triggering |
 | `Warning.SensitiveAttributeExposed` | `sensitive_names` | `~w(password hashed_password password_hash token secret api_key private_key ssn)a` | Attribute names to flag when not marked `sensitive?: true` |

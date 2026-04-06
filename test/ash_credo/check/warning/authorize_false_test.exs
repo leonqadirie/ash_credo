@@ -68,7 +68,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     assert [] = run_check(AuthorizeFalse, source)
   end
 
-  test "reports issue for authorize?: false in non-Ash calls" do
+  test "reports issue for authorize?: false in non-Ash calls by default" do
     source = """
     defmodule MyApp.Accounts do
       def do_thing do
@@ -78,6 +78,46 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     """
 
     assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.trigger == "authorize?: false"
+  end
+
+  test "skips non-Ash calls when include_non_ash_calls is false" do
+    source = """
+    defmodule MyApp.Accounts do
+      def do_thing do
+        SomeOtherLib.run(query, authorize?: false)
+      end
+    end
+    """
+
+    assert [] = run_check(AuthorizeFalse, source, include_non_ash_calls: false)
+  end
+
+  test "still detects Ash calls when include_non_ash_calls is false" do
+    source = """
+    defmodule MyApp.Accounts do
+      def list_users do
+        Ash.read!(MyApp.User, authorize?: false)
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source, include_non_ash_calls: false)
+    assert issue.trigger == "authorize?: false"
+  end
+
+  test "still detects action DSL when include_non_ash_calls is false" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource
+
+      actions do
+        read :list, authorize?: false
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source, include_non_ash_calls: false)
     assert issue.trigger == "authorize?: false"
   end
 

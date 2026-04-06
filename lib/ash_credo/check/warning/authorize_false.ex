@@ -3,6 +3,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
     base_priority: :high,
     category: :warning,
     tags: [:ash, :security],
+    param_defaults: [include_non_ash_calls: true],
     explanations: [
       check: """
       Using `authorize?: false` bypasses Ash authorization entirely, making it
@@ -25,20 +26,35 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
 
           Ash.get!(Resource, id, scope: context)
 
-      **Note:** This check detects `authorize?: false` anywhere it appears as a literal in
-      the source — in Ash API calls, action DSL definitions, variable assignments,
-      keyword list construction, and wrapper functions. It cannot follow values
-      through non-literal expressions (e.g. config lookups or function return values).
-      """
+      **Note:** By default this check flags `authorize?: false` anywhere it appears as a
+      literal — Ash API calls, action DSL definitions, variable assignments, and
+      wrapper functions. Set `include_non_ash_calls: false` to restrict detection
+      to Ash API calls and action DSL definitions only.
+
+      In either mode the check is purely syntactic: it cannot follow values through
+      variables, config lookups, or function return values.
+      """,
+      params: [
+        include_non_ash_calls:
+          "When `true` (default), flags `authorize?: false` anywhere in source. " <>
+            "When `false`, only checks Ash API calls and action DSL definitions."
+      ]
     ]
+
+  alias AshCredo.Introspection
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
 
-    source_file
-    |> find_authorize_false_lines()
-    |> Enum.map(fn line ->
+    lines =
+      if Params.get(params, :include_non_ash_calls, __MODULE__) do
+        all_authorize_false_lines(source_file)
+      else
+        ash_authorize_false_lines(source_file)
+      end
+
+    Enum.map(lines, fn line ->
       format_issue(issue_meta,
         message:
           "`authorize?: false` bypasses authorization. Use system actors with bypass policies instead.",
@@ -48,7 +64,32 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
     end)
   end
 
-  defp find_authorize_false_lines(source_file) do
+  defp ash_authorize_false_lines(source_file) do
+    call_lines =
+      source_file
+      |> Introspection.ash_api_calls()
+      |> Enum.flat_map(fn {_call, meta, args} ->
+        if has_authorize_false?(args), do: [meta[:line]], else: []
+      end)
+
+    action_lines =
+      Introspection.flat_map_dsl_section(source_file, :actions, fn actions_ast ->
+        actions_ast
+        |> Introspection.action_entities()
+        |> Enum.flat_map(fn action ->
+          action
+          |> Introspection.option_occurrences(:authorize?)
+          |> Enum.flat_map(fn
+            {false, line} -> [line]
+            _ -> []
+          end)
+        end)
+      end)
+
+    Enum.uniq(call_lines ++ action_lines)
+  end
+
+  defp all_authorize_false_lines(source_file) do
     Credo.Code.prewalk(
       source_file,
       fn
