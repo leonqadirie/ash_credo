@@ -58,11 +58,13 @@ Register the plugin in your `.credo.exs` configuration:
 }
 ```
 
-That's it. Only `MissingChangeWrapper` is enabled by default. All other checks are opt-in — enable them individually in your `.credo.exs` (see [Configuration](#configuration)). Run Credo as usual:
+Run Credo as usual:
 
 ```bash
 mix credo
 ```
+
+**Note: Only `MissingChangeWrapper` is enabled by default.** All other checks are opt-in — enable them individually in your `.credo.exs` (see [Configuration](#configuration)).
 
 ## Checks
 
@@ -90,7 +92,7 @@ mix credo
 
 ## Configuration
 
-Only `MissingChangeWrapper` is enabled by default. Enable additional checks by adding them to the `extra` section of your `.credo.exs`:
+**Only `MissingChangeWrapper` is enabled by default.** Enable additional checks by adding them to the `extra` section of your `.credo.exs`:
 
 ```elixir
 %{
