@@ -106,6 +106,15 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     assert issue.trigger == "authorize?: false"
   end
 
+  test "still detects top-level Ash calls when include_non_ash_calls is false" do
+    source = """
+    Ash.read!(MyApp.User, authorize?: false)
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source, include_non_ash_calls: false)
+    assert issue.trigger == "authorize?: false"
+  end
+
   test "still detects action DSL when include_non_ash_calls is false" do
     source = """
     defmodule MyApp.User do
@@ -152,6 +161,20 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     assert issue.trigger == "authorize?: false"
   end
 
+  test "does not treat aliases declared after the call as in scope" do
+    source = """
+    defmodule MyApp.Accounts do
+      def before_alias do
+        A.read!(MyApp.User, authorize?: false)
+      end
+
+      alias Ash, as: A
+    end
+    """
+
+    assert [] = run_check(AuthorizeFalse, source, include_non_ash_calls: false)
+  end
+
   test "reports issue for inline authorize?: false on an action" do
     source = """
     defmodule MyApp.User do
@@ -182,6 +205,20 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
 
     assert [issue] = run_check(AuthorizeFalse, source)
     assert issue.trigger == "authorize?: false"
+  end
+
+  test "does not flag ordinary authorize?/1 functions or calls" do
+    source = """
+    defmodule MyApp.Auth do
+      def authorize?(false), do: :reject
+
+      def check do
+        authorize?(false)
+      end
+    end
+    """
+
+    assert [] = run_check(AuthorizeFalse, source)
   end
 
   test "reports issues for multiple actions with authorize?: false" do

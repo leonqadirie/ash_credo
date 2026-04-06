@@ -86,29 +86,28 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
         end)
       end)
 
-    Enum.uniq(call_lines ++ action_lines)
+    Enum.sort(Enum.uniq(call_lines ++ action_lines))
   end
 
   defp all_authorize_false_lines(source_file) do
-    Credo.Code.prewalk(
-      source_file,
-      fn
-        {:authorize?, meta, [false]} = ast, acc ->
-          {ast, [meta[:line] | acc]}
+    literal_lines =
+      Credo.Code.prewalk(
+        source_file,
+        fn
+          {_name, meta, args} = ast, acc when is_list(args) and is_list(meta) ->
+            if has_authorize_false?(args) do
+              {ast, [meta[:line] | acc]}
+            else
+              {ast, acc}
+            end
 
-        {_name, meta, args} = ast, acc when is_list(args) and is_list(meta) ->
-          if has_authorize_false?(args) do
-            {ast, [meta[:line] | acc]}
-          else
+          ast, acc ->
             {ast, acc}
-          end
+        end,
+        []
+      )
 
-        ast, acc ->
-          {ast, acc}
-      end,
-      []
-    )
-    |> Enum.uniq()
+    Enum.sort(Enum.uniq(ash_authorize_false_lines(source_file) ++ literal_lines))
   end
 
   defp has_authorize_false?(args) do
