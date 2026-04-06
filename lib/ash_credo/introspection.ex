@@ -16,22 +16,43 @@ defmodule AshCredo.Introspection do
   def ash_resource?(source_file), do: resource_modules(source_file) != []
 
   @doc "Returns true if the AST node is a call to an `Ash.*` module (e.g. `Ash.read!/2`)."
-  def ash_api_call?({{:., _, [{:__aliases__, _, [:Ash | _]}, _fun]}, _meta, _args}), do: true
-  def ash_api_call?(_), do: false
+  def ash_api_call?(ast, aliases \\ [])
 
-  @doc "Returns all `Ash.*` API call AST nodes found in the source file."
+  def ash_api_call?({{:., _, [{:__aliases__, _, segments}, _fun]}, _meta, _args}, aliases) do
+    match?([:Ash | _], expand_alias(segments, aliases))
+  end
+
+  def ash_api_call?(_, _), do: false
+
+  @doc "Returns all `Ash.*` API call AST nodes found in the source file, resolving aliases."
   def ash_api_calls(source_file) do
-    Credo.Code.prewalk(
-      source_file,
-      fn
-        {_call, _meta, args} = ast, acc when is_list(args) ->
-          if ash_api_call?(ast), do: {ast, [ast | acc]}, else: {ast, acc}
+    source_file
+    |> all_modules()
+    |> Enum.flat_map(&ash_api_calls_in_module/1)
+  end
+
+  defp ash_api_calls_in_module(module_ast) do
+    aliases = module_aliases(module_ast)
+
+    module_ast
+    |> module_body()
+    |> Enum.flat_map(&collect_ash_calls(&1, aliases))
+  end
+
+  defp collect_ash_calls(stmt, aliases) do
+    {_, calls} =
+      Macro.prewalk(stmt, [], fn
+        {:defmodule, _, _}, acc ->
+          {:skipped, acc}
+
+        {{:., _, [{:__aliases__, _, _}, _]}, _, _} = ast, acc ->
+          if ash_api_call?(ast, aliases), do: {ast, [ast | acc]}, else: {ast, acc}
 
         ast, acc ->
           {ast, acc}
-      end,
-      []
-    )
+      end)
+
+    calls
   end
 
   @doc "Returns true if the source file or module contains `use Ash.Domain`."

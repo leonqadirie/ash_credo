@@ -80,6 +80,37 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     assert [] = run_check(AuthorizeFalse, source)
   end
 
+  test "reports issue for authorize?: false with aliased Ash module" do
+    source = """
+    defmodule MyApp.Accounts do
+      alias Ash, as: A
+
+      def list_users do
+        A.read!(MyApp.User, authorize?: false)
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.trigger == "authorize?: false"
+  end
+
+  test "reports issue for authorize?: false with aliased Ash submodule" do
+    source = """
+    defmodule MyApp.Accounts do
+      alias Ash.Query
+
+      def list_users do
+        query = Query.for_read(MyApp.User, :list)
+        Ash.read!(query, authorize?: false)
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.trigger == "authorize?: false"
+  end
+
   test "does not flag authorize?: false passed via a variable (known limitation)" do
     source = """
     defmodule MyApp.Accounts do
