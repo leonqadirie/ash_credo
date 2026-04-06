@@ -2,6 +2,7 @@ defmodule AshCredo.Introspection do
   @moduledoc "Utilities for inspecting Ash DSL constructs in source AST."
 
   @action_entities ~w(create read update destroy action)a
+  @scope_keys ~w(do else after rescue catch)a
 
   @doc "Returns all modules in the source file that directly `use Ash.Resource`."
   def resource_modules(source_file), do: modules_using(source_file, [:Ash, :Resource])
@@ -24,35 +25,70 @@ defmodule AshCredo.Introspection do
 
   def ash_api_call?(_, _), do: false
 
-  @doc "Returns all `Ash.*` API call AST nodes found in the source file, resolving aliases."
+  @doc "Returns all `Ash.*` API call AST nodes found in the source file, resolving aliases lexically."
   def ash_api_calls(source_file) do
-    source_file
-    |> all_modules()
-    |> Enum.flat_map(&ash_api_calls_in_module/1)
+    {_, %{calls: calls}} =
+      source_file
+      |> Credo.SourceFile.ast()
+      |> Macro.traverse(%{alias_frames: [[]], calls: []}, &enter_ash_api_call/2, &leave_scope/2)
+
+    Enum.reverse(calls)
   end
 
-  defp ash_api_calls_in_module(module_ast) do
-    aliases = module_aliases(module_ast)
-
-    module_ast
-    |> module_body()
-    |> Enum.flat_map(&collect_ash_calls(&1, aliases))
+  defp enter_ash_api_call({scope_key, _body} = ast, state) when scope_key in @scope_keys do
+    {ast, push_alias_frame(state)}
   end
 
-  defp collect_ash_calls(stmt, aliases) do
-    {_, calls} =
-      Macro.prewalk(stmt, [], fn
-        {:defmodule, _, _}, acc ->
-          {:skipped, acc}
+  defp enter_ash_api_call({:->, _, [_args, _body]} = ast, state) do
+    {ast, push_alias_frame(state)}
+  end
 
-        {{:., _, [{:__aliases__, _, _}, _]}, _, _} = ast, acc ->
-          if ash_api_call?(ast, aliases), do: {ast, [ast | acc]}, else: {ast, acc}
+  defp enter_ash_api_call({:alias, _, _} = ast, state) do
+    {ast, put_aliases(state, alias_entries(ast))}
+  end
 
-        ast, acc ->
-          {ast, acc}
-      end)
+  defp enter_ash_api_call(
+         {{:., _, [{:__aliases__, _, _segments}, _fun]}, _meta, args} = ast,
+         state
+       )
+       when is_list(args) do
+    if ash_api_call?(ast, current_aliases(state)) do
+      {ast, %{state | calls: [ast | state.calls]}}
+    else
+      {ast, state}
+    end
+  end
 
-    calls
+  defp enter_ash_api_call(ast, state), do: {ast, state}
+
+  defp leave_scope({scope_key, _body} = ast, state) when scope_key in @scope_keys do
+    {ast, pop_alias_frame(state)}
+  end
+
+  defp leave_scope({:->, _, [_args, _body]} = ast, state) do
+    {ast, pop_alias_frame(state)}
+  end
+
+  defp leave_scope(ast, state), do: {ast, state}
+
+  defp push_alias_frame(state) do
+    update_in(state.alias_frames, &[[] | &1])
+  end
+
+  defp pop_alias_frame(%{alias_frames: [_current, []]} = state) do
+    %{state | alias_frames: [[]]}
+  end
+
+  defp pop_alias_frame(%{alias_frames: [_current | frames]} = state) do
+    %{state | alias_frames: frames}
+  end
+
+  defp put_aliases(%{alias_frames: [current | frames]} = state, new_aliases) do
+    %{state | alias_frames: [new_aliases ++ current | frames]}
+  end
+
+  defp current_aliases(%{alias_frames: frames}) do
+    Enum.concat(frames)
   end
 
   @doc "Returns true if the source file or module contains `use Ash.Domain`."

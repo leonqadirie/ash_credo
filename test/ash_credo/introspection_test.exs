@@ -128,6 +128,15 @@ defmodule AshCredo.IntrospectionTest do
   end
 
   describe "ash_api_calls/1" do
+    test "finds top-level Ash calls" do
+      source = """
+      Ash.read!(MyApp.User)
+      """
+
+      calls = Introspection.ash_api_calls(source_file(source))
+      assert length(calls) == 1
+    end
+
     test "finds direct Ash calls" do
       source = """
       defmodule MyApp.Accounts do
@@ -147,6 +156,39 @@ defmodule AshCredo.IntrospectionTest do
         alias Ash, as: A
 
         def list_users do
+          A.read!(MyApp.User)
+        end
+      end
+      """
+
+      calls = Introspection.ash_api_calls(source_file(source))
+      assert length(calls) == 1
+    end
+
+    test "finds function-local aliases before the call site" do
+      source = """
+      defmodule MyApp.Accounts do
+        def list_users do
+          alias Ash, as: A
+          A.read!(MyApp.User)
+        end
+      end
+      """
+
+      calls = Introspection.ash_api_calls(source_file(source))
+      assert length(calls) == 1
+    end
+
+    test "respects alias order at the call site" do
+      source = """
+      defmodule MyApp.Accounts do
+        def before_alias do
+          A.read!(MyApp.User)
+        end
+
+        alias Ash, as: A
+
+        def after_alias do
           A.read!(MyApp.User)
         end
       end
