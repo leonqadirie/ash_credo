@@ -11,9 +11,21 @@ AshCredo detects common anti-patterns, security pitfalls, and missing best pract
 > [!WARNING]
 > This project is experimental and might break frequently.
 
+**Note: Only `MissingChangeWrapper` is enabled by default.** All other checks are opt-in — enable them individually in your `.credo.exs` (see [Configuration](#configuration)).
+
 ## Installation
 
 AshCredo requires [Credo](https://hexdocs.pm/credo) to already be installed in your project.
+
+### With Igniter (recommended)
+
+If your project uses [Igniter](https://hexdocs.pm/igniter), a single command will add the dependency and register the plugin in your `.credo.exs`:
+
+```bash
+mix igniter.install ash_credo
+```
+
+### Manual
 
 Add `ash_credo` to your list of dependencies in `mix.exs`:
 
@@ -25,29 +37,14 @@ def deps do
 end
 ```
 
-Then fetch the dependency:
+Then fetch the dependency and register the plugin in your `.credo.exs`:
 
 ```bash
 mix deps.get
 ```
 
-## Setup
-
-### With Igniter
-
-If your project uses [Igniter](https://hexdocs.pm/igniter), you can set up AshCredo automatically:
-
-```bash
-mix ash_credo.install
-```
-
-This will create or update your `.credo.exs` to include the AshCredo plugin.
-
-### Manual
-
-Register the plugin in your `.credo.exs` configuration:
-
 ```elixir
+# .credo.exs
 %{
   configs: [
     %{
@@ -58,13 +55,11 @@ Register the plugin in your `.credo.exs` configuration:
 }
 ```
 
-Run Credo as usual:
+### Running
 
 ```bash
 mix credo
 ```
-
-**Note: Only `MissingChangeWrapper` is enabled by default.** All other checks are opt-in — enable them individually in your `.credo.exs` (see [Configuration](#configuration)).
 
 ## Checks
 
