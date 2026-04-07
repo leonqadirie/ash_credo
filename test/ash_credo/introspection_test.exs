@@ -231,6 +231,67 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "ash_api_calls_with_context/1" do
+    test "returns normalized args, visible aliases, and straight-line bindings" do
+      source = """
+      defmodule MyApp.Admin do
+        alias Ash.Query, as: Q
+
+        def archive_all do
+          query = Q.for_read(MyApp.Post, :published)
+
+          query
+          |> Ash.bulk_update(:archive, %{})
+        end
+      end
+      """
+
+      calls = Introspection.ash_api_calls_with_context(source_file(source))
+
+      bulk_update =
+        Enum.find(calls, fn %{call_ast: {{:., _, [_module, fun_name]}, _, _args}} ->
+          fun_name == :bulk_update
+        end)
+
+      assert bulk_update.expanded_module == [:Ash]
+      assert [{:query, _, nil}, :archive, {:%{}, _, []}] = bulk_update.args
+      assert {[:Q], [:Ash, :Query]} in bulk_update.aliases
+
+      assert match?(
+               {{:., _, [{:__aliases__, _, [:Q]}, :for_read]}, _, _},
+               Map.fetch!(bulk_update.bindings, {:query, nil})
+             )
+    end
+
+    test "does not record bindings introduced inside branches" do
+      source = """
+      defmodule MyApp.Admin do
+        def archive_all do
+          if ready?() do
+            query = Ash.Query.for_read(MyApp.Post, :published)
+            Ash.bulk_update(query, :archive, %{})
+          end
+
+          Ash.bulk_update(query, :archive, %{})
+        end
+      end
+      """
+
+      calls =
+        source
+        |> source_file()
+        |> Introspection.ash_api_calls_with_context()
+        |> Enum.filter(fn %{call_ast: {{:., _, [_module, fun_name]}, _, _args}} ->
+          fun_name == :bulk_update
+        end)
+
+      [inside_branch, after_branch] = calls
+
+      refute Map.has_key?(inside_branch.bindings, {:query, nil})
+      refute Map.has_key?(after_branch.bindings, {:query, nil})
+    end
+  end
+
   describe "find_dsl_section/2" do
     test "finds the attributes section" do
       sf = source_file(@ash_resource)
