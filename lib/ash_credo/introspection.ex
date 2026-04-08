@@ -10,6 +10,13 @@ defmodule AshCredo.Introspection do
   @doc "Returns all modules in the source file that directly `use Ash.Resource`."
   def resource_modules(source_file), do: modules_using(source_file, [:Ash, :Resource])
 
+  @doc "Returns resource contexts for all resource modules in the source file, in file order."
+  def resource_contexts(source_file) do
+    source_file
+    |> resource_modules()
+    |> Enum.map(&resource_context/1)
+  end
+
   @doc "Returns all modules in the source file that directly `use Ash.Domain`."
   def domain_modules(source_file), do: modules_using(source_file, [:Ash, :Domain])
 
@@ -435,6 +442,29 @@ defmodule AshCredo.Introspection do
   end
 
   def resource_context(_), do: nil
+
+  @doc "Finds a top-level DSL section from a resource context."
+  def resource_section(%{module_ast: _} = resource_context, section_name) do
+    find_dsl_section(resource_context, section_name)
+  end
+
+  def resource_section(_, _section_name), do: nil
+
+  @doc "Returns the best issue anchor line for a section, falling back to `line` and then `fallback`."
+  def section_issue_line(section_ast, line \\ nil, fallback \\ 1) do
+    section_line(section_ast) || line || fallback
+  end
+
+  @doc "Returns the best issue anchor line for a resource section, falling back to the `use` line and then `fallback`."
+  def resource_issue_line(resource_context, section_ast \\ nil, fallback \\ 1)
+
+  def resource_issue_line(%{use_line: use_line}, section_ast, fallback) do
+    section_issue_line(section_ast, use_line, fallback)
+  end
+
+  def resource_issue_line(_resource_context, section_ast, fallback) do
+    section_issue_line(section_ast, nil, fallback)
+  end
 
   @doc "Returns top-level alias mappings in a module body, optionally only those declared before a given line."
   def module_aliases(module_ast, opts \\ [])

@@ -82,6 +82,26 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "resource_contexts/1" do
+    test "returns resource contexts in file order" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog, data_layer: AshPostgres.DataLayer
+
+        defmodule Draft do
+          use Ash.Resource, domain: MyApp.Blog
+        end
+      end
+      """
+
+      [outer, inner] = Introspection.resource_contexts(source_file(source))
+
+      assert Introspection.has_data_layer?(outer)
+      refute Introspection.has_data_layer?(inner)
+      assert outer.use_line < inner.use_line
+    end
+  end
+
   describe "ash_domain?/1" do
     test "returns true for Ash.Domain modules" do
       assert Introspection.ash_domain?(source_file(@ash_domain))
@@ -565,6 +585,70 @@ defmodule AshCredo.IntrospectionTest do
       assert Keyword.has_key?(context.use_opts, :domain)
       assert {[:Authorizer], [:Ash, :Policy, :Authorizer]} in context.aliases
       assert {:actions, _, _} = Introspection.find_dsl_section(context, :actions)
+    end
+  end
+
+  describe "resource_section/2" do
+    test "finds sections within the given resource context only" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+
+        defmodule Draft do
+          use Ash.Resource, domain: MyApp.Blog
+
+          actions do
+            read :read
+          end
+        end
+      end
+      """
+
+      [outer, inner] = Introspection.resource_contexts(source_file(source))
+
+      assert nil == Introspection.resource_section(outer, :actions)
+      assert {:actions, _, _} = Introspection.resource_section(inner, :actions)
+    end
+  end
+
+  describe "resource_issue_line/3" do
+    test "prefers the section line when available" do
+      [context] = Introspection.resource_contexts(source_file(@ash_resource))
+      actions = Introspection.resource_section(context, :actions)
+
+      assert Introspection.section_line(actions) ==
+               Introspection.resource_issue_line(context, actions)
+    end
+
+    test "falls back to the resource use line when the section is missing" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+      end
+      """
+
+      [context] = Introspection.resource_contexts(source_file(source))
+
+      assert context.use_line == Introspection.resource_issue_line(context, nil)
+    end
+
+    test "falls back to the explicit fallback when no context line exists" do
+      assert 7 == Introspection.resource_issue_line(nil, nil, 7)
+    end
+  end
+
+  describe "section_issue_line/3" do
+    test "prefers the section line over the fallback line" do
+      sf = source_file(@ash_resource)
+      actions = Introspection.find_dsl_section(sf, :actions)
+
+      assert Introspection.section_line(actions) ==
+               Introspection.section_issue_line(actions, 99)
+    end
+
+    test "falls back to the provided line and then explicit fallback" do
+      assert 11 == Introspection.section_issue_line(nil, 11)
+      assert 7 == Introspection.section_issue_line(nil, nil, 7)
     end
   end
 
