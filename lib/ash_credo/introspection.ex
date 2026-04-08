@@ -2,6 +2,7 @@ defmodule AshCredo.Introspection do
   @moduledoc "Utilities for inspecting Ash DSL constructs in source AST."
 
   alias AshCredo.Introspection.{Aliases, AshApi}
+  alias Credo.Code.Block
 
   @action_entities ~w(create read update destroy action)a
 
@@ -151,7 +152,7 @@ defmodule AshCredo.Introspection do
   def section_line(_), do: nil
 
   @doc "Returns the flattened list of top-level statements inside a module body."
-  def module_body({:defmodule, _, [_name, [do: body]]}), do: flatten_block(body)
+  def module_body({:defmodule, _, _} = module_ast), do: do_block_entries(module_ast)
   def module_body(_), do: []
 
   @doc "Returns the line span of a module AST, if end metadata is available."
@@ -237,17 +238,14 @@ defmodule AshCredo.Introspection do
   defp use_metadata_opt(%{opts: opts}, key) when is_list(opts), do: Keyword.get(opts, key)
   defp use_metadata_opt(_, _key), do: nil
 
-  defp section_entries({_section, _, [[do: body]]}), do: flatten_block(body)
-  defp section_entries(_), do: []
+  defp section_entries(section_ast), do: do_block_entries(section_ast)
 
-  defp do_block_entries({_name, _meta, args}) when is_list(args) do
-    Enum.find_value(args, [], fn
-      [do: body] -> flatten_block(body)
-      _ -> nil
-    end)
+  defp do_block_entries(ast) do
+    case Block.do_block_for(ast) do
+      {:ok, _body} -> Block.calls_in_do_block(ast)
+      nil -> []
+    end
   end
-
-  defp do_block_entries(_), do: []
 
   @doc "Extracts keyword options from an entity AST call."
   def entity_opts({_name, _meta, args}) when is_list(args) do
@@ -389,10 +387,6 @@ defmodule AshCredo.Introspection do
     |> find_use(module_aliases)
     |> use_metadata_line()
   end
-
-  @doc "Normalizes a block AST node into a flat list of statements."
-  def flatten_block({:__block__, _, stmts}), do: stmts
-  def flatten_block(other), do: [other]
 
   defp modules_using(source_file, module_aliases) do
     source_file

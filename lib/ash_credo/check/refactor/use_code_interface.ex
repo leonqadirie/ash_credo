@@ -34,6 +34,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     ]
 
   alias AshCredo.Introspection
+  alias Credo.Code.Name
 
   # Pattern A: resource at arg 0, action in keyword opts (:action key)
   @action_in_opts ~w(read read! get get! stream stream!)a
@@ -220,7 +221,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   end
 
   defp make_issue(module, fun_name, arity, call_meta, issue_meta) do
-    qualified = Enum.map_join(module, ".", &Atom.to_string/1) <> ".#{fun_name}"
+    qualified = Name.full(module) <> ".#{fun_name}"
 
     format_issue(issue_meta,
       message:

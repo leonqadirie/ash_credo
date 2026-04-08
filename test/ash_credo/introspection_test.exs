@@ -503,6 +503,21 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "module_body/1" do
+    test "returns top-level statements from a module body" do
+      [resource] = Introspection.resource_modules(source_file(@ash_resource))
+      body = Introspection.module_body(resource)
+
+      assert is_list(body)
+      assert Enum.any?(body, &match?({:use, _, _}, &1))
+      assert Enum.any?(body, &match?({:actions, _, _}, &1))
+    end
+
+    test "returns empty list for non-modules" do
+      assert [] == Introspection.module_body(nil)
+    end
+  end
+
   describe "module_aliases/2" do
     test "returns top-level aliases declared before the given line" do
       source = """
