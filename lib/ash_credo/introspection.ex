@@ -3,6 +3,7 @@ defmodule AshCredo.Introspection do
 
   alias AshCredo.Introspection.{Aliases, AshApi}
   alias Credo.Code.Block
+  alias Credo.SourceFile
 
   @action_entities ~w(create read update destroy action)a
 
@@ -56,14 +57,8 @@ defmodule AshCredo.Introspection do
     Keyword.get(opts, :data_layer)
   end
 
-  def resource_data_layer({:defmodule, _, _} = module_ast) do
-    module_ast
-    |> find_use([:Ash, :Resource])
-    |> use_metadata_opt(:data_layer)
-  end
-
-  def resource_data_layer(source_file) do
-    source_file
+  def resource_data_layer(resource_or_source) do
+    resource_or_source
     |> find_use([:Ash, :Resource])
     |> use_metadata_opt(:data_layer)
   end
@@ -94,7 +89,7 @@ defmodule AshCredo.Introspection do
     |> normalized_use_opts()
   end
 
-  @doc "Finds the AST node for a top-level DSL section (e.g. :attributes)."
+  @doc "Finds the AST node for a top-level DSL section (e.g. :attributes) in a module AST or resource/domain context."
   def find_dsl_section(%{module_ast: module_ast}, section_name) do
     find_dsl_section(module_ast, section_name)
   end
@@ -106,10 +101,9 @@ defmodule AshCredo.Introspection do
     end)
   end
 
-  def find_dsl_section(source_file, section_name) do
-    source_file
-    |> all_modules()
-    |> Enum.find_value(&find_dsl_section(&1, section_name))
+  def find_dsl_section(%SourceFile{}, _section_name) do
+    raise ArgumentError,
+          "find_dsl_section/2 no longer accepts a SourceFile; pass a module AST or resource/domain context"
   end
 
   @doc "Checks if an entity call exists inside a section AST node."
