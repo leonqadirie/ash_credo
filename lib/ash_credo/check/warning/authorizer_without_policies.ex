@@ -28,7 +28,12 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
 
   @impl true
   def run(%SourceFile{} = source_file, params),
-    do: Orchestration.flat_map_resource_context(source_file, params, &authorizer_without_policies_issues/2)
+    do:
+      Orchestration.flat_map_resource_context(
+        source_file,
+        params,
+        &authorizer_without_policies_issues/2
+      )
 
   defp authorizer_without_policies_issues(context, issue_meta) do
     authorizer_line = find_authorizer_line(context)
