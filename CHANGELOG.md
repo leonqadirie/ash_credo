@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.5.2](https://github.com/leonqadirie/ash_credo/compare/v0.5.1...v0.5.2) (2026-04-08)
+
+
+### Bug Fixes
+
+* skip default-generated action types in MissingPrimaryAction ([#51](https://github.com/leonqadirie/ash_credo/issues/51)) ([6ad17f8](https://github.com/leonqadirie/ash_credo/commit/6ad17f82da821bc989e2efb6b9ab8be991264e38))
+
 ## [0.5.1](https://github.com/leonqadirie/ash_credo/compare/v0.5.0...v0.5.1) (2026-04-08)
 
 
