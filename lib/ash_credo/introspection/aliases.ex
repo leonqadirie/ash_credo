@@ -3,6 +3,7 @@ defmodule AshCredo.Introspection.Aliases do
 
   alias AshCredo.Introspection
 
+  @doc "Returns top-level alias mappings in a module body, optionally filtered by `:before_line`."
   def module_aliases(module_ast, opts \\ [])
 
   def module_aliases({:defmodule, _, _} = module_ast, opts) do
@@ -23,6 +24,7 @@ defmodule AshCredo.Introspection.Aliases do
 
   def module_aliases(_, _opts), do: []
 
+  @doc "Expands module alias segments using the longest-matching alias mapping."
   def expand_alias(segments, aliases) when is_list(segments) and is_list(aliases) do
     matches =
       Enum.filter(aliases, fn
@@ -45,6 +47,7 @@ defmodule AshCredo.Introspection.Aliases do
 
   def expand_alias(other, _aliases), do: other
 
+  @doc "Resolves a module reference or segments within a module or resource context."
   def resolved_module_ref(ref_or_segments, module_or_context, opts \\ [])
 
   def resolved_module_ref({:__aliases__, meta, segments}, module_or_context, opts) do
@@ -61,10 +64,12 @@ defmodule AshCredo.Introspection.Aliases do
 
   def resolved_module_ref(other, _module_or_context, _opts), do: other
 
+  @doc "Returns true if a module reference resolves to the given target segments."
   def module_ref?(ref_or_segments, module_or_context, target_segments, opts \\ []) do
     resolved_module_ref(ref_or_segments, module_or_context, opts) == target_segments
   end
 
+  @doc "Extracts `{alias_segments, target_segments}` pairs from an alias AST node."
   def alias_entries({:alias, _, [{:__aliases__, _, target_segments}]}) do
     [{default_alias(target_segments), target_segments}]
   end

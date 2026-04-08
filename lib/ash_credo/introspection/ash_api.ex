@@ -8,6 +8,7 @@ defmodule AshCredo.Introspection.AshApi do
   @branch_scope_nodes ~w(if unless case cond with try receive for)a
   @function_scope_nodes ~w(def defp defmacro defmacrop)a
 
+  @doc "Returns true if the AST node is a call to an `Ash.*` module."
   def call?(ast, aliases \\ [])
 
   def call?({{:., _, [{:__aliases__, _, segments}, _fun]}, _meta, _args}, aliases) do
@@ -16,14 +17,17 @@ defmodule AshCredo.Introspection.AshApi do
 
   def call?(_, _), do: false
 
+  @doc "Returns all `Ash.*` API call AST nodes, resolving aliases lexically."
   def calls(source_file) do
     traverse(source_file, fn ast, _expanded, _state -> ast end)
   end
 
+  @doc "Returns `{call_ast, expanded_module_segments}` tuples for all `Ash.*` calls."
   def calls_with_module(source_file) do
     traverse(source_file, fn ast, expanded, _state -> {ast, expanded} end)
   end
 
+  @doc "Returns enriched call maps with `:call_ast`, `:expanded_module`, `:args`, `:aliases`, and `:bindings`."
   def calls_with_context(source_file) do
     traverse(source_file, &build_call_context/3, track_context?: true)
   end
