@@ -16,21 +16,13 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Orchestration
 
   @writable_action_types ~w(create update)a
 
   @impl true
-  def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
-
-    source_file
-    |> Introspection.resource_contexts()
-    |> Enum.flat_map(fn context ->
-      context
-      |> Introspection.resource_section(:actions)
-      |> check_actions(issue_meta)
-    end)
-  end
+  def run(%SourceFile{} = source_file, params),
+    do: Orchestration.flat_map_resource_section(source_file, params, :actions, &check_actions/2)
 
   defp check_actions(nil, _issue_meta), do: []
 

@@ -14,19 +14,17 @@ defmodule AshCredo.Check.Readability.BelongsToMissingAllowNil do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Orchestration
 
   @impl true
-  def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
-
-    source_file
-    |> Introspection.resource_contexts()
-    |> Enum.flat_map(fn context ->
-      context
-      |> Introspection.resource_section(:relationships)
-      |> check_belongs_to(issue_meta)
-    end)
-  end
+  def run(%SourceFile{} = source_file, params),
+    do:
+      Orchestration.flat_map_resource_section(
+        source_file,
+        params,
+        :relationships,
+        &check_belongs_to/2
+      )
 
   defp check_belongs_to(nil, _issue_meta), do: []
 
