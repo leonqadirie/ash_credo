@@ -20,7 +20,12 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
 
   @impl true
   def run(%SourceFile{} = source_file, params),
-    do: Orchestration.flat_map_resource_context(source_file, params, &missing_code_interface_issues/2)
+    do:
+      Orchestration.flat_map_resource_context(
+        source_file,
+        params,
+        &missing_code_interface_issues/2
+      )
 
   defp missing_code_interface_issues(context, issue_meta) do
     actions_ast = Introspection.resource_section(context, :actions)

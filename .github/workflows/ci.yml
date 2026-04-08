@@ -48,5 +48,6 @@ jobs:
           restore-keys: |
             mix-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
       - run: mix deps.get
+      - run: mix format --check-formatted
       - run: mix test
       - run: mix lint
