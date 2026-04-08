@@ -16,21 +16,19 @@ defmodule AshCredo.Check.Readability.ActionMissingDescription do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Orchestration
 
   @action_types ~w(create read update destroy action)a
 
   @impl true
-  def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
-
-    source_file
-    |> Introspection.resource_modules()
-    |> Enum.flat_map(fn module_ast ->
-      module_ast
-      |> Introspection.find_dsl_section(:actions)
-      |> check_descriptions(issue_meta)
-    end)
-  end
+  def run(%SourceFile{} = source_file, params),
+    do:
+      Orchestration.flat_map_resource_section(
+        source_file,
+        params,
+        :actions,
+        &check_descriptions/2
+      )
 
   defp check_descriptions(nil, _issue_meta), do: []
 

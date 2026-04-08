@@ -18,22 +18,18 @@ defmodule AshCredo.Check.Warning.MissingPrimaryKey do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Orchestration
 
   @primary_key_entities ~w(uuid_primary_key uuid_v7_primary_key integer_primary_key)a
 
   @impl true
-  def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
+  def run(%SourceFile{} = source_file, params),
+    do: Orchestration.flat_map_resource_context(source_file, params, &check_for_primary_key/2)
 
-    source_file
-    |> Introspection.resource_modules()
-    |> Enum.flat_map(&check_for_primary_key(&1, issue_meta))
-  end
-
-  defp check_for_primary_key(module_ast, issue_meta) do
-    if Introspection.has_data_layer?(module_ast) do
-      attrs_ast = Introspection.find_dsl_section(module_ast, :attributes)
-      rels_ast = Introspection.find_dsl_section(module_ast, :relationships)
+  defp check_for_primary_key(context, issue_meta) do
+    if Introspection.has_data_layer?(context) do
+      attrs_ast = Introspection.resource_section(context, :attributes)
+      rels_ast = Introspection.resource_section(context, :relationships)
 
       if has_pk_entity?(attrs_ast) or has_pk_attribute?(attrs_ast) or
            has_pk_relationship?(rels_ast) do
@@ -43,9 +39,7 @@ defmodule AshCredo.Check.Warning.MissingPrimaryKey do
           format_issue(issue_meta,
             message: "Resource is missing a primary key.",
             trigger: "attributes",
-            line_no:
-              Introspection.section_line(attrs_ast) ||
-                Introspection.find_use_line(module_ast, [:Ash, :Resource]) || 1
+            line_no: Introspection.resource_issue_line(context, attrs_ast)
           )
         ]
       end

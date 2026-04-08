@@ -100,6 +100,22 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
     assert Enum.any?(issues, &(&1.trigger == "Ash.bulk_update"))
   end
 
+  test "flags Ash.bulk_update when traced query origin uses an alias" do
+    source = """
+    defmodule MyApp.Admin do
+      def archive_all do
+        alias Ash.Query, as: QueryDsl
+
+        query = QueryDsl.for_read(MyApp.Post, :published)
+        Ash.bulk_update(query, :archive, %{})
+      end
+    end
+    """
+
+    issues = run_check(UseCodeInterface, source)
+    assert Enum.any?(issues, &(&1.trigger == "Ash.bulk_update"))
+  end
+
   test "flags piped Ash.bulk_destroy! when query originates from literal resource" do
     source = """
     defmodule MyApp.Admin do

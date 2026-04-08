@@ -18,34 +18,24 @@ defmodule AshCredo.Check.Warning.NoActions do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Orchestration
 
   @impl true
-  def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
+  def run(%SourceFile{} = source_file, params),
+    do: Orchestration.flat_map_resource_context(source_file, params, &no_action_issues/2)
 
-    source_file
-    |> Introspection.resource_modules()
-    |> Enum.flat_map(&no_action_issues(&1, issue_meta))
-  end
-
-  defp no_action_issues(module_ast, issue_meta) do
-    context = Introspection.resource_context(module_ast)
-
+  defp no_action_issues(context, issue_meta) do
     if Introspection.has_data_layer?(context) do
-      actions_ast = Introspection.find_dsl_section(context, :actions)
+      actions_ast = Introspection.resource_section(context, :actions)
 
       if Introspection.actions_defined?(actions_ast) do
         []
       else
-        line_no =
-          Introspection.section_line(actions_ast) ||
-            context.use_line || 1
-
         [
           format_issue(issue_meta,
             message: "Resource has a data layer but no actions defined.",
             trigger: "use Ash.Resource",
-            line_no: line_no
+            line_no: Introspection.resource_issue_line(context, actions_ast)
           )
         ]
       end

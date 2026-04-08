@@ -26,6 +26,7 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
     ]
 
   alias AshCredo.Introspection
+  alias Credo.Code.Name
 
   @time_calls %{
     {[:Date], :utc_today} => "today()",
@@ -43,15 +44,16 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
   end
 
   defp find_pinned_time_calls(ast, issue_meta) do
-    {_, issues} =
-      Macro.prewalk(ast, [], fn
+    Credo.Code.prewalk(
+      ast,
+      fn
         {:^, meta, [{{:., _, [{:__aliases__, _, module}, func]}, _, _}]} = node, acc ->
           case Map.get(@time_calls, {module, func}) do
             nil ->
               {node, acc}
 
             replacement ->
-              pinned = "^#{Enum.join(module, ".")}.#{func}()"
+              pinned = "^#{Name.full(module)}.#{func}()"
 
               issue =
                 format_issue(issue_meta,
@@ -67,9 +69,9 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
 
         node, acc ->
           {node, acc}
-      end)
-
-    issues
+      end,
+      []
+    )
   end
 
   defp module_expr_issues(module_ast, issue_meta) do
@@ -80,15 +82,16 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
   end
 
   defp expr_issues(ast, issue_meta) do
-    {_, issues} =
-      Macro.prewalk(ast, [], fn
+    Credo.Code.prewalk(
+      ast,
+      fn
         {:expr, _meta, [body]} = node, acc ->
           {node, find_pinned_time_calls(body, issue_meta) ++ acc}
 
         node, acc ->
           {node, acc}
-      end)
-
-    issues
+      end,
+      []
+    )
   end
 end

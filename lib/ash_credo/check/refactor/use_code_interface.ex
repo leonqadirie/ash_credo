@@ -34,6 +34,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     ]
 
   alias AshCredo.Introspection
+  alias Credo.Code.Name
 
   # Pattern A: resource at arg 0, action in keyword opts (:action key)
   @action_in_opts ~w(read read! get get! stream stream!)a
@@ -158,7 +159,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   end
 
   defp originates_from_literal_resource?({:|>, _, [left, right]}, context, seen_vars) do
-    case piped_call_signature(left, right, context.aliases) do
+    case piped_call_signature(left, right, context) do
       {:ok, expanded_module, fun_name, args} ->
         origin_call?(expanded_module, fun_name, args, context, seen_vars)
 
@@ -173,7 +174,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
          seen_vars
        )
        when is_list(args) do
-    module = expanded_call_module(module_ast, context.aliases)
+    module = Introspection.resolved_module_ref(module_ast, context)
     origin_call?(module, fun_name, args, context, seen_vars)
   end
 
@@ -205,12 +206,12 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     literal_module?(ast) or originates_from_literal_resource?(ast, context, seen_vars)
   end
 
-  defp piped_call_signature(left, {{:., _, [module_ast, fun_name]}, _meta, args}, aliases)
+  defp piped_call_signature(left, {{:., _, [module_ast, fun_name]}, _meta, args}, context)
        when is_list(args) do
-    {:ok, expanded_call_module(module_ast, aliases), fun_name, [left | args]}
+    {:ok, Introspection.resolved_module_ref(module_ast, context), fun_name, [left | args]}
   end
 
-  defp piped_call_signature(_left, _right, _aliases), do: :error
+  defp piped_call_signature(_left, _right, _context), do: :error
 
   defp action_from_opts(args) do
     case List.last(args) do
@@ -219,14 +220,8 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     end
   end
 
-  defp expanded_call_module({:__aliases__, _, segments}, aliases) when is_list(segments) do
-    Introspection.expand_alias(segments, aliases)
-  end
-
-  defp expanded_call_module(_module_ast, _aliases), do: []
-
   defp make_issue(module, fun_name, arity, call_meta, issue_meta) do
-    qualified = Enum.map_join(module, ".", &Atom.to_string/1) <> ".#{fun_name}"
+    qualified = Name.full(module) <> ".#{fun_name}"
 
     format_issue(issue_meta,
       message:

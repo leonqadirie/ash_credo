@@ -41,6 +41,32 @@ defmodule AshCredo.IntrospectionTest do
   end
   """
 
+  defp first_resource_module(source) do
+    source
+    |> source_file()
+    |> Introspection.resource_modules()
+    |> hd()
+  end
+
+  defp first_domain_module(source) do
+    source
+    |> source_file()
+    |> Introspection.domain_modules()
+    |> hd()
+  end
+
+  defp first_resource_section(source, section_name) do
+    source
+    |> first_resource_module()
+    |> Introspection.find_dsl_section(section_name)
+  end
+
+  defp first_domain_section(source, section_name) do
+    source
+    |> first_domain_module()
+    |> Introspection.find_dsl_section(section_name)
+  end
+
   describe "ash_resource?/1" do
     test "returns true for Ash.Resource modules" do
       assert Introspection.ash_resource?(source_file(@ash_resource))
@@ -79,6 +105,26 @@ defmodule AshCredo.IntrospectionTest do
 
       assert Introspection.has_data_layer?(outer)
       refute Introspection.has_data_layer?(inner)
+    end
+  end
+
+  describe "resource_contexts/1" do
+    test "returns resource contexts in file order" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog, data_layer: AshPostgres.DataLayer
+
+        defmodule Draft do
+          use Ash.Resource, domain: MyApp.Blog
+        end
+      end
+      """
+
+      [outer, inner] = Introspection.resource_contexts(source_file(source))
+
+      assert Introspection.has_data_layer?(outer)
+      refute Introspection.has_data_layer?(inner)
+      assert outer.use_line < inner.use_line
     end
   end
 
@@ -231,6 +277,49 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "ash_api_calls_with_module/1" do
+    test "returns expanded module segments for aliased calls" do
+      source = """
+      defmodule MyApp.Accounts do
+        def list_users do
+          alias Ash.Query, as: Q
+          Q.for_read(MyApp.User, :published)
+        end
+      end
+      """
+
+      [{call_ast, expanded_module}] =
+        source
+        |> source_file()
+        |> Introspection.ash_api_calls_with_module()
+
+      assert expanded_module == [:Ash, :Query]
+
+      assert match?(
+               {{:., _, [{:__aliases__, _, [:Q]}, :for_read]}, _, _},
+               call_ast
+             )
+    end
+
+    test "does not leak function-local aliases across sibling functions" do
+      source = """
+      defmodule MyApp.Accounts do
+        def with_alias do
+          alias Ash, as: A
+          A.read!(MyApp.User)
+        end
+
+        def without_alias do
+          A.read!(MyApp.User)
+        end
+      end
+      """
+
+      calls = Introspection.ash_api_calls_with_module(source_file(source))
+      assert length(calls) == 1
+    end
+  end
+
   describe "ash_api_calls_with_context/1" do
     test "returns normalized args, visible aliases, and straight-line bindings" do
       source = """
@@ -290,24 +379,57 @@ defmodule AshCredo.IntrospectionTest do
       refute Map.has_key?(inside_branch.bindings, {:query, nil})
       refute Map.has_key?(after_branch.bindings, {:query, nil})
     end
+
+    test "resolves function-local aliases before the call site" do
+      source = """
+      defmodule MyApp.Admin do
+        def read_posts do
+          alias Ash, as: A
+          A.read!(MyApp.Post)
+        end
+      end
+      """
+
+      [%{call_ast: call_ast, expanded_module: expanded_module, aliases: aliases}] =
+        Introspection.ash_api_calls_with_context(source_file(source))
+
+      assert expanded_module == [:Ash]
+      assert {[:A], [:Ash]} in aliases
+
+      assert match?(
+               {{:., _, [{:__aliases__, _, [:A]}, :read!]}, _, _},
+               call_ast
+             )
+    end
   end
 
   describe "find_dsl_section/2" do
     test "finds the attributes section" do
-      sf = source_file(@ash_resource)
-      result = Introspection.find_dsl_section(sf, :attributes)
+      result = first_resource_section(@ash_resource, :attributes)
       assert {:attributes, _, _} = result
     end
 
     test "finds the actions section" do
-      sf = source_file(@ash_resource)
-      result = Introspection.find_dsl_section(sf, :actions)
+      result = first_resource_section(@ash_resource, :actions)
       assert {:actions, _, _} = result
     end
 
     test "returns nil for missing section" do
+      assert nil == first_resource_section(@ash_resource, :policies)
+    end
+
+    test "finds domain sections from the explicit domain module" do
+      assert {:resources, _, _} = first_domain_section(@ash_domain, :resources)
+    end
+
+    test "raises on source files to avoid ambiguous lookups" do
       sf = source_file(@ash_resource)
-      assert nil == Introspection.find_dsl_section(sf, :policies)
+
+      assert_raise ArgumentError,
+                   ~r/find_dsl_section\/2 no longer accepts a SourceFile/,
+                   fn ->
+                     Introspection.find_dsl_section(sf, :attributes)
+                   end
     end
 
     test "only inspects the given module body" do
@@ -334,15 +456,13 @@ defmodule AshCredo.IntrospectionTest do
 
   describe "has_entity?/2" do
     test "detects entity in section" do
-      sf = source_file(@ash_resource)
-      attrs = Introspection.find_dsl_section(sf, :attributes)
+      attrs = first_resource_section(@ash_resource, :attributes)
       assert Introspection.has_entity?(attrs, :uuid_primary_key)
       assert Introspection.has_entity?(attrs, :timestamps)
     end
 
     test "returns false for missing entity" do
-      sf = source_file(@ash_resource)
-      attrs = Introspection.find_dsl_section(sf, :attributes)
+      attrs = first_resource_section(@ash_resource, :attributes)
       refute Introspection.has_entity?(attrs, :integer_primary_key)
     end
 
@@ -353,8 +473,7 @@ defmodule AshCredo.IntrospectionTest do
 
   describe "entities/2" do
     test "finds all attribute entities" do
-      sf = source_file(@ash_resource)
-      attrs = Introspection.find_dsl_section(sf, :attributes)
+      attrs = first_resource_section(@ash_resource, :attributes)
       attributes = Introspection.entities(attrs, :attribute)
       assert length(attributes) == 2
     end
@@ -370,6 +489,11 @@ defmodule AshCredo.IntrospectionTest do
       opts = Introspection.use_opts(sf, [:Ash, :Resource])
       assert is_list(opts)
       assert Keyword.has_key?(opts, :domain)
+    end
+
+    test "returns nil when use is not found" do
+      sf = source_file(@plain_module)
+      assert nil == Introspection.use_opts(sf, [:Ash, :Resource])
     end
 
     test "returns empty list when no opts" do
@@ -403,13 +527,27 @@ defmodule AshCredo.IntrospectionTest do
 
   describe "section_line/1" do
     test "returns line number for a section" do
-      sf = source_file(@ash_resource)
-      attrs = Introspection.find_dsl_section(sf, :attributes)
+      attrs = first_resource_section(@ash_resource, :attributes)
       assert is_integer(Introspection.section_line(attrs))
     end
 
     test "returns nil for nil" do
       assert nil == Introspection.section_line(nil)
+    end
+  end
+
+  describe "module_body/1" do
+    test "returns top-level statements from a module body" do
+      [resource] = Introspection.resource_modules(source_file(@ash_resource))
+      body = Introspection.module_body(resource)
+
+      assert is_list(body)
+      assert Enum.any?(body, &match?({:use, _, _}, &1))
+      assert Enum.any?(body, &match?({:actions, _, _}, &1))
+    end
+
+    test "returns empty list for non-modules" do
+      assert [] == Introspection.module_body(nil)
     end
   end
 
@@ -498,6 +636,69 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "resource_section/2" do
+    test "finds sections within the given resource context only" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+
+        defmodule Draft do
+          use Ash.Resource, domain: MyApp.Blog
+
+          actions do
+            read :read
+          end
+        end
+      end
+      """
+
+      [outer, inner] = Introspection.resource_contexts(source_file(source))
+
+      assert nil == Introspection.resource_section(outer, :actions)
+      assert {:actions, _, _} = Introspection.resource_section(inner, :actions)
+    end
+  end
+
+  describe "resource_issue_line/3" do
+    test "prefers the section line when available" do
+      [context] = Introspection.resource_contexts(source_file(@ash_resource))
+      actions = Introspection.resource_section(context, :actions)
+
+      assert Introspection.section_line(actions) ==
+               Introspection.resource_issue_line(context, actions)
+    end
+
+    test "falls back to the resource use line when the section is missing" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+      end
+      """
+
+      [context] = Introspection.resource_contexts(source_file(source))
+
+      assert context.use_line == Introspection.resource_issue_line(context, nil)
+    end
+
+    test "falls back to the explicit fallback when no context line exists" do
+      assert 7 == Introspection.resource_issue_line(nil, nil, 7)
+    end
+  end
+
+  describe "section_issue_line/3" do
+    test "prefers the section line over the fallback line" do
+      actions = first_resource_section(@ash_resource, :actions)
+
+      assert Introspection.section_line(actions) ==
+               Introspection.section_issue_line(actions, 99)
+    end
+
+    test "falls back to the provided line and then explicit fallback" do
+      assert 11 == Introspection.section_issue_line(nil, 11)
+      assert 7 == Introspection.section_issue_line(nil, nil, 7)
+    end
+  end
+
   describe "resolved_module_ref/3" do
     test "resolves aliased module references from resource context" do
       source = """
@@ -554,8 +755,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      sf = source_file(source)
-      actions = Introspection.find_dsl_section(sf, :actions)
+      actions = first_resource_section(source, :actions)
 
       assert length(Introspection.action_entities(actions, [:read, :create])) == 2
       assert length(Introspection.action_entities(actions)) == 3
@@ -583,8 +783,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      sf = source_file(source)
-      actions = Introspection.find_dsl_section(sf, :actions)
+      actions = first_resource_section(source, :actions)
 
       assert [{[:name], line_no}] = Introspection.option_occurrences(actions, :default_accept)
       assert is_integer(line_no)
@@ -593,8 +792,7 @@ defmodule AshCredo.IntrospectionTest do
 
   describe "entity_opts/1" do
     test "extracts inline keyword opts" do
-      sf = source_file(@ash_resource)
-      attrs = Introspection.find_dsl_section(sf, :attributes)
+      attrs = first_resource_section(@ash_resource, :attributes)
       [title | _] = Introspection.entities(attrs, :attribute)
       opts = Introspection.entity_opts(title)
       assert Keyword.has_key?(opts, :public?)
@@ -626,8 +824,7 @@ defmodule AshCredo.IntrospectionTest do
 
   describe "entity_has_opt?/3" do
     test "detects inline opt value" do
-      sf = source_file(@ash_resource)
-      attrs = Introspection.find_dsl_section(sf, :attributes)
+      attrs = first_resource_section(@ash_resource, :attributes)
       [title | _] = Introspection.entities(attrs, :attribute)
       assert Introspection.entity_has_opt?(title, :public?, true)
       refute Introspection.entity_has_opt?(title, :public?, false)
@@ -641,8 +838,7 @@ defmodule AshCredo.IntrospectionTest do
     end
 
     test "detects opt in do block" do
-      sf = source_file(@ash_resource)
-      actions = Introspection.find_dsl_section(sf, :actions)
+      actions = first_resource_section(@ash_resource, :actions)
       [create] = Introspection.entities(actions, :create)
       assert Introspection.entity_has_opt?(create, :primary?, true)
     end
@@ -650,16 +846,14 @@ defmodule AshCredo.IntrospectionTest do
 
   describe "entity_has_opt_key?/2" do
     test "detects inline opt key" do
-      sf = source_file(@ash_resource)
-      attrs = Introspection.find_dsl_section(sf, :attributes)
+      attrs = first_resource_section(@ash_resource, :attributes)
       [title | _] = Introspection.entities(attrs, :attribute)
       assert Introspection.entity_has_opt_key?(title, :public?)
       refute Introspection.entity_has_opt_key?(title, :sensitive?)
     end
 
     test "detects opt key in do block" do
-      sf = source_file(@ash_resource)
-      actions = Introspection.find_dsl_section(sf, :actions)
+      actions = first_resource_section(@ash_resource, :actions)
       [create] = Introspection.entities(actions, :create)
       assert Introspection.entity_has_opt_key?(create, :primary?)
     end
@@ -667,8 +861,7 @@ defmodule AshCredo.IntrospectionTest do
 
   describe "entity_name/1" do
     test "extracts atom name from entity" do
-      sf = source_file(@ash_resource)
-      actions = Introspection.find_dsl_section(sf, :actions)
+      actions = first_resource_section(@ash_resource, :actions)
       [create] = Introspection.entities(actions, :create)
       assert :create == Introspection.entity_name(create)
     end
@@ -680,15 +873,13 @@ defmodule AshCredo.IntrospectionTest do
 
   describe "find_in_body/2" do
     test "finds call inside do block" do
-      sf = source_file(@ash_resource)
-      actions = Introspection.find_dsl_section(sf, :actions)
+      actions = first_resource_section(@ash_resource, :actions)
       [create] = Introspection.entities(actions, :create)
       assert {:accept, _, _} = Introspection.find_in_body(create, :accept)
     end
 
     test "returns nil when call not found" do
-      sf = source_file(@ash_resource)
-      actions = Introspection.find_dsl_section(sf, :actions)
+      actions = first_resource_section(@ash_resource, :actions)
       [create] = Introspection.entities(actions, :create)
       assert nil == Introspection.find_in_body(create, :description)
     end
@@ -700,8 +891,7 @@ defmodule AshCredo.IntrospectionTest do
 
   describe "section_body/1" do
     test "returns statements from section" do
-      sf = source_file(@ash_resource)
-      attrs = Introspection.find_dsl_section(sf, :attributes)
+      attrs = first_resource_section(@ash_resource, :attributes)
       body = Introspection.section_body(attrs)
       assert is_list(body)
       refute Enum.empty?(body)
@@ -714,8 +904,7 @@ defmodule AshCredo.IntrospectionTest do
 
   describe "section_has_entries?/1" do
     test "returns true for non-empty section" do
-      sf = source_file(@ash_resource)
-      attrs = Introspection.find_dsl_section(sf, :attributes)
+      attrs = first_resource_section(@ash_resource, :attributes)
       assert Introspection.section_has_entries?(attrs)
     end
 
@@ -726,8 +915,7 @@ defmodule AshCredo.IntrospectionTest do
 
   describe "actions_defined?/1" do
     test "returns true when explicit actions exist" do
-      sf = source_file(@ash_resource)
-      actions = Introspection.find_dsl_section(sf, :actions)
+      actions = first_resource_section(@ash_resource, :actions)
       assert Introspection.actions_defined?(actions)
     end
 
@@ -742,8 +930,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      sf = source_file(source)
-      actions = Introspection.find_dsl_section(sf, :actions)
+      actions = first_resource_section(source, :actions)
       assert Introspection.actions_defined?(actions)
     end
 
@@ -764,8 +951,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      sf = source_file(source)
-      actions = Introspection.find_dsl_section(sf, :actions)
+      actions = first_resource_section(source, :actions)
       [defaults] = Introspection.entities(actions, :defaults)
       entries = Introspection.default_action_entries(defaults)
       assert :read in entries
@@ -789,8 +975,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      sf = source_file(source)
-      actions = Introspection.find_dsl_section(sf, :actions)
+      actions = first_resource_section(source, :actions)
       [defaults] = Introspection.entities(actions, :defaults)
       assert Introspection.default_action_has_value?(defaults, :create, :*)
       refute Introspection.default_action_has_value?(defaults, :update, :*)
@@ -815,8 +1000,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      sf = source_file(source)
-      policies = Introspection.find_dsl_section(sf, :policies)
+      policies = first_resource_section(source, :policies)
       entities = Introspection.policy_entities(policies)
       assert length(entities) == 2
     end
@@ -836,8 +1020,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      sf = source_file(source)
-      policies = Introspection.find_dsl_section(sf, :policies)
+      policies = first_resource_section(source, :policies)
       entities = Introspection.policy_entities(policies)
       assert length(entities) == 1
     end
@@ -849,8 +1032,7 @@ defmodule AshCredo.IntrospectionTest do
 
   describe "entity_body/1" do
     test "extracts body statements from entity with do block" do
-      sf = source_file(@ash_resource)
-      actions = Introspection.find_dsl_section(sf, :actions)
+      actions = first_resource_section(@ash_resource, :actions)
       [create] = Introspection.entities(actions, :create)
       body = Introspection.entity_body(create)
       assert is_list(body)

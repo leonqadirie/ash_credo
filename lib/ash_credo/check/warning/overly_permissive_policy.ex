@@ -21,19 +21,11 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Orchestration
 
   @impl true
-  def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
-
-    source_file
-    |> Introspection.resource_modules()
-    |> Enum.flat_map(fn module_ast ->
-      module_ast
-      |> Introspection.find_dsl_section(:policies)
-      |> check_policies(issue_meta)
-    end)
-  end
+  def run(%SourceFile{} = source_file, params),
+    do: Orchestration.flat_map_resource_section(source_file, params, :policies, &check_policies/2)
 
   defp check_policies(nil, _issue_meta), do: []
 
@@ -54,19 +46,10 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
     end)
   end
 
-  defp has_authorize_if_always?({kind, _, args})
-       when kind in [:policy, :bypass] and is_list(args) do
-    Enum.any?(args, fn
-      [do: body] ->
-        body
-        |> Introspection.flatten_block()
-        |> Enum.any?(fn
-          {:authorize_if, _, [{:always, _, _}]} -> true
-          _ -> false
-        end)
-
-      _ ->
-        false
+  defp has_authorize_if_always?({kind, _, _} = policy_ast) when kind in [:policy, :bypass] do
+    Enum.any?(Introspection.entity_body(policy_ast), fn
+      {:authorize_if, _, [{:always, _, _}]} -> true
+      _ -> false
     end)
   end
 

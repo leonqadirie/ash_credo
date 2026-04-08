@@ -22,22 +22,17 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Orchestration
 
   @policy_authorizer [:Ash, :Policy, :Authorizer]
 
   @impl true
-  def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
+  def run(%SourceFile{} = source_file, params),
+    do: Orchestration.flat_map_resource_context(source_file, params, &authorizer_without_policies_issues/2)
 
-    source_file
-    |> Introspection.resource_modules()
-    |> Enum.flat_map(&authorizer_without_policies_issues(&1, issue_meta))
-  end
-
-  defp authorizer_without_policies_issues(module_ast, issue_meta) do
-    context = Introspection.resource_context(module_ast)
+  defp authorizer_without_policies_issues(context, issue_meta) do
     authorizer_line = find_authorizer_line(context)
-    policies_ast = Introspection.find_dsl_section(context, :policies)
+    policies_ast = Introspection.resource_section(context, :policies)
     has_policies = Introspection.policy_entities(policies_ast) != []
 
     if authorizer_line != nil and not has_policies do

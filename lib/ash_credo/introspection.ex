@@ -1,14 +1,21 @@
 defmodule AshCredo.Introspection do
   @moduledoc "Utilities for inspecting Ash DSL constructs in source AST."
 
+  alias AshCredo.Introspection.{Aliases, AshApi}
+  alias Credo.Code.Block
+  alias Credo.SourceFile
+
   @action_entities ~w(create read update destroy action)a
-  @scope_keys ~w(do else after rescue catch)a
-  @lexical_scope_nodes ~w(defmodule def defp defmacro defmacrop fn if unless case cond with try receive for)a
-  @branch_scope_nodes ~w(if unless case cond with try receive for)a
-  @function_scope_nodes ~w(def defp defmacro defmacrop)a
 
   @doc "Returns all modules in the source file that directly `use Ash.Resource`."
   def resource_modules(source_file), do: modules_using(source_file, [:Ash, :Resource])
+
+  @doc "Returns resource contexts for all resource modules in the source file, in file order."
+  def resource_contexts(source_file) do
+    source_file
+    |> resource_modules()
+    |> Enum.map(&resource_context/1)
+  end
 
   @doc "Returns all modules in the source file that directly `use Ash.Domain`."
   def domain_modules(source_file), do: modules_using(source_file, [:Ash, :Domain])
@@ -20,26 +27,16 @@ defmodule AshCredo.Introspection do
   def ash_resource?(source_file), do: resource_modules(source_file) != []
 
   @doc "Returns true if the AST node is a call to an `Ash.*` module (e.g. `Ash.read!/2`)."
-  def ash_api_call?(ast, aliases \\ [])
-
-  def ash_api_call?({{:., _, [{:__aliases__, _, segments}, _fun]}, _meta, _args}, aliases) do
-    match?([:Ash | _], expand_alias(segments, aliases))
-  end
-
-  def ash_api_call?(_, _), do: false
+  def ash_api_call?(ast, aliases \\ []), do: AshApi.call?(ast, aliases)
 
   @doc "Returns all `Ash.*` API call AST nodes found in the source file, resolving aliases lexically."
-  def ash_api_calls(source_file) do
-    ash_api_traverse(source_file, fn ast, _expanded -> ast end)
-  end
+  def ash_api_calls(source_file), do: AshApi.calls(source_file)
 
   @doc """
   Returns all `Ash.*` API call AST nodes found in the source file together with
   their alias-expanded module segments as `{call_ast, expanded_module_segments}` tuples.
   """
-  def ash_api_calls_with_module(source_file) do
-    ash_api_traverse(source_file, fn ast, expanded -> {ast, expanded} end)
-  end
+  def ash_api_calls_with_module(source_file), do: AshApi.calls_with_module(source_file)
 
   @doc """
   Returns all `Ash.*` API call AST nodes found in the source file together with
@@ -49,273 +46,7 @@ defmodule AshCredo.Introspection do
   Each result is a map with keys `:call_ast`, `:expanded_module`, `:args`,
   `:aliases`, and `:bindings`.
   """
-  def ash_api_calls_with_context(source_file) do
-    {_, %{calls: calls}} =
-      source_file
-      |> Credo.SourceFile.ast()
-      |> Macro.traverse(
-        initial_ash_api_context_state(),
-        &enter_ash_api_context_node/2,
-        &leave_ash_api_context_node/2
-      )
-
-    Enum.reverse(calls)
-  end
-
-  defp ash_api_traverse(source_file, collect_fn) do
-    {_, %{calls: calls}} =
-      source_file
-      |> Credo.SourceFile.ast()
-      |> Macro.traverse(
-        %{alias_frames: [[]], calls: []},
-        &enter_ash_api_node(&1, &2, collect_fn),
-        &leave_scope/2
-      )
-
-    Enum.reverse(calls)
-  end
-
-  defp enter_ash_api_node({scope_key, _body} = ast, state, _collect_fn)
-       when scope_key in @scope_keys do
-    {ast, push_alias_frame(state)}
-  end
-
-  defp enter_ash_api_node({:->, _, [_args, _body]} = ast, state, _collect_fn) do
-    {ast, push_alias_frame(state)}
-  end
-
-  defp enter_ash_api_node({:alias, _, _} = ast, state, _collect_fn) do
-    {ast, put_aliases(state, alias_entries(ast))}
-  end
-
-  defp enter_ash_api_node(
-         {{:., _, [{:__aliases__, _, segments}, _fun]}, _meta, args} = ast,
-         state,
-         collect_fn
-       )
-       when is_list(args) do
-    expanded = expand_alias(segments, current_aliases(state))
-
-    if match?([:Ash | _], expanded) do
-      {ast, %{state | calls: [collect_fn.(ast, expanded) | state.calls]}}
-    else
-      {ast, state}
-    end
-  end
-
-  defp enter_ash_api_node(ast, state, _collect_fn), do: {ast, state}
-
-  defp leave_scope({scope_key, _body} = ast, state) when scope_key in @scope_keys do
-    {ast, pop_alias_frame(state)}
-  end
-
-  defp leave_scope({:->, _, [_args, _body]} = ast, state) do
-    {ast, pop_alias_frame(state)}
-  end
-
-  defp leave_scope(ast, state), do: {ast, state}
-
-  defp enter_ash_api_context_node({scope_key, _body} = ast, state)
-       when scope_key in @scope_keys do
-    {ast, push_alias_frame(state)}
-  end
-
-  defp enter_ash_api_context_node({:->, _, [_args, _body]} = ast, state) do
-    {ast, push_alias_frame(state)}
-  end
-
-  defp enter_ash_api_context_node({node_name, _, _} = ast, state)
-       when node_name in @lexical_scope_nodes do
-    {ast,
-     state
-     |> push_alias_frame()
-     |> maybe_push_binding_frame(node_name)
-     |> maybe_enter_branch_scope(node_name)}
-  end
-
-  defp enter_ash_api_context_node({:alias, _, _} = ast, state) do
-    {ast, put_aliases(state, alias_entries(ast))}
-  end
-
-  defp enter_ash_api_context_node({:|>, _, [left, {{:., _, _}, meta, _}]} = ast, state)
-       when is_list(meta) do
-    key = call_key(meta)
-    {ast, %{state | pipe_origins: Map.put(state.pipe_origins, key, left)}}
-  end
-
-  defp enter_ash_api_context_node(
-         {{:., _, [module_ast, _fun_name]}, call_meta, args} = call_ast,
-         state
-       )
-       when is_list(args) do
-    expanded_module = expanded_call_module(module_ast, current_aliases(state))
-
-    if match?([:Ash | _], expanded_module) do
-      call_info = %{
-        call_ast: call_ast,
-        expanded_module: expanded_module,
-        args: normalized_call_args(args, call_meta, state.pipe_origins),
-        aliases: current_aliases(state),
-        bindings: current_bindings(state)
-      }
-
-      {call_ast, %{state | calls: [call_info | state.calls]}}
-    else
-      {call_ast, state}
-    end
-  end
-
-  defp enter_ash_api_context_node(ast, state), do: {ast, state}
-
-  defp leave_ash_api_context_node({scope_key, _body} = ast, state)
-       when scope_key in @scope_keys do
-    {ast, pop_alias_frame(state)}
-  end
-
-  defp leave_ash_api_context_node({:->, _, [_args, _body]} = ast, state) do
-    {ast, pop_alias_frame(state)}
-  end
-
-  defp leave_ash_api_context_node({:=, _, [lhs, rhs]} = ast, state) do
-    {ast, maybe_record_binding(state, lhs, rhs)}
-  end
-
-  defp leave_ash_api_context_node({node_name, _, _} = ast, state)
-       when node_name in @lexical_scope_nodes do
-    {ast,
-     state
-     |> maybe_leave_branch_scope(node_name)
-     |> maybe_pop_binding_frame(node_name)
-     |> pop_alias_frame()}
-  end
-
-  defp leave_ash_api_context_node(ast, state), do: {ast, state}
-
-  defp initial_ash_api_context_state do
-    %{
-      alias_frames: [[]],
-      binding_frames: [],
-      branch_depth: 0,
-      calls: [],
-      pipe_origins: %{}
-    }
-  end
-
-  defp push_alias_frame(state) do
-    update_in(state.alias_frames, &[[] | &1])
-  end
-
-  defp pop_alias_frame(%{alias_frames: [_current, []]} = state) do
-    %{state | alias_frames: [[]]}
-  end
-
-  defp pop_alias_frame(%{alias_frames: [_current | frames]} = state) do
-    %{state | alias_frames: frames}
-  end
-
-  defp put_aliases(%{alias_frames: [current | frames]} = state, new_aliases) do
-    %{state | alias_frames: [new_aliases ++ current | frames]}
-  end
-
-  defp current_aliases(%{alias_frames: frames}) do
-    Enum.concat(frames)
-  end
-
-  defp normalized_call_args(args, call_meta, pipe_origins) do
-    case Map.get(pipe_origins, call_key(call_meta)) do
-      nil -> args
-      piped_arg -> [piped_arg | args]
-    end
-  end
-
-  defp call_key(meta), do: {meta[:line], meta[:column] || 0}
-
-  defp expanded_call_module({:__aliases__, _, segments}, aliases) when is_list(segments) do
-    expand_alias(segments, aliases)
-  end
-
-  defp expanded_call_module(_module_ast, _aliases), do: []
-
-  defp maybe_push_binding_frame(state, node_name) when node_name in @function_scope_nodes do
-    update_in(state.binding_frames, &[%{} | &1])
-  end
-
-  defp maybe_push_binding_frame(state, :fn) do
-    update_in(state.binding_frames, &[current_bindings(state) | &1])
-  end
-
-  defp maybe_push_binding_frame(state, _node_name), do: state
-
-  defp maybe_pop_binding_frame(%{binding_frames: [_current | frames]} = state, node_name)
-       when node_name in @function_scope_nodes or node_name == :fn do
-    %{state | binding_frames: frames}
-  end
-
-  defp maybe_pop_binding_frame(state, _node_name), do: state
-
-  defp current_bindings(%{binding_frames: [bindings | _]}), do: bindings
-  defp current_bindings(_state), do: %{}
-
-  defp maybe_enter_branch_scope(state, node_name) when node_name in @branch_scope_nodes do
-    update_in(state.branch_depth, &(&1 + 1))
-  end
-
-  defp maybe_enter_branch_scope(state, _node_name), do: state
-
-  defp maybe_leave_branch_scope(state, node_name) when node_name in @branch_scope_nodes do
-    update_in(state.branch_depth, &max(&1 - 1, 0))
-  end
-
-  defp maybe_leave_branch_scope(state, _node_name), do: state
-
-  defp maybe_record_binding(%{binding_frames: []} = state, _lhs, _rhs), do: state
-
-  defp maybe_record_binding(%{branch_depth: branch_depth} = state, _lhs, _rhs)
-       when branch_depth > 0 do
-    state
-  end
-
-  defp maybe_record_binding(state, lhs, rhs) do
-    binding_keys =
-      lhs
-      |> binding_keys()
-      |> Enum.reject(fn {name, _ctx} -> name == :_ end)
-
-    update_in(state.binding_frames, fn
-      [bindings | rest] ->
-        new_bindings =
-          Enum.reduce(binding_keys, bindings, fn key, acc ->
-            Map.put(acc, key, rhs)
-          end)
-
-        [new_bindings | rest]
-
-      [] ->
-        []
-    end)
-  end
-
-  defp binding_keys(lhs) do
-    lhs
-    |> do_binding_keys()
-    |> Enum.uniq()
-  end
-
-  defp do_binding_keys({:^, _, [_inner]}), do: []
-
-  defp do_binding_keys({name, _, ctx}) when is_atom(name) and (is_atom(ctx) or is_nil(ctx)) do
-    [{name, ctx}]
-  end
-
-  defp do_binding_keys({_form, _meta, args}) when is_list(args) do
-    Enum.flat_map(args, &do_binding_keys/1)
-  end
-
-  defp do_binding_keys(list) when is_list(list) do
-    Enum.flat_map(list, &do_binding_keys/1)
-  end
-
-  defp do_binding_keys(_), do: []
+  def ash_api_calls_with_context(source_file), do: AshApi.calls_with_context(source_file)
 
   @doc "Returns true if the source file or module contains `use Ash.Domain`."
   def ash_domain?({:defmodule, _, _} = module_ast), do: module_uses?(module_ast, [:Ash, :Domain])
@@ -326,18 +57,10 @@ defmodule AshCredo.Introspection do
     Keyword.get(opts, :data_layer)
   end
 
-  def resource_data_layer({:defmodule, _, _} = module_ast) do
-    case use_opts(module_ast, [:Ash, :Resource]) do
-      opts when is_list(opts) -> Keyword.get(opts, :data_layer)
-      _ -> nil
-    end
-  end
-
-  def resource_data_layer(source_file) do
-    case first_module_using(source_file, [:Ash, :Resource]) do
-      nil -> nil
-      module_ast -> resource_data_layer(module_ast)
-    end
+  def resource_data_layer(resource_or_source) do
+    resource_or_source
+    |> find_use([:Ash, :Resource])
+    |> use_metadata_opt(:data_layer)
   end
 
   @doc "Returns true if the resource uses `data_layer: :embedded`."
@@ -355,35 +78,18 @@ defmodule AshCredo.Introspection do
 
   @doc "Extracts keyword options from a `use` call matching the given module aliases."
   def use_opts({:defmodule, _, _} = module_ast, module_aliases) do
-    Enum.find_value(module_body(module_ast), nil, fn
-      {:use, _, [{:__aliases__, _, ^module_aliases}, opts]} when is_list(opts) ->
-        opts
-
-      {:use, _, [{:__aliases__, _, ^module_aliases}]} ->
-        []
-
-      _ ->
-        nil
-    end)
+    module_ast
+    |> find_use(module_aliases)
+    |> normalized_use_opts()
   end
 
   def use_opts(source_file, module_aliases) do
-    case first_module_using(source_file, module_aliases) do
-      nil -> nil
-      module_ast -> use_opts(module_ast, module_aliases)
-    end
-  end
-
-  @doc "Iterates resource modules, finds a DSL section, and flat-maps results through `fun`."
-  def flat_map_dsl_section(source_file, section, fun) do
     source_file
-    |> resource_modules()
-    |> Enum.flat_map(fn module_ast ->
-      module_ast |> find_dsl_section(section) |> fun.()
-    end)
+    |> find_use(module_aliases)
+    |> normalized_use_opts()
   end
 
-  @doc "Finds the AST node for a top-level DSL section (e.g. :attributes)."
+  @doc "Finds the AST node for a top-level DSL section (e.g. :attributes) in a module AST or resource/domain context."
   def find_dsl_section(%{module_ast: module_ast}, section_name) do
     find_dsl_section(module_ast, section_name)
   end
@@ -395,36 +101,35 @@ defmodule AshCredo.Introspection do
     end)
   end
 
-  def find_dsl_section(source_file, section_name) do
-    source_file
-    |> all_modules()
-    |> Enum.find_value(&find_dsl_section(&1, section_name))
+  def find_dsl_section(%SourceFile{}, _section_name) do
+    raise ArgumentError,
+          "find_dsl_section/2 no longer accepts a SourceFile; pass a module AST or resource/domain context"
   end
 
   @doc "Checks if an entity call exists inside a section AST node."
-  def has_entity?({_section, _, [[do: body]]}, entity_name) do
-    body
-    |> flatten_block()
+  def has_entity?(nil, _), do: false
+
+  def has_entity?({_section, _, [[do: _body]]} = section_ast, entity_name) do
+    section_ast
+    |> section_entries()
     |> Enum.any?(fn
       {^entity_name, _, _} -> true
       _ -> false
     end)
   end
 
-  def has_entity?(nil, _), do: false
-
   @doc "Returns all entity AST nodes of a given name within a section."
-  def entities({_section, _, [[do: body]]}, entity_name) do
-    body
-    |> flatten_block()
-    |> Enum.filter(&match?({^entity_name, _, _}, &1))
-  end
-
   def entities(nil, _), do: []
+
+  def entities({_section, _, [[do: _body]]} = section_ast, entity_name) do
+    filter_entities(section_entries(section_ast), entity_name)
+  end
 
   @doc "Returns all explicit action entity AST nodes within an `actions` section."
   def action_entities(actions_ast, action_types \\ @action_entities) do
-    Enum.flat_map(action_types, &entities(actions_ast, &1))
+    entries = section_entries(actions_ast)
+
+    Enum.flat_map(action_types, &filter_entities(entries, &1))
   end
 
   @doc "Returns the line number of a section's opening."
@@ -432,7 +137,7 @@ defmodule AshCredo.Introspection do
   def section_line(_), do: nil
 
   @doc "Returns the flattened list of top-level statements inside a module body."
-  def module_body({:defmodule, _, [_name, [do: body]]}), do: flatten_block(body)
+  def module_body({:defmodule, _, _} = module_ast), do: do_block_entries(module_ast)
   def module_body(_), do: []
 
   @doc "Returns the line span of a module AST, if end metadata is available."
@@ -450,149 +155,82 @@ defmodule AshCredo.Introspection do
 
   @doc "Returns shared resource metadata for a resource module."
   def resource_context({:defmodule, _, _} = module_ast) do
+    use_metadata = find_use(module_ast, [:Ash, :Resource])
+
     %{
       module_ast: module_ast,
       aliases: module_aliases(module_ast),
-      use_line: find_use_line(module_ast, [:Ash, :Resource]),
-      use_opts: normalized_use_opts(module_ast)
+      use_line: use_metadata_line(use_metadata),
+      use_opts: normalized_resource_use_opts(use_metadata)
     }
   end
 
   def resource_context(_), do: nil
 
-  @doc "Returns top-level alias mappings in a module body, optionally only those declared before a given line."
-  def module_aliases(module_ast, opts \\ [])
-
-  def module_aliases({:defmodule, _, _} = module_ast, opts) do
-    before_line = Keyword.get(opts, :before_line)
-
-    Enum.reduce(module_body(module_ast), [], fn
-      {:alias, meta, _} = alias_ast, aliases ->
-        if alias_before?(meta[:line], before_line) do
-          alias_entries(alias_ast) ++ aliases
-        else
-          aliases
-        end
-
-      _stmt, aliases ->
-        aliases
-    end)
+  @doc "Finds a top-level DSL section from a resource context."
+  def resource_section(%{module_ast: _} = resource_context, section_name) do
+    find_dsl_section(resource_context, section_name)
   end
 
-  def module_aliases(_, _opts), do: []
+  def resource_section(_, _section_name), do: nil
+
+  @doc "Returns the best issue anchor line for a section, falling back to `line` and then `fallback`."
+  def section_issue_line(section_ast, line \\ nil, fallback \\ 1) do
+    section_line(section_ast) || line || fallback
+  end
+
+  @doc "Returns the best issue anchor line for a resource section, falling back to the `use` line and then `fallback`."
+  def resource_issue_line(resource_context, section_ast \\ nil, fallback \\ 1)
+
+  def resource_issue_line(%{use_line: use_line}, section_ast, fallback) do
+    section_issue_line(section_ast, use_line, fallback)
+  end
+
+  def resource_issue_line(_resource_context, section_ast, fallback) do
+    section_issue_line(section_ast, nil, fallback)
+  end
+
+  @doc "Returns top-level alias mappings in a module body, optionally only those declared before a given line."
+  def module_aliases(module_ast, opts \\ []), do: Aliases.module_aliases(module_ast, opts)
 
   @doc "Expands module alias segments using alias mappings returned by module_aliases/2."
-  def expand_alias(segments, aliases) when is_list(segments) and is_list(aliases) do
-    matches =
-      Enum.filter(aliases, fn
-        {alias_segments, _target_segments} -> List.starts_with?(segments, alias_segments)
-        _ -> false
-      end)
-
-    case Enum.max_by(
-           matches,
-           fn {alias_segments, _target_segments} -> length(alias_segments) end,
-           fn -> nil end
-         ) do
-      {alias_segments, target_segments} ->
-        target_segments ++ Enum.drop(segments, length(alias_segments))
-
-      nil ->
-        segments
-    end
-  end
-
-  def expand_alias(other, _aliases), do: other
+  def expand_alias(segments, aliases), do: Aliases.expand_alias(segments, aliases)
 
   @doc "Resolves a module reference within a module or resource context."
-  def resolved_module_ref(ref_or_segments, module_or_context, opts \\ [])
-
-  def resolved_module_ref({:__aliases__, meta, segments}, module_or_context, opts) do
-    resolved_module_ref(
-      segments,
-      module_or_context,
-      Keyword.put_new(opts, :before_line, meta[:line])
-    )
+  def resolved_module_ref(ref_or_segments, module_or_context, opts \\ []) do
+    Aliases.resolved_module_ref(ref_or_segments, module_or_context, opts)
   end
-
-  def resolved_module_ref(segments, module_or_context, opts) when is_list(segments) do
-    expand_alias(segments, context_aliases(module_or_context, opts))
-  end
-
-  def resolved_module_ref(other, _module_or_context, _opts), do: other
 
   @doc "Returns true if a module reference resolves to the given module segments."
   def module_ref?(ref_or_segments, module_or_context, target_segments, opts \\ []) do
-    resolved_module_ref(ref_or_segments, module_or_context, opts) == target_segments
+    Aliases.module_ref?(ref_or_segments, module_or_context, target_segments, opts)
   end
 
-  defp alias_before?(_alias_line, nil), do: true
+  defp normalized_use_opts(%{opts: opts}) when is_list(opts), do: opts
+  defp normalized_use_opts(nil), do: nil
+  defp normalized_use_opts(_), do: []
 
-  defp alias_before?(alias_line, before_line)
-       when is_integer(alias_line) and is_integer(before_line), do: alias_line < before_line
-
-  defp alias_before?(_alias_line, _before_line), do: false
-
-  defp alias_entries({:alias, _, [{:__aliases__, _, target_segments}]}) do
-    [{default_alias(target_segments), target_segments}]
-  end
-
-  defp alias_entries({:alias, _, [{:__aliases__, _, target_segments}, opts]})
-       when is_list(opts) do
-    case Keyword.get(opts, :as) do
-      {:__aliases__, _, alias_segments} -> [{alias_segments, target_segments}]
-      _ -> [{default_alias(target_segments), target_segments}]
-    end
-  end
-
-  defp alias_entries(
-         {:alias, _, [{{:., _, [{:__aliases__, _, prefix_segments}, :{}]}, _, suffix_aliases}]}
-       )
-       when is_list(suffix_aliases) do
-    grouped_alias_entries(prefix_segments, suffix_aliases)
-  end
-
-  defp alias_entries(
-         {:alias, _,
-          [{{:., _, [{:__aliases__, _, prefix_segments}, :{}]}, _, suffix_aliases}, opts]}
-       )
-       when is_list(suffix_aliases) and is_list(opts) do
-    grouped_alias_entries(prefix_segments, suffix_aliases)
-  end
-
-  defp alias_entries(_), do: []
-
-  defp grouped_alias_entries(prefix_segments, suffix_aliases) do
-    Enum.flat_map(suffix_aliases, fn
-      {:__aliases__, _, suffix_segments} ->
-        target_segments = prefix_segments ++ suffix_segments
-        [{default_alias(target_segments), target_segments}]
-
-      _ ->
-        []
-    end)
-  end
-
-  defp default_alias(target_segments), do: [List.last(target_segments)]
-
-  defp normalized_use_opts(module_ast) do
-    case use_opts(module_ast, [:Ash, :Resource]) do
+  defp normalized_resource_use_opts(use_metadata) do
+    case normalized_use_opts(use_metadata) do
       opts when is_list(opts) -> opts
       _ -> []
     end
   end
 
-  defp context_aliases(%{module_ast: module_ast, aliases: aliases}, opts) do
-    case Keyword.get(opts, :before_line) do
-      nil -> aliases
-      _ -> module_aliases(module_ast, opts)
+  defp use_metadata_line(%{line: line}) when is_integer(line), do: line
+  defp use_metadata_line(_), do: nil
+
+  defp use_metadata_opt(%{opts: opts}, key) when is_list(opts), do: Keyword.get(opts, key)
+  defp use_metadata_opt(_, _key), do: nil
+
+  defp section_entries(section_ast), do: do_block_entries(section_ast)
+
+  defp do_block_entries(ast) do
+    case Block.do_block_for(ast) do
+      {:ok, _body} -> Block.calls_in_do_block(ast)
+      nil -> []
     end
   end
-
-  defp context_aliases({:defmodule, _, _} = module_ast, opts),
-    do: module_aliases(module_ast, opts)
-
-  defp context_aliases(_, _opts), do: []
 
   @doc "Extracts keyword options from an entity AST call."
   def entity_opts({_name, _meta, args}) when is_list(args) do
@@ -618,10 +256,7 @@ defmodule AshCredo.Introspection do
 
   @doc "Returns normalized option values with line numbers from inline opts and `do` blocks."
   def option_occurrences({_name, meta, _args} = ast, key) do
-    inline = inline_option_occurrences(ast, key, meta[:line])
-    body = body_option_occurrences(ast, key)
-
-    inline ++ body
+    normalized_option_occurrences(ast, key, meta[:line])
   end
 
   def option_occurrences(_, _), do: []
@@ -631,6 +266,13 @@ defmodule AshCredo.Introspection do
     Enum.map(option_occurrences(ast, key), &elem(&1, 0))
   end
 
+  defp normalized_option_occurrences(ast, key, line) do
+    inline = inline_option_occurrences(ast, key, line)
+    body = do_block_option_occurrences(ast, key)
+
+    inline ++ body
+  end
+
   defp inline_option_occurrences(ast, key, line) do
     case Keyword.fetch(entity_opts(ast), key) do
       {:ok, value} -> [{value, line}]
@@ -638,15 +280,15 @@ defmodule AshCredo.Introspection do
     end
   end
 
-  defp body_option_occurrences(ast, key) do
+  defp do_block_option_occurrences(ast, key) do
     ast
-    |> entity_body()
-    |> Enum.flat_map(&body_option_occurrence(&1, key))
+    |> do_block_entries()
+    |> Enum.flat_map(&do_block_option_occurrence(&1, key))
   end
 
-  defp body_option_occurrence({key, meta, [value]}, key), do: [{value, meta[:line]}]
-  defp body_option_occurrence({key, meta, args}, key), do: [{args, meta[:line]}]
-  defp body_option_occurrence(_, _), do: []
+  defp do_block_option_occurrence({key, meta, [value]}, key), do: [{value, meta[:line]}]
+  defp do_block_option_occurrence({key, meta, args}, key), do: [{args, meta[:line]}]
+  defp do_block_option_occurrence(_, _), do: []
 
   @doc "Checks if a keyword option is set to a specific value in an entity's opts or do block."
   def entity_has_opt?(entity_ast, key, value) do
@@ -659,7 +301,7 @@ defmodule AshCredo.Introspection do
   end
 
   @doc "Returns the flattened list of statements inside a section body."
-  def section_body({_section, _, [[do: body]]}), do: flatten_block(body)
+  def section_body({_section, _, [[do: _body]]} = section_ast), do: section_entries(section_ast)
   def section_body(nil), do: []
 
   @doc "Returns true if a section contains at least one DSL entry."
@@ -687,14 +329,16 @@ defmodule AshCredo.Introspection do
 
   @doc "Returns all `policy` and `bypass` entities from a policies section, including inside `policy_group`."
   def policy_entities(policies_ast) do
+    entries = section_entries(policies_ast)
+
     top_level =
-      entities(policies_ast, :policy) ++ entities(policies_ast, :bypass)
+      filter_entities(entries, :policy) ++ filter_entities(entries, :bypass)
 
     nested =
-      policies_ast
-      |> entities(:policy_group)
+      entries
+      |> filter_entities(:policy_group)
       |> Enum.flat_map(fn group ->
-        group_body = entity_body(group)
+        group_body = do_block_entries(group)
         filter_entities(group_body, :policy) ++ filter_entities(group_body, :bypass)
       end)
 
@@ -702,33 +346,15 @@ defmodule AshCredo.Introspection do
   end
 
   @doc "Extracts the body statements from an entity's do block."
-  def entity_body({_name, _meta, args}) when is_list(args) do
-    Enum.find_value(args, [], fn
-      [do: body] -> flatten_block(body)
-      _ -> nil
-    end)
-  end
-
-  def entity_body(_), do: []
+  def entity_body(ast), do: do_block_entries(ast)
 
   defp filter_entities(stmts, name) do
     Enum.filter(stmts, &match?({^name, _, _}, &1))
   end
 
   @doc "Searches inside an entity's `do` block for a call matching `call_name`."
-  def find_in_body({_name, _meta, args}, call_name) when is_list(args) do
-    Enum.find_value(args, fn
-      [do: body] ->
-        body
-        |> flatten_block()
-        |> Enum.find(&match?({^call_name, _, _}, &1))
-
-      _ ->
-        nil
-    end)
-  end
-
-  def find_in_body(_, _), do: nil
+  def find_in_body(ast, call_name),
+    do: Enum.find(do_block_entries(ast), &match?({^call_name, _, _}, &1))
 
   @doc "Extracts the first atom argument from an entity call (e.g. action name)."
   def entity_name({_call, _meta, [name | _]}) when is_atom(name), do: name
@@ -736,22 +362,16 @@ defmodule AshCredo.Introspection do
 
   @doc "Returns the line number of a `use` call for the given module aliases."
   def find_use_line({:defmodule, _, _} = module_ast, module_aliases) do
-    Enum.find_value(module_body(module_ast), fn
-      {:use, meta, [{:__aliases__, _, ^module_aliases} | _]} -> meta[:line]
-      _ -> nil
-    end)
+    module_ast
+    |> find_use(module_aliases)
+    |> use_metadata_line()
   end
 
   def find_use_line(source_file, module_aliases) do
-    case first_module_using(source_file, module_aliases) do
-      nil -> nil
-      module_ast -> find_use_line(module_ast, module_aliases)
-    end
+    source_file
+    |> find_use(module_aliases)
+    |> use_metadata_line()
   end
-
-  @doc "Normalizes a block AST node into a flat list of statements."
-  def flatten_block({:__block__, _, stmts}), do: stmts
-  def flatten_block(other), do: [other]
 
   defp modules_using(source_file, module_aliases) do
     source_file
@@ -759,10 +379,23 @@ defmodule AshCredo.Introspection do
     |> Enum.filter(&module_uses?(&1, module_aliases))
   end
 
-  defp first_module_using(source_file, module_aliases) do
+  defp find_use({:defmodule, _, _} = module_ast, module_aliases) do
+    Enum.find_value(module_body(module_ast), fn
+      {:use, meta, [{:__aliases__, _, ^module_aliases}, opts]} = use_ast when is_list(opts) ->
+        %{module_ast: module_ast, use_ast: use_ast, line: meta[:line], opts: opts}
+
+      {:use, meta, [{:__aliases__, _, ^module_aliases}]} = use_ast ->
+        %{module_ast: module_ast, use_ast: use_ast, line: meta[:line], opts: []}
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp find_use(source_file, module_aliases) do
     source_file
-    |> modules_using(module_aliases)
-    |> List.first()
+    |> all_modules()
+    |> Enum.find_value(&find_use(&1, module_aliases))
   end
 
   defp all_modules(source_file) do
@@ -781,9 +414,6 @@ defmodule AshCredo.Introspection do
   end
 
   defp module_uses?(module_ast, module_aliases) do
-    Enum.any?(module_body(module_ast), fn
-      {:use, _, [{:__aliases__, _, ^module_aliases} | _]} -> true
-      _ -> false
-    end)
+    not is_nil(find_use(module_ast, module_aliases))
   end
 end
