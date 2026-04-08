@@ -3,6 +3,17 @@ defmodule Mix.Tasks.AshCredo.InstallTest do
 
   import Igniter.Test
 
+  alias Mix.Tasks.AshCredo.Install, as: AshCredoInstall
+
+  describe "installer metadata" do
+    test "installs ash_credo as a dev/test, non-runtime dependency" do
+      info = AshCredoInstall.info([], nil)
+
+      assert info.only == [:dev, :test]
+      assert info.dep_opts[:runtime] == false
+    end
+  end
+
   describe "with no existing .credo.exs" do
     test "creates .credo.exs with AshCredo plugin" do
       test_project()
