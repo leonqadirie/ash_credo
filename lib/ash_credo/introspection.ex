@@ -311,17 +311,15 @@ defmodule AshCredo.Introspection do
   end
 
   def resource_data_layer({:defmodule, _, _} = module_ast) do
-    case use_opts(module_ast, [:Ash, :Resource]) do
-      opts when is_list(opts) -> Keyword.get(opts, :data_layer)
-      _ -> nil
-    end
+    module_ast
+    |> find_use([:Ash, :Resource])
+    |> use_metadata_opt(:data_layer)
   end
 
   def resource_data_layer(source_file) do
-    case first_module_using(source_file, [:Ash, :Resource]) do
-      nil -> nil
-      module_ast -> resource_data_layer(module_ast)
-    end
+    source_file
+    |> find_use([:Ash, :Resource])
+    |> use_metadata_opt(:data_layer)
   end
 
   @doc "Returns true if the resource uses `data_layer: :embedded`."
@@ -339,23 +337,15 @@ defmodule AshCredo.Introspection do
 
   @doc "Extracts keyword options from a `use` call matching the given module aliases."
   def use_opts({:defmodule, _, _} = module_ast, module_aliases) do
-    Enum.find_value(module_body(module_ast), nil, fn
-      {:use, _, [{:__aliases__, _, ^module_aliases}, opts]} when is_list(opts) ->
-        opts
-
-      {:use, _, [{:__aliases__, _, ^module_aliases}]} ->
-        []
-
-      _ ->
-        nil
-    end)
+    module_ast
+    |> find_use(module_aliases)
+    |> normalized_use_opts()
   end
 
   def use_opts(source_file, module_aliases) do
-    case first_module_using(source_file, module_aliases) do
-      nil -> nil
-      module_ast -> use_opts(module_ast, module_aliases)
-    end
+    source_file
+    |> find_use(module_aliases)
+    |> normalized_use_opts()
   end
 
   @doc "Iterates resource modules, finds a DSL section, and flat-maps results through `fun`."
@@ -434,11 +424,13 @@ defmodule AshCredo.Introspection do
 
   @doc "Returns shared resource metadata for a resource module."
   def resource_context({:defmodule, _, _} = module_ast) do
+    use_metadata = find_use(module_ast, [:Ash, :Resource])
+
     %{
       module_ast: module_ast,
       aliases: module_aliases(module_ast),
-      use_line: find_use_line(module_ast, [:Ash, :Resource]),
-      use_opts: normalized_use_opts(module_ast)
+      use_line: use_metadata_line(use_metadata),
+      use_opts: normalized_resource_use_opts(use_metadata)
     }
   end
 
@@ -559,12 +551,22 @@ defmodule AshCredo.Introspection do
 
   defp default_alias(target_segments), do: [List.last(target_segments)]
 
-  defp normalized_use_opts(module_ast) do
-    case use_opts(module_ast, [:Ash, :Resource]) do
+  defp normalized_use_opts(%{opts: opts}) when is_list(opts), do: opts
+  defp normalized_use_opts(nil), do: nil
+  defp normalized_use_opts(_), do: []
+
+  defp normalized_resource_use_opts(use_metadata) do
+    case normalized_use_opts(use_metadata) do
       opts when is_list(opts) -> opts
       _ -> []
     end
   end
+
+  defp use_metadata_line(%{line: line}) when is_integer(line), do: line
+  defp use_metadata_line(_), do: nil
+
+  defp use_metadata_opt(%{opts: opts}, key) when is_list(opts), do: Keyword.get(opts, key)
+  defp use_metadata_opt(_, _key), do: nil
 
   defp context_aliases(%{module_ast: module_ast, aliases: aliases}, opts) do
     case Keyword.get(opts, :before_line) do
@@ -720,17 +722,15 @@ defmodule AshCredo.Introspection do
 
   @doc "Returns the line number of a `use` call for the given module aliases."
   def find_use_line({:defmodule, _, _} = module_ast, module_aliases) do
-    Enum.find_value(module_body(module_ast), fn
-      {:use, meta, [{:__aliases__, _, ^module_aliases} | _]} -> meta[:line]
-      _ -> nil
-    end)
+    module_ast
+    |> find_use(module_aliases)
+    |> use_metadata_line()
   end
 
   def find_use_line(source_file, module_aliases) do
-    case first_module_using(source_file, module_aliases) do
-      nil -> nil
-      module_ast -> find_use_line(module_ast, module_aliases)
-    end
+    source_file
+    |> find_use(module_aliases)
+    |> use_metadata_line()
   end
 
   @doc "Normalizes a block AST node into a flat list of statements."
@@ -743,10 +743,23 @@ defmodule AshCredo.Introspection do
     |> Enum.filter(&module_uses?(&1, module_aliases))
   end
 
-  defp first_module_using(source_file, module_aliases) do
+  defp find_use({:defmodule, _, _} = module_ast, module_aliases) do
+    Enum.find_value(module_body(module_ast), fn
+      {:use, meta, [{:__aliases__, _, ^module_aliases}, opts]} = use_ast when is_list(opts) ->
+        %{module_ast: module_ast, use_ast: use_ast, line: meta[:line], opts: opts}
+
+      {:use, meta, [{:__aliases__, _, ^module_aliases}]} = use_ast ->
+        %{module_ast: module_ast, use_ast: use_ast, line: meta[:line], opts: []}
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp find_use(source_file, module_aliases) do
     source_file
-    |> modules_using(module_aliases)
-    |> List.first()
+    |> all_modules()
+    |> Enum.find_value(&find_use(&1, module_aliases))
   end
 
   defp all_modules(source_file) do
@@ -765,9 +778,6 @@ defmodule AshCredo.Introspection do
   end
 
   defp module_uses?(module_ast, module_aliases) do
-    Enum.any?(module_body(module_ast), fn
-      {:use, _, [{:__aliases__, _, ^module_aliases} | _]} -> true
-      _ -> false
-    end)
+    not is_nil(find_use(module_ast, module_aliases))
   end
 end

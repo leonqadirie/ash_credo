@@ -437,6 +437,11 @@ defmodule AshCredo.IntrospectionTest do
       assert Keyword.has_key?(opts, :domain)
     end
 
+    test "returns nil when use is not found" do
+      sf = source_file(@plain_module)
+      assert nil == Introspection.use_opts(sf, [:Ash, :Resource])
+    end
+
     test "returns empty list when no opts" do
       source = """
       defmodule Foo do
