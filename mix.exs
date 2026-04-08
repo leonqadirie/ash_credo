@@ -27,7 +27,7 @@ defmodule AshCredo.MixProject do
 
   defp aliases do
     [
-      lint: ["credo", "ex_dna"]
+      lint: ["format --check-formatted", "credo", "ex_dna"]
     ]
   end
 
