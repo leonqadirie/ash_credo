@@ -231,6 +231,49 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "ash_api_calls_with_module/1" do
+    test "returns expanded module segments for aliased calls" do
+      source = """
+      defmodule MyApp.Accounts do
+        def list_users do
+          alias Ash.Query, as: Q
+          Q.for_read(MyApp.User, :published)
+        end
+      end
+      """
+
+      [{call_ast, expanded_module}] =
+        source
+        |> source_file()
+        |> Introspection.ash_api_calls_with_module()
+
+      assert expanded_module == [:Ash, :Query]
+
+      assert match?(
+               {{:., _, [{:__aliases__, _, [:Q]}, :for_read]}, _, _},
+               call_ast
+             )
+    end
+
+    test "does not leak function-local aliases across sibling functions" do
+      source = """
+      defmodule MyApp.Accounts do
+        def with_alias do
+          alias Ash, as: A
+          A.read!(MyApp.User)
+        end
+
+        def without_alias do
+          A.read!(MyApp.User)
+        end
+      end
+      """
+
+      calls = Introspection.ash_api_calls_with_module(source_file(source))
+      assert length(calls) == 1
+    end
+  end
+
   describe "ash_api_calls_with_context/1" do
     test "returns normalized args, visible aliases, and straight-line bindings" do
       source = """
@@ -289,6 +332,28 @@ defmodule AshCredo.IntrospectionTest do
 
       refute Map.has_key?(inside_branch.bindings, {:query, nil})
       refute Map.has_key?(after_branch.bindings, {:query, nil})
+    end
+
+    test "resolves function-local aliases before the call site" do
+      source = """
+      defmodule MyApp.Admin do
+        def read_posts do
+          alias Ash, as: A
+          A.read!(MyApp.Post)
+        end
+      end
+      """
+
+      [%{call_ast: call_ast, expanded_module: expanded_module, aliases: aliases}] =
+        Introspection.ash_api_calls_with_context(source_file(source))
+
+      assert expanded_module == [:Ash]
+      assert {[:A], [:Ash]} in aliases
+
+      assert match?(
+               {{:., _, [{:__aliases__, _, [:A]}, :read!]}, _, _},
+               call_ast
+             )
     end
   end
 

@@ -30,7 +30,7 @@ defmodule AshCredo.Introspection do
 
   @doc "Returns all `Ash.*` API call AST nodes found in the source file, resolving aliases lexically."
   def ash_api_calls(source_file) do
-    ash_api_traverse(source_file, fn ast, _expanded -> ast end)
+    ash_api_traverse(source_file, fn ast, _expanded, _state -> ast end)
   end
 
   @doc """
@@ -38,7 +38,7 @@ defmodule AshCredo.Introspection do
   their alias-expanded module segments as `{call_ast, expanded_module_segments}` tuples.
   """
   def ash_api_calls_with_module(source_file) do
-    ash_api_traverse(source_file, fn ast, expanded -> {ast, expanded} end)
+    ash_api_traverse(source_file, fn ast, expanded, _state -> {ast, expanded} end)
   end
 
   @doc """
@@ -50,155 +50,139 @@ defmodule AshCredo.Introspection do
   `:aliases`, and `:bindings`.
   """
   def ash_api_calls_with_context(source_file) do
+    ash_api_traverse(source_file, &build_ash_api_call_context/3, track_context?: true)
+  end
+
+  defp ash_api_traverse(source_file, collect_fn, opts \\ []) do
     {_, %{calls: calls}} =
       source_file
       |> Credo.SourceFile.ast()
       |> Macro.traverse(
-        initial_ash_api_context_state(),
-        &enter_ash_api_context_node/2,
-        &leave_ash_api_context_node/2
+        initial_ash_api_state(opts),
+        &enter_ash_api_traversal_node(&1, &2, collect_fn),
+        &leave_ash_api_traversal_node/2
       )
 
     Enum.reverse(calls)
   end
 
-  defp ash_api_traverse(source_file, collect_fn) do
-    {_, %{calls: calls}} =
-      source_file
-      |> Credo.SourceFile.ast()
-      |> Macro.traverse(
-        %{alias_frames: [[]], calls: []},
-        &enter_ash_api_node(&1, &2, collect_fn),
-        &leave_scope/2
-      )
-
-    Enum.reverse(calls)
-  end
-
-  defp enter_ash_api_node({scope_key, _body} = ast, state, _collect_fn)
+  defp enter_ash_api_traversal_node({scope_key, _body} = ast, state, _collect_fn)
        when scope_key in @scope_keys do
     {ast, push_alias_frame(state)}
   end
 
-  defp enter_ash_api_node({:->, _, [_args, _body]} = ast, state, _collect_fn) do
+  defp enter_ash_api_traversal_node({:->, _, [_args, _body]} = ast, state, _collect_fn) do
     {ast, push_alias_frame(state)}
   end
 
-  defp enter_ash_api_node({:alias, _, _} = ast, state, _collect_fn) do
+  defp enter_ash_api_traversal_node({node_name, _, _} = ast, state, _collect_fn)
+       when node_name in @lexical_scope_nodes do
+    {ast, maybe_enter_ash_api_lexical_scope(state, node_name)}
+  end
+
+  defp enter_ash_api_traversal_node({:alias, _, _} = ast, state, _collect_fn) do
     {ast, put_aliases(state, alias_entries(ast))}
   end
 
-  defp enter_ash_api_node(
-         {{:., _, [{:__aliases__, _, segments}, _fun]}, _meta, args} = ast,
+  defp enter_ash_api_traversal_node(
+         {:|>, _, [left, {{:., _, _}, meta, _}]} = ast,
+         state,
+         _collect_fn
+       )
+       when is_list(meta) do
+    {ast, maybe_track_pipe_origin(state, meta, left)}
+  end
+
+  defp enter_ash_api_traversal_node(
+         {{:., _, [module_ast, _fun_name]}, _meta, args} = call_ast,
          state,
          collect_fn
-       )
-       when is_list(args) do
-    expanded = expand_alias(segments, current_aliases(state))
-
-    if match?([:Ash | _], expanded) do
-      {ast, %{state | calls: [collect_fn.(ast, expanded) | state.calls]}}
-    else
-      {ast, state}
-    end
-  end
-
-  defp enter_ash_api_node(ast, state, _collect_fn), do: {ast, state}
-
-  defp leave_scope({scope_key, _body} = ast, state) when scope_key in @scope_keys do
-    {ast, pop_alias_frame(state)}
-  end
-
-  defp leave_scope({:->, _, [_args, _body]} = ast, state) do
-    {ast, pop_alias_frame(state)}
-  end
-
-  defp leave_scope(ast, state), do: {ast, state}
-
-  defp enter_ash_api_context_node({scope_key, _body} = ast, state)
-       when scope_key in @scope_keys do
-    {ast, push_alias_frame(state)}
-  end
-
-  defp enter_ash_api_context_node({:->, _, [_args, _body]} = ast, state) do
-    {ast, push_alias_frame(state)}
-  end
-
-  defp enter_ash_api_context_node({node_name, _, _} = ast, state)
-       when node_name in @lexical_scope_nodes do
-    {ast,
-     state
-     |> push_alias_frame()
-     |> maybe_push_binding_frame(node_name)
-     |> maybe_enter_branch_scope(node_name)}
-  end
-
-  defp enter_ash_api_context_node({:alias, _, _} = ast, state) do
-    {ast, put_aliases(state, alias_entries(ast))}
-  end
-
-  defp enter_ash_api_context_node({:|>, _, [left, {{:., _, _}, meta, _}]} = ast, state)
-       when is_list(meta) do
-    key = call_key(meta)
-    {ast, %{state | pipe_origins: Map.put(state.pipe_origins, key, left)}}
-  end
-
-  defp enter_ash_api_context_node(
-         {{:., _, [module_ast, _fun_name]}, call_meta, args} = call_ast,
-         state
        )
        when is_list(args) do
     expanded_module = expanded_call_module(module_ast, current_aliases(state))
 
     if match?([:Ash | _], expanded_module) do
-      call_info = %{
-        call_ast: call_ast,
-        expanded_module: expanded_module,
-        args: normalized_call_args(args, call_meta, state.pipe_origins),
-        aliases: current_aliases(state),
-        bindings: current_bindings(state)
-      }
-
-      {call_ast, %{state | calls: [call_info | state.calls]}}
+      {call_ast, record_ash_api_call(state, call_ast, expanded_module, collect_fn)}
     else
       {call_ast, state}
     end
   end
 
-  defp enter_ash_api_context_node(ast, state), do: {ast, state}
+  defp enter_ash_api_traversal_node(ast, state, _collect_fn), do: {ast, state}
 
-  defp leave_ash_api_context_node({scope_key, _body} = ast, state)
+  defp leave_ash_api_traversal_node({scope_key, _body} = ast, state)
        when scope_key in @scope_keys do
     {ast, pop_alias_frame(state)}
   end
 
-  defp leave_ash_api_context_node({:->, _, [_args, _body]} = ast, state) do
+  defp leave_ash_api_traversal_node({:->, _, [_args, _body]} = ast, state) do
     {ast, pop_alias_frame(state)}
   end
 
-  defp leave_ash_api_context_node({:=, _, [lhs, rhs]} = ast, state) do
+  defp leave_ash_api_traversal_node({:=, _, [lhs, rhs]} = ast, state) do
     {ast, maybe_record_binding(state, lhs, rhs)}
   end
 
-  defp leave_ash_api_context_node({node_name, _, _} = ast, state)
+  defp leave_ash_api_traversal_node({node_name, _, _} = ast, state)
        when node_name in @lexical_scope_nodes do
-    {ast,
-     state
-     |> maybe_leave_branch_scope(node_name)
-     |> maybe_pop_binding_frame(node_name)
-     |> pop_alias_frame()}
+    {ast, maybe_leave_ash_api_lexical_scope(state, node_name)}
   end
 
-  defp leave_ash_api_context_node(ast, state), do: {ast, state}
+  defp leave_ash_api_traversal_node(ast, state), do: {ast, state}
 
-  defp initial_ash_api_context_state do
+  defp initial_ash_api_state(opts) do
     %{
       alias_frames: [[]],
       binding_frames: [],
       branch_depth: 0,
       calls: [],
-      pipe_origins: %{}
+      pipe_origins: %{},
+      track_context?: Keyword.get(opts, :track_context?, false)
     }
+  end
+
+  defp record_ash_api_call(state, call_ast, expanded_module, collect_fn) do
+    %{state | calls: [collect_fn.(call_ast, expanded_module, state) | state.calls]}
+  end
+
+  defp build_ash_api_call_context(
+         {{:., _, [_module_ast, _fun_name]}, call_meta, args} = call_ast,
+         expanded_module,
+         state
+       )
+       when is_list(args) do
+    %{
+      call_ast: call_ast,
+      expanded_module: expanded_module,
+      args: normalized_call_args(args, call_meta, state.pipe_origins),
+      aliases: current_aliases(state),
+      bindings: current_bindings(state)
+    }
+  end
+
+  defp maybe_enter_ash_api_lexical_scope(%{track_context?: false} = state, _node_name), do: state
+
+  defp maybe_enter_ash_api_lexical_scope(state, node_name) do
+    state
+    |> push_alias_frame()
+    |> maybe_push_binding_frame(node_name)
+    |> maybe_enter_branch_scope(node_name)
+  end
+
+  defp maybe_leave_ash_api_lexical_scope(%{track_context?: false} = state, _node_name), do: state
+
+  defp maybe_leave_ash_api_lexical_scope(state, node_name) do
+    state
+    |> maybe_leave_branch_scope(node_name)
+    |> maybe_pop_binding_frame(node_name)
+    |> pop_alias_frame()
+  end
+
+  defp maybe_track_pipe_origin(%{track_context?: false} = state, _meta, _left), do: state
+
+  defp maybe_track_pipe_origin(state, meta, left) do
+    key = call_key(meta)
+    %{state | pipe_origins: Map.put(state.pipe_origins, key, left)}
   end
 
   defp push_alias_frame(state) do
