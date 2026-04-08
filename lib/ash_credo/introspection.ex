@@ -376,29 +376,29 @@ defmodule AshCredo.Introspection do
   end
 
   @doc "Checks if an entity call exists inside a section AST node."
-  def has_entity?({_section, _, [[do: body]]}, entity_name) do
-    body
-    |> flatten_block()
+  def has_entity?(nil, _), do: false
+
+  def has_entity?({_section, _, [[do: _body]]} = section_ast, entity_name) do
+    section_ast
+    |> section_entries()
     |> Enum.any?(fn
       {^entity_name, _, _} -> true
       _ -> false
     end)
   end
 
-  def has_entity?(nil, _), do: false
-
   @doc "Returns all entity AST nodes of a given name within a section."
-  def entities({_section, _, [[do: body]]}, entity_name) do
-    body
-    |> flatten_block()
-    |> Enum.filter(&match?({^entity_name, _, _}, &1))
-  end
-
   def entities(nil, _), do: []
+
+  def entities({_section, _, [[do: _body]]} = section_ast, entity_name) do
+    filter_entities(section_entries(section_ast), entity_name)
+  end
 
   @doc "Returns all explicit action entity AST nodes within an `actions` section."
   def action_entities(actions_ast, action_types \\ @action_entities) do
-    Enum.flat_map(action_types, &entities(actions_ast, &1))
+    entries = section_entries(actions_ast)
+
+    Enum.flat_map(action_types, &filter_entities(entries, &1))
   end
 
   @doc "Returns the line number of a section's opening."
@@ -568,6 +568,18 @@ defmodule AshCredo.Introspection do
   defp use_metadata_opt(%{opts: opts}, key) when is_list(opts), do: Keyword.get(opts, key)
   defp use_metadata_opt(_, _key), do: nil
 
+  defp section_entries({_section, _, [[do: body]]}), do: flatten_block(body)
+  defp section_entries(_), do: []
+
+  defp do_block_entries({_name, _meta, args}) when is_list(args) do
+    Enum.find_value(args, [], fn
+      [do: body] -> flatten_block(body)
+      _ -> nil
+    end)
+  end
+
+  defp do_block_entries(_), do: []
+
   defp context_aliases(%{module_ast: module_ast, aliases: aliases}, opts) do
     case Keyword.get(opts, :before_line) do
       nil -> aliases
@@ -604,10 +616,7 @@ defmodule AshCredo.Introspection do
 
   @doc "Returns normalized option values with line numbers from inline opts and `do` blocks."
   def option_occurrences({_name, meta, _args} = ast, key) do
-    inline = inline_option_occurrences(ast, key, meta[:line])
-    body = body_option_occurrences(ast, key)
-
-    inline ++ body
+    normalized_option_occurrences(ast, key, meta[:line])
   end
 
   def option_occurrences(_, _), do: []
@@ -617,6 +626,13 @@ defmodule AshCredo.Introspection do
     Enum.map(option_occurrences(ast, key), &elem(&1, 0))
   end
 
+  defp normalized_option_occurrences(ast, key, line) do
+    inline = inline_option_occurrences(ast, key, line)
+    body = do_block_option_occurrences(ast, key)
+
+    inline ++ body
+  end
+
   defp inline_option_occurrences(ast, key, line) do
     case Keyword.fetch(entity_opts(ast), key) do
       {:ok, value} -> [{value, line}]
@@ -624,15 +640,15 @@ defmodule AshCredo.Introspection do
     end
   end
 
-  defp body_option_occurrences(ast, key) do
+  defp do_block_option_occurrences(ast, key) do
     ast
-    |> entity_body()
-    |> Enum.flat_map(&body_option_occurrence(&1, key))
+    |> do_block_entries()
+    |> Enum.flat_map(&do_block_option_occurrence(&1, key))
   end
 
-  defp body_option_occurrence({key, meta, [value]}, key), do: [{value, meta[:line]}]
-  defp body_option_occurrence({key, meta, args}, key), do: [{args, meta[:line]}]
-  defp body_option_occurrence(_, _), do: []
+  defp do_block_option_occurrence({key, meta, [value]}, key), do: [{value, meta[:line]}]
+  defp do_block_option_occurrence({key, meta, args}, key), do: [{args, meta[:line]}]
+  defp do_block_option_occurrence(_, _), do: []
 
   @doc "Checks if a keyword option is set to a specific value in an entity's opts or do block."
   def entity_has_opt?(entity_ast, key, value) do
@@ -645,7 +661,7 @@ defmodule AshCredo.Introspection do
   end
 
   @doc "Returns the flattened list of statements inside a section body."
-  def section_body({_section, _, [[do: body]]}), do: flatten_block(body)
+  def section_body({_section, _, [[do: _body]]} = section_ast), do: section_entries(section_ast)
   def section_body(nil), do: []
 
   @doc "Returns true if a section contains at least one DSL entry."
@@ -673,14 +689,16 @@ defmodule AshCredo.Introspection do
 
   @doc "Returns all `policy` and `bypass` entities from a policies section, including inside `policy_group`."
   def policy_entities(policies_ast) do
+    entries = section_entries(policies_ast)
+
     top_level =
-      entities(policies_ast, :policy) ++ entities(policies_ast, :bypass)
+      filter_entities(entries, :policy) ++ filter_entities(entries, :bypass)
 
     nested =
-      policies_ast
-      |> entities(:policy_group)
+      entries
+      |> filter_entities(:policy_group)
       |> Enum.flat_map(fn group ->
-        group_body = entity_body(group)
+        group_body = do_block_entries(group)
         filter_entities(group_body, :policy) ++ filter_entities(group_body, :bypass)
       end)
 
@@ -688,33 +706,15 @@ defmodule AshCredo.Introspection do
   end
 
   @doc "Extracts the body statements from an entity's do block."
-  def entity_body({_name, _meta, args}) when is_list(args) do
-    Enum.find_value(args, [], fn
-      [do: body] -> flatten_block(body)
-      _ -> nil
-    end)
-  end
-
-  def entity_body(_), do: []
+  def entity_body(ast), do: do_block_entries(ast)
 
   defp filter_entities(stmts, name) do
     Enum.filter(stmts, &match?({^name, _, _}, &1))
   end
 
   @doc "Searches inside an entity's `do` block for a call matching `call_name`."
-  def find_in_body({_name, _meta, args}, call_name) when is_list(args) do
-    Enum.find_value(args, fn
-      [do: body] ->
-        body
-        |> flatten_block()
-        |> Enum.find(&match?({^call_name, _, _}, &1))
-
-      _ ->
-        nil
-    end)
-  end
-
-  def find_in_body(_, _), do: nil
+  def find_in_body(ast, call_name),
+    do: Enum.find(do_block_entries(ast), &match?({^call_name, _, _}, &1))
 
   @doc "Extracts the first atom argument from an entity call (e.g. action name)."
   def entity_name({_call, _meta, [name | _]}) when is_atom(name), do: name
