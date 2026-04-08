@@ -16,15 +16,11 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Orchestration
 
   @impl true
-  def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
-
-    source_file
-    |> Introspection.resource_contexts()
-    |> Enum.flat_map(&missing_code_interface_issues(&1, issue_meta))
-  end
+  def run(%SourceFile{} = source_file, params),
+    do: Orchestration.flat_map_resource_context(source_file, params, &missing_code_interface_issues/2)
 
   defp missing_code_interface_issues(context, issue_meta) do
     actions_ast = Introspection.resource_section(context, :actions)

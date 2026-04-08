@@ -18,15 +18,11 @@ defmodule AshCredo.Check.Warning.NoActions do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Orchestration
 
   @impl true
-  def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
-
-    source_file
-    |> Introspection.resource_contexts()
-    |> Enum.flat_map(&no_action_issues(&1, issue_meta))
-  end
+  def run(%SourceFile{} = source_file, params),
+    do: Orchestration.flat_map_resource_context(source_file, params, &no_action_issues/2)
 
   defp no_action_issues(context, issue_meta) do
     if Introspection.has_data_layer?(context) do

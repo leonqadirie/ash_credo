@@ -14,15 +14,11 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Orchestration
 
   @impl true
-  def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
-
-    source_file
-    |> Introspection.resource_contexts()
-    |> Enum.flat_map(&check_for_timestamps(&1, issue_meta))
-  end
+  def run(%SourceFile{} = source_file, params),
+    do: Orchestration.flat_map_resource_context(source_file, params, &check_for_timestamps/2)
 
   defp check_for_timestamps(context, issue_meta) do
     if Introspection.has_data_layer?(context) do

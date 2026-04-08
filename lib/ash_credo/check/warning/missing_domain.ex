@@ -13,15 +13,11 @@ defmodule AshCredo.Check.Warning.MissingDomain do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Orchestration
 
   @impl true
-  def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
-
-    source_file
-    |> Introspection.resource_contexts()
-    |> Enum.flat_map(&missing_domain_issues(&1, issue_meta))
-  end
+  def run(%SourceFile{} = source_file, params),
+    do: Orchestration.flat_map_resource_context(source_file, params, &missing_domain_issues/2)
 
   defp missing_domain_issues(context, issue_meta) do
     case context.use_opts do

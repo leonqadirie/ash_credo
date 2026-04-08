@@ -18,17 +18,13 @@ defmodule AshCredo.Check.Warning.MissingPrimaryKey do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Orchestration
 
   @primary_key_entities ~w(uuid_primary_key uuid_v7_primary_key integer_primary_key)a
 
   @impl true
-  def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
-
-    source_file
-    |> Introspection.resource_contexts()
-    |> Enum.flat_map(&check_for_primary_key(&1, issue_meta))
-  end
+  def run(%SourceFile{} = source_file, params),
+    do: Orchestration.flat_map_resource_context(source_file, params, &check_for_primary_key/2)
 
   defp check_for_primary_key(context, issue_meta) do
     if Introspection.has_data_layer?(context) do
