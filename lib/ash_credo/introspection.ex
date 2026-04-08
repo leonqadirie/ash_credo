@@ -617,6 +617,8 @@ defmodule AshCredo.Introspection do
     end
   end
 
+  defp context_aliases(%{aliases: aliases}, _opts) when is_list(aliases), do: aliases
+
   defp context_aliases({:defmodule, _, _} = module_ast, opts),
     do: module_aliases(module_ast, opts)
 
