@@ -3,6 +3,9 @@ defmodule AshCredo.Introspection do
 
   @action_entities ~w(create read update destroy action)a
   @scope_keys ~w(do else after rescue catch)a
+  @lexical_scope_nodes ~w(defmodule def defp defmacro defmacrop fn if unless case cond with try receive for)a
+  @branch_scope_nodes ~w(if unless case cond with try receive for)a
+  @function_scope_nodes ~w(def defp defmacro defmacrop)a
 
   @doc "Returns all modules in the source file that directly `use Ash.Resource`."
   def resource_modules(source_file), do: modules_using(source_file, [:Ash, :Resource])
@@ -27,39 +30,80 @@ defmodule AshCredo.Introspection do
 
   @doc "Returns all `Ash.*` API call AST nodes found in the source file, resolving aliases lexically."
   def ash_api_calls(source_file) do
+    ash_api_traverse(source_file, fn ast, _expanded -> ast end)
+  end
+
+  @doc """
+  Returns all `Ash.*` API call AST nodes found in the source file together with
+  their alias-expanded module segments as `{call_ast, expanded_module_segments}` tuples.
+  """
+  def ash_api_calls_with_module(source_file) do
+    ash_api_traverse(source_file, fn ast, expanded -> {ast, expanded} end)
+  end
+
+  @doc """
+  Returns all `Ash.*` API call AST nodes found in the source file together with
+  their alias-expanded module segments, normalized call arguments, visible
+  alias mappings, and straight-line local bindings.
+
+  Each result is a map with keys `:call_ast`, `:expanded_module`, `:args`,
+  `:aliases`, and `:bindings`.
+  """
+  def ash_api_calls_with_context(source_file) do
     {_, %{calls: calls}} =
       source_file
       |> Credo.SourceFile.ast()
-      |> Macro.traverse(%{alias_frames: [[]], calls: []}, &enter_ash_api_call/2, &leave_scope/2)
+      |> Macro.traverse(
+        initial_ash_api_context_state(),
+        &enter_ash_api_context_node/2,
+        &leave_ash_api_context_node/2
+      )
 
     Enum.reverse(calls)
   end
 
-  defp enter_ash_api_call({scope_key, _body} = ast, state) when scope_key in @scope_keys do
+  defp ash_api_traverse(source_file, collect_fn) do
+    {_, %{calls: calls}} =
+      source_file
+      |> Credo.SourceFile.ast()
+      |> Macro.traverse(
+        %{alias_frames: [[]], calls: []},
+        &enter_ash_api_node(&1, &2, collect_fn),
+        &leave_scope/2
+      )
+
+    Enum.reverse(calls)
+  end
+
+  defp enter_ash_api_node({scope_key, _body} = ast, state, _collect_fn)
+       when scope_key in @scope_keys do
     {ast, push_alias_frame(state)}
   end
 
-  defp enter_ash_api_call({:->, _, [_args, _body]} = ast, state) do
+  defp enter_ash_api_node({:->, _, [_args, _body]} = ast, state, _collect_fn) do
     {ast, push_alias_frame(state)}
   end
 
-  defp enter_ash_api_call({:alias, _, _} = ast, state) do
+  defp enter_ash_api_node({:alias, _, _} = ast, state, _collect_fn) do
     {ast, put_aliases(state, alias_entries(ast))}
   end
 
-  defp enter_ash_api_call(
-         {{:., _, [{:__aliases__, _, _segments}, _fun]}, _meta, args} = ast,
-         state
+  defp enter_ash_api_node(
+         {{:., _, [{:__aliases__, _, segments}, _fun]}, _meta, args} = ast,
+         state,
+         collect_fn
        )
        when is_list(args) do
-    if ash_api_call?(ast, current_aliases(state)) do
-      {ast, %{state | calls: [ast | state.calls]}}
+    expanded = expand_alias(segments, current_aliases(state))
+
+    if match?([:Ash | _], expanded) do
+      {ast, %{state | calls: [collect_fn.(ast, expanded) | state.calls]}}
     else
       {ast, state}
     end
   end
 
-  defp enter_ash_api_call(ast, state), do: {ast, state}
+  defp enter_ash_api_node(ast, state, _collect_fn), do: {ast, state}
 
   defp leave_scope({scope_key, _body} = ast, state) when scope_key in @scope_keys do
     {ast, pop_alias_frame(state)}
@@ -70,6 +114,92 @@ defmodule AshCredo.Introspection do
   end
 
   defp leave_scope(ast, state), do: {ast, state}
+
+  defp enter_ash_api_context_node({scope_key, _body} = ast, state)
+       when scope_key in @scope_keys do
+    {ast, push_alias_frame(state)}
+  end
+
+  defp enter_ash_api_context_node({:->, _, [_args, _body]} = ast, state) do
+    {ast, push_alias_frame(state)}
+  end
+
+  defp enter_ash_api_context_node({node_name, _, _} = ast, state)
+       when node_name in @lexical_scope_nodes do
+    {ast,
+     state
+     |> push_alias_frame()
+     |> maybe_push_binding_frame(node_name)
+     |> maybe_enter_branch_scope(node_name)}
+  end
+
+  defp enter_ash_api_context_node({:alias, _, _} = ast, state) do
+    {ast, put_aliases(state, alias_entries(ast))}
+  end
+
+  defp enter_ash_api_context_node({:|>, _, [left, {{:., _, _}, meta, _}]} = ast, state)
+       when is_list(meta) do
+    key = call_key(meta)
+    {ast, %{state | pipe_origins: Map.put(state.pipe_origins, key, left)}}
+  end
+
+  defp enter_ash_api_context_node(
+         {{:., _, [module_ast, _fun_name]}, call_meta, args} = call_ast,
+         state
+       )
+       when is_list(args) do
+    expanded_module = expanded_call_module(module_ast, current_aliases(state))
+
+    if match?([:Ash | _], expanded_module) do
+      call_info = %{
+        call_ast: call_ast,
+        expanded_module: expanded_module,
+        args: normalized_call_args(args, call_meta, state.pipe_origins),
+        aliases: current_aliases(state),
+        bindings: current_bindings(state)
+      }
+
+      {call_ast, %{state | calls: [call_info | state.calls]}}
+    else
+      {call_ast, state}
+    end
+  end
+
+  defp enter_ash_api_context_node(ast, state), do: {ast, state}
+
+  defp leave_ash_api_context_node({scope_key, _body} = ast, state)
+       when scope_key in @scope_keys do
+    {ast, pop_alias_frame(state)}
+  end
+
+  defp leave_ash_api_context_node({:->, _, [_args, _body]} = ast, state) do
+    {ast, pop_alias_frame(state)}
+  end
+
+  defp leave_ash_api_context_node({:=, _, [lhs, rhs]} = ast, state) do
+    {ast, maybe_record_binding(state, lhs, rhs)}
+  end
+
+  defp leave_ash_api_context_node({node_name, _, _} = ast, state)
+       when node_name in @lexical_scope_nodes do
+    {ast,
+     state
+     |> maybe_leave_branch_scope(node_name)
+     |> maybe_pop_binding_frame(node_name)
+     |> pop_alias_frame()}
+  end
+
+  defp leave_ash_api_context_node(ast, state), do: {ast, state}
+
+  defp initial_ash_api_context_state do
+    %{
+      alias_frames: [[]],
+      binding_frames: [],
+      branch_depth: 0,
+      calls: [],
+      pipe_origins: %{}
+    }
+  end
 
   defp push_alias_frame(state) do
     update_in(state.alias_frames, &[[] | &1])
@@ -90,6 +220,102 @@ defmodule AshCredo.Introspection do
   defp current_aliases(%{alias_frames: frames}) do
     Enum.concat(frames)
   end
+
+  defp normalized_call_args(args, call_meta, pipe_origins) do
+    case Map.get(pipe_origins, call_key(call_meta)) do
+      nil -> args
+      piped_arg -> [piped_arg | args]
+    end
+  end
+
+  defp call_key(meta), do: {meta[:line], meta[:column] || 0}
+
+  defp expanded_call_module({:__aliases__, _, segments}, aliases) when is_list(segments) do
+    expand_alias(segments, aliases)
+  end
+
+  defp expanded_call_module(_module_ast, _aliases), do: []
+
+  defp maybe_push_binding_frame(state, node_name) when node_name in @function_scope_nodes do
+    update_in(state.binding_frames, &[%{} | &1])
+  end
+
+  defp maybe_push_binding_frame(state, :fn) do
+    update_in(state.binding_frames, &[current_bindings(state) | &1])
+  end
+
+  defp maybe_push_binding_frame(state, _node_name), do: state
+
+  defp maybe_pop_binding_frame(%{binding_frames: [_current | frames]} = state, node_name)
+       when node_name in @function_scope_nodes or node_name == :fn do
+    %{state | binding_frames: frames}
+  end
+
+  defp maybe_pop_binding_frame(state, _node_name), do: state
+
+  defp current_bindings(%{binding_frames: [bindings | _]}), do: bindings
+  defp current_bindings(_state), do: %{}
+
+  defp maybe_enter_branch_scope(state, node_name) when node_name in @branch_scope_nodes do
+    update_in(state.branch_depth, &(&1 + 1))
+  end
+
+  defp maybe_enter_branch_scope(state, _node_name), do: state
+
+  defp maybe_leave_branch_scope(state, node_name) when node_name in @branch_scope_nodes do
+    update_in(state.branch_depth, &max(&1 - 1, 0))
+  end
+
+  defp maybe_leave_branch_scope(state, _node_name), do: state
+
+  defp maybe_record_binding(%{binding_frames: []} = state, _lhs, _rhs), do: state
+
+  defp maybe_record_binding(%{branch_depth: branch_depth} = state, _lhs, _rhs)
+       when branch_depth > 0 do
+    state
+  end
+
+  defp maybe_record_binding(state, lhs, rhs) do
+    binding_keys =
+      lhs
+      |> binding_keys()
+      |> Enum.reject(fn {name, _ctx} -> name == :_ end)
+
+    update_in(state.binding_frames, fn
+      [bindings | rest] ->
+        new_bindings =
+          Enum.reduce(binding_keys, bindings, fn key, acc ->
+            Map.put(acc, key, rhs)
+          end)
+
+        [new_bindings | rest]
+
+      [] ->
+        []
+    end)
+  end
+
+  defp binding_keys(lhs) do
+    lhs
+    |> do_binding_keys()
+    |> Enum.uniq()
+  end
+
+  defp do_binding_keys({:^, _, [_inner]}), do: []
+
+  defp do_binding_keys({name, _, ctx}) when is_atom(name) and (is_atom(ctx) or is_nil(ctx)) do
+    [{name, ctx}]
+  end
+
+  defp do_binding_keys({_form, _meta, args}) when is_list(args) do
+    Enum.flat_map(args, &do_binding_keys/1)
+  end
+
+  defp do_binding_keys(list) when is_list(list) do
+    Enum.flat_map(list, &do_binding_keys/1)
+  end
+
+  defp do_binding_keys(_), do: []
 
   @doc "Returns true if the source file or module contains `use Ash.Domain`."
   def ash_domain?({:defmodule, _, _} = module_ast), do: module_uses?(module_ast, [:Ash, :Domain])
@@ -523,7 +749,7 @@ defmodule AshCredo.Introspection do
     end
   end
 
-  @doc false
+  @doc "Normalizes a block AST node into a flat list of statements."
   def flatten_block({:__block__, _, stmts}), do: stmts
   def flatten_block(other), do: [other]
 

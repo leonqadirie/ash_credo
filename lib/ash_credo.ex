@@ -46,7 +46,8 @@ defmodule AshCredo do
             {AshCredo.Check.Readability.ActionMissingDescription, false},
             {AshCredo.Check.Readability.BelongsToMissingAllowNil, false},
             # Refactor
-            {AshCredo.Check.Refactor.LargeResource, false}
+            {AshCredo.Check.Refactor.LargeResource, false},
+            {AshCredo.Check.Refactor.UseCodeInterface, false}
           ]
         }
       }

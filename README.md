@@ -84,6 +84,7 @@ mix credo
 | `ActionMissingDescription` | Readability | Low | No | Flags actions without a `description` |
 | `BelongsToMissingAllowNil` | Readability | Normal | No | Flags `belongs_to` without explicit `allow_nil?` |
 | `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |
+| `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals — use a code interface function instead |
 
 ## Configuration
 
@@ -139,7 +140,8 @@ checks: %{
     {AshCredo.Check.Design.MissingTimestamps, []},
     {AshCredo.Check.Readability.ActionMissingDescription, []},
     {AshCredo.Check.Readability.BelongsToMissingAllowNil, []},
-    {AshCredo.Check.Refactor.LargeResource, []}
+    {AshCredo.Check.Refactor.LargeResource, []},
+    {AshCredo.Check.Refactor.UseCodeInterface, []}
   ]
 }
 ```
