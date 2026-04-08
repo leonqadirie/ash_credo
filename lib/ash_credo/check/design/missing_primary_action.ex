@@ -36,7 +36,10 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
   defp check_primary_actions(nil, _issue_meta), do: []
 
   defp check_primary_actions(actions_ast, issue_meta) do
+    default_types = default_action_types(actions_ast)
+
     @action_types
+    |> Enum.reject(&MapSet.member?(default_types, &1))
     |> Enum.flat_map(fn type ->
       actions_ast
       |> Introspection.action_entities([type])
@@ -62,5 +65,17 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
 
   defp has_primary_opt?(entity_ast) do
     Introspection.entity_has_opt?(entity_ast, :primary?, true)
+  end
+
+  defp default_action_types(actions_ast) do
+    actions_ast
+    |> Introspection.entities(:defaults)
+    |> Enum.flat_map(&Introspection.default_action_entries/1)
+    |> Enum.flat_map(fn
+      type when is_atom(type) -> [type]
+      {type, _} when is_atom(type) -> [type]
+      _ -> []
+    end)
+    |> MapSet.new()
   end
 end
