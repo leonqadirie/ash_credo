@@ -73,20 +73,30 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
       end)
 
     action_lines =
-      Introspection.flat_map_dsl_section(source_file, :actions, fn actions_ast ->
-        actions_ast
-        |> Introspection.action_entities()
-        |> Enum.flat_map(fn action ->
-          action
-          |> Introspection.option_occurrences(:authorize?)
-          |> Enum.flat_map(fn
-            {false, line} -> [line]
-            _ -> []
-          end)
-        end)
+      source_file
+      |> Introspection.resource_contexts()
+      |> Enum.flat_map(fn context ->
+        context
+        |> Introspection.resource_section(:actions)
+        |> action_authorize_false_lines()
       end)
 
     Enum.sort(Enum.uniq(call_lines ++ action_lines))
+  end
+
+  defp action_authorize_false_lines(nil), do: []
+
+  defp action_authorize_false_lines(actions_ast) do
+    actions_ast
+    |> Introspection.action_entities()
+    |> Enum.flat_map(fn action ->
+      action
+      |> Introspection.option_occurrences(:authorize?)
+      |> Enum.flat_map(fn
+        {false, line} -> [line]
+        _ -> []
+      end)
+    end)
   end
 
   defp all_authorize_false_lines(source_file) do

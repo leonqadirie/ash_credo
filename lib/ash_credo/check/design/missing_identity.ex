@@ -28,10 +28,10 @@ defmodule AshCredo.Check.Design.MissingIdentity do
     issue_meta = IssueMeta.for(source_file, params)
 
     source_file
-    |> Introspection.resource_modules()
-    |> Enum.flat_map(fn module_ast ->
-      attrs_ast = Introspection.find_dsl_section(module_ast, :attributes)
-      identities_ast = Introspection.find_dsl_section(module_ast, :identities)
+    |> Introspection.resource_contexts()
+    |> Enum.flat_map(fn context ->
+      attrs_ast = Introspection.resource_section(context, :attributes)
+      identities_ast = Introspection.resource_section(context, :identities)
       check_identities(attrs_ast, identities_ast, candidates, issue_meta)
     end)
   end

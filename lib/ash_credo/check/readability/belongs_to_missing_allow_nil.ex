@@ -20,10 +20,10 @@ defmodule AshCredo.Check.Readability.BelongsToMissingAllowNil do
     issue_meta = IssueMeta.for(source_file, params)
 
     source_file
-    |> Introspection.resource_modules()
-    |> Enum.flat_map(fn module_ast ->
-      module_ast
-      |> Introspection.find_dsl_section(:relationships)
+    |> Introspection.resource_contexts()
+    |> Enum.flat_map(fn context ->
+      context
+      |> Introspection.resource_section(:relationships)
       |> check_belongs_to(issue_meta)
     end)
   end

@@ -19,13 +19,11 @@ defmodule AshCredo.Check.Warning.MissingDomain do
     issue_meta = IssueMeta.for(source_file, params)
 
     source_file
-    |> Introspection.resource_modules()
+    |> Introspection.resource_contexts()
     |> Enum.flat_map(&missing_domain_issues(&1, issue_meta))
   end
 
-  defp missing_domain_issues(module_ast, issue_meta) do
-    context = Introspection.resource_context(module_ast)
-
+  defp missing_domain_issues(context, issue_meta) do
     case context.use_opts do
       opts when is_list(opts) ->
         if Keyword.has_key?(opts, :domain) or Introspection.embedded_resource?(context) do
@@ -35,7 +33,7 @@ defmodule AshCredo.Check.Warning.MissingDomain do
             format_issue(issue_meta,
               message: "Resource is missing a `domain:` option in `use Ash.Resource`.",
               trigger: "use Ash.Resource",
-              line_no: context.use_line
+              line_no: Introspection.resource_issue_line(context)
             )
           ]
         end

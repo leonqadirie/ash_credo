@@ -24,10 +24,10 @@ defmodule AshCredo.Check.Readability.ActionMissingDescription do
     issue_meta = IssueMeta.for(source_file, params)
 
     source_file
-    |> Introspection.resource_modules()
-    |> Enum.flat_map(fn module_ast ->
-      module_ast
-      |> Introspection.find_dsl_section(:actions)
+    |> Introspection.resource_contexts()
+    |> Enum.flat_map(fn context ->
+      context
+      |> Introspection.resource_section(:actions)
       |> check_descriptions(issue_meta)
     end)
   end
