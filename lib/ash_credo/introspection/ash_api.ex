@@ -153,10 +153,6 @@ defmodule AshCredo.Introspection.AshApi do
     update_in(state.alias_frames, &[[] | &1])
   end
 
-  defp pop_alias_frame(%{alias_frames: [_current, []]} = state) do
-    %{state | alias_frames: [[]]}
-  end
-
   defp pop_alias_frame(%{alias_frames: [_current | frames]} = state) do
     %{state | alias_frames: frames}
   end
