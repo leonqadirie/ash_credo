@@ -22,8 +22,10 @@ AshCredo requires [Credo](https://hexdocs.pm/credo) to already be installed in y
 If your project uses [Igniter](https://hexdocs.pm/igniter), a single command will add the dependency and register the plugin in your `.credo.exs`:
 
 ```bash
-mix igniter.install ash_credo
+mix igniter.install ash_credo --only dev,test
 ```
+
+This keeps `ash_credo` scoped to the same `:dev`/`:test` environments as `credo`. The installer also sets `runtime: false`.
 
 ### Manual
 
@@ -169,4 +171,3 @@ The following checks accept custom parameters:
 ## License
 
 MIT - see [LICENSE](LICENSE) for details.
-
