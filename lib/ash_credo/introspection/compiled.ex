@@ -42,7 +42,7 @@ defmodule AshCredo.Introspection.Compiled do
   @compile {:no_warn_undefined,
             [Ash.Resource.Info, Ash.Domain.Info, Ash.Policy.Info, Ash.Policy.Authorizer]}
 
-  @cache_table :ash_credo_introspection_compiled_cache
+  @cache_key_tag {__MODULE__, :cache}
   @ash_available_key {__MODULE__, :ash_available?}
   @ash_missing_warned_key {__MODULE__, :ash_missing_warned}
   @not_loadable_warned_key {__MODULE__, :not_loadable_warned}
@@ -490,15 +490,14 @@ defmodule AshCredo.Introspection.Compiled do
   defp name_ancestors([]), do: []
   defp name_ancestors(segs), do: [segs | name_ancestors(Enum.drop(segs, -1))]
 
-  # Test helper. Clears the per-module ETS cache and the persistent_term
+  # Test helper. Clears the per-module persistent_term cache entries and the
   # one-shot diagnostic flags so each test runs with a fresh `Compiled` state.
   # Intentionally `@doc false` — not part of the public API surface.
   @doc false
   @spec clear_cache() :: :ok
   def clear_cache do
-    case :ets.whereis(@cache_table) do
-      :undefined -> :ok
-      _ -> :ets.delete_all_objects(@cache_table)
+    for {key, _value} <- :persistent_term.get(), match?({@cache_key_tag, _}, key) do
+      :persistent_term.erase(key)
     end
 
     :persistent_term.erase(@ash_available_key)
@@ -543,29 +542,15 @@ defmodule AshCredo.Introspection.Compiled do
     _ -> []
   end
 
-  defp cache_table do
-    case :ets.whereis(@cache_table) do
-      :undefined ->
-        try do
-          :ets.new(@cache_table, [:named_table, :public, :set, read_concurrency: true])
-        rescue
-          ArgumentError -> @cache_table
-        end
-
-      _tid ->
-        @cache_table
-    end
-  end
-
   defp cache_fetch(module) do
-    case :ets.lookup(cache_table(), module) do
-      [{^module, result}] -> {:ok, result}
-      [] -> :miss
+    case :persistent_term.get({@cache_key_tag, module}, :miss) do
+      :miss -> :miss
+      cached -> {:ok, cached}
     end
   end
 
   defp cache_put(module, result) do
-    :ets.insert(cache_table(), {module, result})
+    :persistent_term.put({@cache_key_tag, module}, result)
     result
   end
 end
