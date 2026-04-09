@@ -90,12 +90,8 @@ mix credo
 
 ## Checks that require a compiled project
 
-Seven checks read Ash's runtime introspection (`Ash.Resource.Info`,
-`Ash.Domain.Info`, and `Ash.Policy.Info`) rather than source AST. They see
-the fully-resolved resource state — including anything Spark transformers
-or extensions contribute — and catch bugs that pure AST scanning would miss
-(e.g. identities on AshAuthentication-injected `:email` attributes,
-fragment-spliced actions, extension-added authorizers).
+Seven checks read Ash's runtime introspection (`Ash.Resource.Info`, `Ash.Domain.Info`, and `Ash.Policy.Info`) rather than source AST.
+They see the fully-resolved resource state — including anything Spark transformers or extensions contribute — and catch bugs that pure AST scanning would miss (e.g. identities on AshAuthentication-injected `:email` attributes, fragment-spliced actions, extension-added authorizers).
 
 - `Refactor.UseCodeInterface`
 - `Design.MissingCodeInterface`
@@ -105,9 +101,8 @@ fragment-spliced actions, extension-added authorizers).
 - `Warning.NoActions`
 - `Warning.AuthorizerWithoutPolicies`
 
-**Your project must be compiled before running `mix credo`**, otherwise
-these checks emit a configuration diagnostic and become a no-op. Typically
-chain the two commands in a Mix alias:
+**Your project must be compiled before running `mix credo`**, otherwise these checks emit a configuration diagnostic and become a no-op.
+Typically chain the two commands in a Mix alias:
 
 ```elixir
 # mix.exs
@@ -118,12 +113,7 @@ defp aliases do
 end
 ```
 
-If a referenced resource cannot be loaded, the check emits a per-call-site
-"could not load" issue pointing at the resource. If Ash itself is not
-available in the VM running Credo (unusual — requires a project that uses
-`ash_credo` without depending on Ash), all four checks emit a single shared
-diagnostic and become no-ops. You can disable any of them in `.credo.exs`
-if your workflow can't run `mix compile` beforehand.
+If a referenced resource cannot be loaded, the check emits a per-call-site "could not load" issue pointing at the resource. If Ash itself is not available in the VM running Credo (why are you using `ash_credo` without depending on Ash?), all four checks emit a single shared diagnostic and become no-ops. You can disable any of them in `.credo.exs` if your workflow can't run `mix compile` beforehand.
 
 ### Adapting `UseCodeInterface` to your team's conventions
 
@@ -161,8 +151,7 @@ philosophies:
   in-domain/outside-domain heuristic; `:resource` always suggests a
   resource-level function; `:domain` always suggests a domain-level function.
 
-Unknown-action issues (e.g. `Ash.read!(Post, action: :publishd)`) are always
-emitted when the resource loads — disable the whole check to silence them.
+Unknown-action issues (e.g. `Ash.read!(Post, action: :publishd)`) are always emitted when the resource loads — disable the whole check to silence them.
 
 ## Configuration
 
