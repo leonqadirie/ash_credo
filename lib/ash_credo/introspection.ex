@@ -10,11 +10,89 @@ defmodule AshCredo.Introspection do
   @doc "Returns all modules in the source file that directly `use Ash.Resource`."
   def resource_modules(source_file), do: modules_using(source_file, [:Ash, :Resource])
 
-  @doc "Returns resource contexts for all resource modules in the source file, in file order."
+  @doc """
+  Returns resource contexts for all resource modules in the source file, in
+  file order. Each context now includes `:absolute_segments` — the full
+  enclosing path of the resource's `defmodule` name (e.g. `[:MyApp, :Blog, :Post]`
+  for a nested `defmodule Post` inside `defmodule MyApp.Blog`). This lets
+  compiled-introspection checks resolve the resource to its runtime module atom.
+  """
   def resource_contexts(source_file) do
     source_file
-    |> resource_modules()
-    |> Enum.map(&resource_context/1)
+    |> all_modules_with_path()
+    |> Enum.filter(fn {ast, _segs} -> module_uses?(ast, [:Ash, :Resource]) end)
+    |> Enum.map(fn {ast, segs} -> resource_context_with_segments(ast, segs) end)
+  end
+
+  @doc """
+  Walks every `defmodule` in a source file and returns
+  `{module_ast, absolute_segments}` tuples in file order.
+
+  `absolute_segments` is the concatenation of all enclosing `defmodule` names
+  (top-to-bottom), so a `defmodule Bar` nested inside `defmodule Foo` is
+  reported as `[:Foo, :Bar]`. Modules whose name is not a literal alias are
+  reported with `absolute_segments: nil` (they still appear in the output).
+  """
+  def all_modules_with_path(source_file) do
+    {_, %{out: out}} =
+      source_file
+      |> Credo.SourceFile.ast()
+      |> Macro.traverse(
+        %{stack: [], out: []},
+        &enter_module_for_path/2,
+        &leave_module_for_path/2
+      )
+
+    Enum.reverse(out)
+  end
+
+  defp enter_module_for_path({:defmodule, _, [{:__aliases__, _, segs}, [do: _body]]} = ast, state)
+       when is_list(segs) do
+    parent_absolute =
+      case state.stack do
+        [top | _] -> top
+        [] -> []
+      end
+
+    absolute =
+      cond do
+        not Enum.all?(segs, &is_atom/1) -> nil
+        is_nil(parent_absolute) -> nil
+        true -> parent_absolute ++ segs
+      end
+
+    new_state = %{
+      state
+      | stack: [absolute | state.stack],
+        out: [{ast, absolute} | state.out]
+    }
+
+    {ast, new_state}
+  end
+
+  defp enter_module_for_path({:defmodule, _, _} = ast, state) do
+    new_state = %{state | stack: [nil | state.stack]}
+    {ast, new_state}
+  end
+
+  defp enter_module_for_path(ast, state), do: {ast, state}
+
+  defp leave_module_for_path({:defmodule, _, _} = ast, %{stack: [_ | rest]} = state) do
+    {ast, %{state | stack: rest}}
+  end
+
+  defp leave_module_for_path(ast, state), do: {ast, state}
+
+  defp resource_context_with_segments(module_ast, absolute_segments) do
+    use_metadata = find_use(module_ast, [:Ash, :Resource])
+
+    %{
+      module_ast: module_ast,
+      aliases: module_aliases(module_ast),
+      use_line: use_metadata_line(use_metadata),
+      use_opts: normalized_resource_use_opts(use_metadata),
+      absolute_segments: absolute_segments
+    }
   end
 
   @doc "Returns all modules in the source file that directly `use Ash.Domain`."
