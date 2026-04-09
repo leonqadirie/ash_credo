@@ -2,6 +2,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
   use AshCredo.CheckCase
 
   alias AshCredo.Check.Refactor.UseCodeInterface
+  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   # The synthetic source strings in these tests reference real fixture modules
   # loaded from `test/support/fixtures/ash_fixtures.ex`:
@@ -12,11 +13,11 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
   #   * `AshCredoFixtures.Accounts.User`  — a resource in Accounts
   #   * `AshCredoFixtures.Plain`          — a non-Ash module
   #
-  # The check resolves each referenced name to an atom and then queries Ash's
-  # runtime introspection, so the tests exercise the real classification path.
+  # The check resolves each referenced name to an atom and then queries the
+  # compiled-BEAM introspection, exercising the real classification path.
 
   setup do
-    AshCredo.RuntimeIntrospection.clear_cache()
+    CompiledIntrospection.clear_cache()
     :ok
   end
 

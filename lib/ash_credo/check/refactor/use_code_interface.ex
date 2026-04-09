@@ -105,7 +105,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     ]
 
   alias AshCredo.Introspection
-  alias AshCredo.RuntimeIntrospection
+  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias Credo.Code.Name
 
   # Pattern A: resource at arg 0, action in keyword opts (:action key)
@@ -154,7 +154,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       not (config.in_domain or config.outside_domain) ->
         []
 
-      not RuntimeIntrospection.ash_available?() ->
+      not CompiledIntrospection.ash_available?() ->
         ash_missing_diagnostic(issue_meta)
 
       true ->
@@ -289,7 +289,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   defp classify_and_emit(segments, action_name, ctx) do
     resource = Module.concat(segments)
 
-    case RuntimeIntrospection.inspect_module(resource) do
+    case CompiledIntrospection.inspect_module(resource) do
       {:ok, info} ->
         handle_loaded(resource, action_name, info, ctx)
 
@@ -328,7 +328,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
        when is_list(enclosing) and enclosing != [] do
     candidate = Module.concat(enclosing ++ segments)
 
-    case RuntimeIntrospection.inspect_module(candidate) do
+    case CompiledIntrospection.inspect_module(candidate) do
       {:ok, info} -> {:ok, candidate, info}
       _ -> :error
     end
@@ -337,7 +337,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   defp try_implicit_resolution(_segments, _ctx), do: :error
 
   defp handle_loaded(resource, action_name, info, ctx) do
-    case RuntimeIntrospection.action(resource, action_name) do
+    case CompiledIntrospection.action(resource, action_name) do
       {:ok, _action} ->
         classification = classify(resource, action_name, info, ctx)
 
@@ -372,8 +372,9 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       resource: resource,
       action: action_name,
       resource_domain: resource_domain,
-      resource_iface: RuntimeIntrospection.find_interface(info.interfaces, action_name),
-      domain_iface: RuntimeIntrospection.domain_interface(resource_domain, resource, action_name),
+      resource_iface: CompiledIntrospection.find_interface(info.interfaces, action_name),
+      domain_iface:
+        CompiledIntrospection.domain_interface(resource_domain, resource, action_name),
       same_domain?: same_domain?,
       scope: ctx.config.scope,
       bang?: bang?(ctx.fun_name, ctx.builder_prefix),
@@ -391,14 +392,14 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   defp caller_domain(module) do
     cond do
-      RuntimeIntrospection.domain?(module) ->
+      CompiledIntrospection.domain?(module) ->
         module
 
-      RuntimeIntrospection.ash_callback_module?(module) ->
-        RuntimeIntrospection.enclosing_domain(module)
+      CompiledIntrospection.ash_callback_module?(module) ->
+        CompiledIntrospection.enclosing_domain(module)
 
       true ->
-        case RuntimeIntrospection.domain(module) do
+        case CompiledIntrospection.domain(module) do
           {:ok, domain} -> domain
           _ -> nil
         end

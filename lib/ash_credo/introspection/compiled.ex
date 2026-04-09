@@ -1,13 +1,18 @@
-defmodule AshCredo.RuntimeIntrospection do
+defmodule AshCredo.Introspection.Compiled do
   @moduledoc """
-  Runtime wrapper around `Ash.Resource.Info` and `Ash.Domain.Info`.
+  Introspection that reads **compiled BEAM metadata** — a wrapper around
+  `Ash.Resource.Info` and `Ash.Domain.Info`.
+
+  Sibling of `AshCredo.Introspection` (AST-level) and
+  `AshCredo.Introspection.AshApi` (AST-level Ash call discovery). This is
+  the module that reaches for the compiled artifact: it loads target
+  modules on demand, reads their DSL metadata through Ash's own
+  introspection API, and caches the results per-module in a lazy ETS table
+  so repeated lookups during a single `mix credo` run are cheap.
 
   Checks in `AshCredo` that need authoritative metadata about a referenced
-  module (its domain, its actions, its code interfaces, whether it is even an
-  Ash resource) call into this module instead of scanning source AST. Every
-  call first ensures the target module is compiled and loaded, then queries
-  Ash's own introspection API. Results are cached per-module in a lazy ETS
-  table so repeated lookups during a single `mix credo` run are cheap.
+  module (its domain, its actions, its code interfaces, whether it is even
+  an Ash resource) call into this module instead of scanning source AST.
 
   ## Error modes
 
@@ -27,7 +32,7 @@ defmodule AshCredo.RuntimeIntrospection do
   # at runtime by `ash_available?/0`.
   @compile {:no_warn_undefined, [Ash.Resource.Info, Ash.Domain.Info]}
 
-  @cache_table :ash_credo_runtime_introspection_cache
+  @cache_table :ash_credo_introspection_compiled_cache
   @ash_available_key {__MODULE__, :ash_available?}
 
   # Behaviours that mark a module as an Ash resource auxiliary — i.e. a
