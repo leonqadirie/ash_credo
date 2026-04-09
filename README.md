@@ -86,7 +86,29 @@ mix credo
 | `ActionMissingDescription` | Readability | Low | No | Flags actions without a `description` |
 | `BelongsToMissingAllowNil` | Readability | Normal | No | Flags `belongs_to` without explicit `allow_nil?` |
 | `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |
-| `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals — use a code interface function instead |
+| `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals — names the exact code interface function to call instead. **Requires compiled project** (see below). |
+
+## Running `UseCodeInterface`
+
+`UseCodeInterface` queries Ash's runtime introspection (`Ash.Resource.Info` and
+`Ash.Domain.Info`) to look up the caller's domain, the resource's declared
+actions, and any existing code interfaces. This means **your project must be
+compiled before running `mix credo`** — typically chain them in a Mix alias:
+
+```elixir
+# mix.exs
+defp aliases do
+  [
+    lint: ["compile", "credo --strict"]
+  ]
+end
+```
+
+If a referenced resource cannot be loaded, the check emits a configuration
+issue pointing at the call site. If Ash itself is not available in the VM
+running Credo, the check is a no-op and emits a single diagnostic. You can
+always disable the check in `.credo.exs` if your workflow can't run `mix
+compile` beforehand.
 
 ## Configuration
 
