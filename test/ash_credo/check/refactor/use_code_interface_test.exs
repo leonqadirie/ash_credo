@@ -342,6 +342,183 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
     end
   end
 
+  # ── Implicit submodule alias ───────────────────────────────────────────────
+
+  describe "implicit submodule alias" do
+    test "unqualified resource resolves to enclosing_module.Resource" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def list_published do
+          Ash.read!(Post, action: :published)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.published_posts!"
+    end
+
+    test "implicit alias is not applied when a matching top-level module exists" do
+      # `AshCredoFixtures.Blog.Post` is loadable directly, so the direct
+      # resolution wins and implicit lookup is not consulted.
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def list_published do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :published)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.published_posts!"
+    end
+  end
+
+  # ── __MODULE__ in the resource position ───────────────────────────────────
+
+  describe "__MODULE__" do
+    test "bare __MODULE__ resolves to the enclosing resource" do
+      source = """
+      defmodule AshCredoFixtures.Blog.Post do
+        def echo do
+          Ash.read!(__MODULE__, action: :published)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.published_posts!"
+    end
+  end
+
+  # ── Struct literal + traced-record bindings for builders ───────────────────
+
+  describe "struct literal as builder resource" do
+    test "Ash.Changeset.for_update with a struct literal" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def run(id) do
+          Ash.Changeset.for_update(%AshCredoFixtures.Blog.Post{id: id}, :archive, %{})
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.Changeset.for_update"
+      assert issue.message =~ "changeset_to_archive"
+    end
+
+    test "Ash.Changeset.for_destroy with a struct literal" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def run do
+          Ash.Changeset.for_destroy(%AshCredoFixtures.Blog.Post{}, :destroy, %{})
+        end
+      end
+      """
+
+      # `:destroy` is a default action on Post but has no code interface →
+      # same-domain fallback is "define a resource interface".
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.Changeset.for_destroy"
+      assert issue.message =~ "define :destroy"
+    end
+  end
+
+  describe "traced record bindings" do
+    test "for_update sees records bound via Ash.get!" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def run(id) do
+          post = Ash.get!(AshCredoFixtures.Blog.Post, id)
+          Ash.Changeset.for_update(post, :archive, %{})
+        end
+      end
+      """
+
+      issues = run_check(UseCodeInterface, source)
+      assert Enum.any?(issues, &(&1.trigger == "Ash.Changeset.for_update"))
+      update_issue = Enum.find(issues, &(&1.trigger == "Ash.Changeset.for_update"))
+      assert update_issue.message =~ "changeset_to_archive"
+    end
+
+    test "for_update sees records piped through Ash.get!" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def run(id) do
+          AshCredoFixtures.Blog.Post
+          |> Ash.get!(id)
+          |> Ash.Changeset.for_update(:archive, %{})
+        end
+      end
+      """
+
+      issues = run_check(UseCodeInterface, source)
+      update_issue = Enum.find(issues, &(&1.trigger == "Ash.Changeset.for_update"))
+      assert update_issue
+      assert update_issue.message =~ "changeset_to_archive"
+    end
+
+    test "for_destroy sees records bound via Ash.get!" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def run(id) do
+          post = Ash.get!(AshCredoFixtures.Blog.Post, id)
+          Ash.Changeset.for_destroy(post, :destroy, %{})
+        end
+      end
+      """
+
+      issues = run_check(UseCodeInterface, source)
+      assert Enum.any?(issues, &(&1.trigger == "Ash.Changeset.for_destroy"))
+    end
+
+    test "non-bang Ash.get is not traced (it returns a result tuple, not a record)" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def run(id) do
+          post = Ash.get(AshCredoFixtures.Blog.Post, id)
+          Ash.Changeset.for_update(post, :archive, %{})
+        end
+      end
+      """
+
+      issues = run_check(UseCodeInterface, source)
+      refute Enum.any?(issues, &(&1.trigger == "Ash.Changeset.for_update"))
+    end
+
+    test "no issue when the record origin is an unrelated helper" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def run(id) do
+          post = SomeRepo.load(id)
+          Ash.Changeset.for_update(post, :archive, %{})
+        end
+      end
+      """
+
+      assert [] = run_check(UseCodeInterface, source)
+    end
+
+    test "for_create is not record-traced (would be a user error anyway)" do
+      # `Ash.Changeset.for_create` expects a resource module, not a record.
+      # The check must not trace `post` back to a resource for `for_create`.
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def run(id) do
+          post = Ash.get!(AshCredoFixtures.Blog.Post, id)
+          Ash.Changeset.for_create(post, :create, %{})
+        end
+      end
+      """
+
+      # The for_create call is not flagged (post is not a literal module).
+      # The Ash.get! call is also not flagged (action key is a positional arg).
+      issues = run_check(UseCodeInterface, source)
+      refute Enum.any?(issues, &(&1.trigger == "Ash.Changeset.for_create"))
+    end
+  end
+
   # ── Bulk operations ────────────────────────────────────────────────────────
 
   describe "bulk operations" do
