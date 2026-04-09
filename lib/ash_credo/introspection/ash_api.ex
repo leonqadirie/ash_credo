@@ -67,6 +67,13 @@ defmodule AshCredo.Introspection.AshApi do
     {ast, maybe_track_pipe_origin(state, meta, left)}
   end
 
+  defp enter_node({:defmodule, _, _} = ast, state, _collect_fn) do
+    {ast,
+     state
+     |> maybe_enter_lexical_scope(:defmodule)
+     |> push_module_stack(ast)}
+  end
+
   defp enter_node({{:., _, [module_ast, _fun_name]}, _meta, args} = call_ast, state, collect_fn)
        when is_list(args) do
     expanded_module = expanded_call_module(module_ast, current_aliases(state))
@@ -92,6 +99,13 @@ defmodule AshCredo.Introspection.AshApi do
     {ast, maybe_record_binding(state, lhs, rhs)}
   end
 
+  defp leave_node({:defmodule, _, _} = ast, state) do
+    {ast,
+     state
+     |> pop_module_stack()
+     |> maybe_leave_lexical_scope(:defmodule)}
+  end
+
   defp leave_node({node_name, _, _} = ast, state) when node_name in @lexical_scope_nodes do
     {ast, maybe_leave_lexical_scope(state, node_name)}
   end
@@ -105,6 +119,7 @@ defmodule AshCredo.Introspection.AshApi do
       branch_depth: 0,
       calls: [],
       pipe_origins: %{},
+      module_stack: [],
       track_context?: Keyword.get(opts, :track_context?, false)
     }
   end
@@ -124,9 +139,34 @@ defmodule AshCredo.Introspection.AshApi do
       expanded_module: expanded_module,
       args: normalized_call_args(args, call_meta, state.pipe_origins),
       aliases: current_aliases(state),
-      bindings: current_bindings(state)
+      bindings: current_bindings(state),
+      enclosing_module_segments: current_module_segments(state)
     }
   end
+
+  defp push_module_stack(state, ast) do
+    literal = defmodule_literal_segments(ast)
+
+    parent_absolute =
+      case state.module_stack do
+        [top | _] -> top || []
+        [] -> []
+      end
+
+    absolute = if literal, do: parent_absolute ++ literal
+    %{state | module_stack: [absolute | state.module_stack]}
+  end
+
+  defp pop_module_stack(%{module_stack: [_ | rest]} = state), do: %{state | module_stack: rest}
+  defp pop_module_stack(state), do: state
+
+  defp current_module_segments(%{module_stack: [top | _]}), do: top
+  defp current_module_segments(%{module_stack: []}), do: nil
+
+  defp defmodule_literal_segments({:defmodule, _, [{:__aliases__, _, segs}, _]})
+       when is_list(segs), do: segs
+
+  defp defmodule_literal_segments(_), do: nil
 
   defp maybe_enter_lexical_scope(%{track_context?: false} = state, _node_name), do: state
 
