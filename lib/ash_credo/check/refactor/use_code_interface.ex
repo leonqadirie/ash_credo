@@ -148,17 +148,23 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     issue_meta = IssueMeta.for(source_file, params)
     config = load_config(params)
 
-    cond do
-      not (config.in_domain or config.outside_domain) ->
-        []
-
-      not CompiledIntrospection.ash_available?() ->
-        ash_missing_diagnostic(issue_meta)
-
-      true ->
-        source_file
-        |> Introspection.ash_api_calls_with_context()
-        |> Enum.flat_map(&check_call(&1, issue_meta, config))
+    if config.in_domain or config.outside_domain do
+      CompiledIntrospection.with_compiled_check(
+        fn ->
+          format_issue(issue_meta,
+            message:
+              "Ash is not loaded in the VM running Credo — `UseCodeInterface` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+            line_no: 1
+          )
+        end,
+        fn ->
+          source_file
+          |> Introspection.ash_api_calls_with_context()
+          |> Enum.flat_map(&check_call(&1, issue_meta, config))
+        end
+      )
+    else
+      []
     end
   end
 
@@ -168,22 +174,6 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       outside_domain: Params.get(params, :enforce_code_interface_outside_domain, __MODULE__),
       scope: Params.get(params, :prefer_interface_scope, __MODULE__)
     }
-  end
-
-  defp ash_missing_diagnostic(issue_meta) do
-    if CompiledIntrospection.ash_missing_warned?() do
-      []
-    else
-      CompiledIntrospection.mark_ash_missing_warned()
-
-      [
-        format_issue(issue_meta,
-          message:
-            "Ash is not loaded in the VM running Credo — the UseCodeInterface check is a no-op in this project. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
-          line_no: 1
-        )
-      ]
-    end
   end
 
   # ── Call-site dispatch ──

@@ -330,6 +330,40 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
+  Shared scaffold for compile-dependent checks. Wraps the common pattern of:
+
+    * bail out early with an `:ash_missing` diagnostic (emitted at most once
+      per `mix credo` run across all compile-dependent checks) if Ash is not
+      loaded in the VM;
+    * otherwise run the check body.
+
+  `missing_issue_fn` must be a 0-arity function that returns a single
+  `Credo.Issue.t()` (typically a `format_issue/2` call — which is a macro
+  from `use Credo.Check`, so it can only be built from inside the check
+  module itself).
+
+  `check_fn` is the 0-arity function that runs the actual check and returns
+  the list of issues.
+
+  Returns a list of issues either way.
+  """
+  @spec with_compiled_check((-> struct()), (-> [struct()])) :: [struct()]
+  def with_compiled_check(missing_issue_fn, check_fn)
+      when is_function(missing_issue_fn, 0) and is_function(check_fn, 0) do
+    cond do
+      ash_available?() ->
+        check_fn.()
+
+      ash_missing_warned?() ->
+        []
+
+      true ->
+        mark_ash_missing_warned()
+        [missing_issue_fn.()]
+    end
+  end
+
+  @doc """
   Walks `module`'s name segments upward and returns the innermost ancestor
   that is a loaded `Ash.Domain`, or `nil` if none is found.
 
