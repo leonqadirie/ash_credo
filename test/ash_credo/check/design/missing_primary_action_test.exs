@@ -78,4 +78,30 @@ defmodule AshCredo.Check.Design.MissingPrimaryActionTest do
     assert issue.message =~ "Could not load"
     assert issue.message =~ "Totally.Fake.Resource"
   end
+
+  test "deduplicates :not_loadable diagnostics across multiple references to the same module" do
+    # Two source files (or two run_check invocations) referencing the same
+    # unloadable module should produce only ONE diagnostic. Verifies the
+    # `Compiled.with_unique_not_loadable/2` dedup wired through
+    # `:not_loadable` branches in every compile-dependent check.
+    first_source = """
+    defmodule Totally.Fake.Dedup do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+    end
+    """
+
+    second_source = """
+    defmodule Totally.Fake.Dedup do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+    end
+    """
+
+    assert [issue] = run_check(MissingPrimaryAction, first_source)
+    assert issue.message =~ "Could not load"
+    assert issue.message =~ "Totally.Fake.Dedup"
+
+    # Second invocation against the same broken module — already warned, so
+    # the dedup helper returns [] without re-emitting.
+    assert [] = run_check(MissingPrimaryAction, second_source)
+  end
 end

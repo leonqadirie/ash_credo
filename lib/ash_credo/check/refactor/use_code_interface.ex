@@ -294,23 +294,22 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   defp handle_not_loadable(segments, resource, action_name, ctx) do
     case try_implicit_resolution(segments, ctx) do
-      {:ok, atom, info} ->
-        handle_loaded(atom, action_name, info, ctx)
-
-      :error ->
-        # Unloadable resources fall into the "outside domain" bucket - we
-        # cannot confirm the caller shares a domain with something we can't
-        # introspect. The dedup wrapper ensures one diagnostic per unique
-        # broken module across all compile-dependent checks.
-        if ctx.config.outside_domain do
-          CompiledIntrospection.with_unique_not_loadable(resource, fn ->
-            not_loadable_issue(resource, ctx)
-          end)
-        else
-          []
-        end
+      {:ok, atom, info} -> handle_loaded(atom, action_name, info, ctx)
+      :error -> emit_not_loadable_when_outside_enabled(resource, ctx)
     end
   end
+
+  # Unloadable resources fall into the "outside domain" bucket — we cannot
+  # confirm the caller shares a domain with something we can't introspect.
+  # The dedup wrapper ensures one diagnostic per unique broken module across
+  # all compile-dependent checks.
+  defp emit_not_loadable_when_outside_enabled(resource, %{config: %{outside_domain: true}} = ctx) do
+    CompiledIntrospection.with_unique_not_loadable(resource, fn ->
+      not_loadable_issue(resource, ctx)
+    end)
+  end
+
+  defp emit_not_loadable_when_outside_enabled(_resource, _ctx), do: []
 
   # Elixir implicitly aliases direct sub-modules: inside `defmodule MyApp.Blog`,
   # `Post` refers to `MyApp.Blog.Post`. If the direct resolution of `segments`
