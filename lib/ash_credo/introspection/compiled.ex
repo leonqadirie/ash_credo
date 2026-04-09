@@ -43,6 +43,7 @@ defmodule AshCredo.Introspection.Compiled do
             [Ash.Resource.Info, Ash.Domain.Info, Ash.Policy.Info, Ash.Policy.Authorizer]}
 
   @cache_key_tag {__MODULE__, :cache}
+  @domain_refs_key_tag {__MODULE__, :domain_refs}
   @ash_available_key {__MODULE__, :ash_available?}
   @ash_missing_warned_key {__MODULE__, :ash_missing_warned}
   @not_loadable_warned_key {__MODULE__, :not_loadable_warned}
@@ -328,17 +329,30 @@ defmodule AshCredo.Introspection.Compiled do
     end
   end
 
-  # Performance note: not cached. Each call walks the domain's full
-  # reference list. For files with many `Ash.*` calls into one large
-  # domain this becomes O(N*M). Acceptable at typical project scale and
-  # deferred until profiling shows it matters; if/when it does, the
-  # cleanest fix is a parallel `inspect_domain/1` that caches the
-  # resolved reference list per-domain in an info map (mirroring
-  # `inspect_module/1` for resources).
   defp resource_reference(domain, resource) do
     domain
-    |> Ash.Domain.Info.resource_references()
+    |> cached_domain_references()
     |> Enum.find(fn ref -> ref.resource == resource end)
+  end
+
+  # Cached per-domain in `:persistent_term`. A domain's reference list is
+  # constant for the VM lifetime (set at compile time by Ash), so we read it
+  # from Ash once per `mix credo` run and reuse the same list for every
+  # subsequent `domain_interface/3` / `domain_interfaces/2` lookup. Keeps
+  # `UseCodeInterface` at O(N) across a file with N `Ash.*` calls into the
+  # same domain instead of O(N*M).
+  defp cached_domain_references(domain) do
+    key = {@domain_refs_key_tag, domain}
+
+    case :persistent_term.get(key, :miss) do
+      :miss ->
+        refs = Ash.Domain.Info.resource_references(domain)
+        :persistent_term.put(key, refs)
+        refs
+
+      cached ->
+        cached
+    end
   end
 
   @doc """
@@ -490,13 +504,14 @@ defmodule AshCredo.Introspection.Compiled do
   defp name_ancestors([]), do: []
   defp name_ancestors(segs), do: [segs | name_ancestors(Enum.drop(segs, -1))]
 
-  # Test helper. Clears the per-module persistent_term cache entries and the
-  # one-shot diagnostic flags so each test runs with a fresh `Compiled` state.
-  # Intentionally `@doc false` — not part of the public API surface.
+  # Test helper. Clears the per-module and per-domain persistent_term cache
+  # entries and the one-shot diagnostic flags so each test runs with a fresh
+  # `Compiled` state. Intentionally `@doc false` — not part of the public API.
   @doc false
   @spec clear_cache() :: :ok
   def clear_cache do
-    for {key, _value} <- :persistent_term.get(), match?({@cache_key_tag, _}, key) do
+    for {key, _value} <- :persistent_term.get(),
+        match?({@cache_key_tag, _}, key) or match?({@domain_refs_key_tag, _}, key) do
       :persistent_term.erase(key)
     end
 
