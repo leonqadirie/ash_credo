@@ -86,7 +86,7 @@ mix credo
 | `ActionMissingDescription` | Readability | Low | No | Flags actions without a `description` |
 | `BelongsToMissingAllowNil` | Readability | Normal | No | Flags `belongs_to` without explicit `allow_nil?` |
 | `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |
-| `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals — names the exact code interface function to call instead. **Requires compiled project** (see below). |
+| `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals — names the exact code interface function to call instead. **Requires compiled project** and **configurable** (see below). |
 
 ## Running `UseCodeInterface`
 
@@ -109,6 +109,45 @@ issue pointing at the call site. If Ash itself is not available in the VM
 running Credo, the check is a no-op and emits a single diagnostic. You can
 always disable the check in `.credo.exs` if your workflow can't run `mix
 compile` beforehand.
+
+### Adapting the check to your team's conventions
+
+`UseCodeInterface` accepts three params that map to common code-interface
+philosophies:
+
+```elixir
+# Opinion A — raw Ash.* calls are OK when the caller is in the resource's
+# domain (e.g. inside a Change / Preparation / Validation module).
+{AshCredo.Check.Refactor.UseCodeInterface,
+ [enforce_code_interface_in_domain: false]},
+
+# Opinion B — code interfaces are only defined on resources; never suggest
+# reaching for a domain-level interface.
+{AshCredo.Check.Refactor.UseCodeInterface,
+ [prefer_interface_scope: :resource]},
+
+# Opinion A + B — allow same-domain raw calls AND always direct the rest
+# at the resource-level interface.
+{AshCredo.Check.Refactor.UseCodeInterface,
+ [enforce_code_interface_in_domain: false, prefer_interface_scope: :resource]},
+
+# Default — "in-domain → resource, outside-domain → domain" hierarchy.
+{AshCredo.Check.Refactor.UseCodeInterface, []},
+```
+
+- **`enforce_code_interface_in_domain`** (`true` default) — when `false`, leaves
+  callers that share a domain with the resource alone.
+- **`enforce_code_interface_outside_domain`** (`true` default) — when `false`,
+  silences every case where the caller is not confirmed to be in the resource's
+  domain (different domain, plain controller/LiveView, domainless resource,
+  `:not_loadable` resource).
+- **`prefer_interface_scope`** (`:auto | :resource | :domain`, default `:auto`)
+  — overrides which interface the check points at. `:auto` follows the
+  in-domain/outside-domain heuristic; `:resource` always suggests a
+  resource-level function; `:domain` always suggests a domain-level function.
+
+Unknown-action issues (e.g. `Ash.read!(Post, action: :publishd)`) are always
+emitted when the resource loads — disable the whole check to silence them.
 
 ## Configuration
 
@@ -179,6 +218,9 @@ The following checks accept custom parameters:
 | `Warning.AuthorizeFalse` | `include_non_ash_calls` | `true` | When `false`, only checks Ash API calls and action DSL definitions |
 | `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
 | `Refactor.LargeResource` | `max_lines` | `400` | Maximum line count before triggering |
+| `Refactor.UseCodeInterface` | `enforce_code_interface_in_domain` | `true` | When `false`, leaves callers that share a domain with the resource alone (useful when raw `Ash.*` calls inside `Change`/`Preparation`/`Validation` modules are considered acceptable) |
+| `Refactor.UseCodeInterface` | `enforce_code_interface_outside_domain` | `true` | When `false`, silences every case where the caller is not confirmed to be in the resource's domain (different known domain, plain caller, `Ash.Resource` without a `:domain`, `:not_loadable` resource) |
+| `Refactor.UseCodeInterface` | `prefer_interface_scope` | `:auto` | Overrides which interface is suggested. `:auto` follows the in-domain/outside-domain heuristic. `:resource` always suggests a resource-level interface. `:domain` always suggests a domain-level interface |
 | `Warning.SensitiveAttributeExposed` | `sensitive_names` | `~w(password hashed_password password_hash token secret api_key private_key ssn)a` | Attribute names to flag when not marked `sensitive?: true` |
 | `Warning.SensitiveFieldInAccept` | `dangerous_fields` | `~w(is_admin admin permissions api_key secret_key)a` | Field names to flag when found in `accept` lists |
 
