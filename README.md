@@ -68,19 +68,19 @@ mix credo
 | Check | Category | Priority | Default | Description |
 |---|---|---|---|---|
 | `AuthorizeFalse` | Warning | High | No | Flags literal `authorize?: false` in Ash calls, action DSL, and (by default) any other call site |
-| `AuthorizerWithoutPolicies` | Warning | High | No | Detects resources with `Ash.Policy.Authorizer` but no policies defined |
+| `AuthorizerWithoutPolicies` | Warning | High | No | Detects resources with `Ash.Policy.Authorizer` but no policies defined. **Requires compiled project.** |
 | `EmptyDomain` | Warning | Normal | No | Flags domains with no resources registered |
 | `MissingChangeWrapper` | Warning | High | Yes | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions |
 | `MissingDomain` | Warning | Normal | No | Ensures non-embedded resources set the `domain:` option |
 | `MissingPrimaryKey` | Warning | High | No | Ensures resources with data layers have a primary key |
-| `NoActions` | Warning | Normal | No | Flags resources with data layers but no actions defined |
+| `NoActions` | Warning | Normal | No | Flags resources with data layers but no actions defined. **Requires compiled project.** |
 | `OverlyPermissivePolicy` | Warning | High | No | Flags unscoped `authorize_if always()` policies |
 | `PinnedTimeInExpression` | Warning | High | No | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
 | `SensitiveAttributeExposed` | Warning | High | No | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
 | `SensitiveFieldInAccept` | Warning | High | No | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
 | `WildcardAcceptOnAction` | Warning | High | No | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
 | `MissingCodeInterface` | Design | Low | No | Flags each action that has no code interface (resource- or domain-level). **Requires compiled project.** |
-| `MissingIdentity` | Design | Normal | No | Suggests identities for attributes like `email`, `username`, `slug` |
+| `MissingIdentity` | Design | Normal | No | Suggests identities for attributes like `email`, `username`, `slug`. **Requires compiled project.** |
 | `MissingPrimaryAction` | Design | Normal | No | Flags missing `primary?: true` when multiple actions of the same type exist. **Requires compiled project.** |
 | `MissingTimestamps` | Design | Normal | No | Suggests adding `timestamps()` to persisted resources. **Requires compiled project.** |
 | `ActionMissingDescription` | Readability | Low | No | Flags actions without a `description` |
@@ -90,15 +90,20 @@ mix credo
 
 ## Checks that require a compiled project
 
-Four checks read Ash's runtime introspection (`Ash.Resource.Info` and
-`Ash.Domain.Info`) rather than source AST. They see the fully-resolved
-resource state — including anything Spark transformers or extensions
-contribute — and catch bugs that pure AST scanning would miss.
+Seven checks read Ash's runtime introspection (`Ash.Resource.Info`,
+`Ash.Domain.Info`, and `Ash.Policy.Info`) rather than source AST. They see
+the fully-resolved resource state — including anything Spark transformers
+or extensions contribute — and catch bugs that pure AST scanning would miss
+(e.g. identities on AshAuthentication-injected `:email` attributes,
+fragment-spliced actions, extension-added authorizers).
 
 - `Refactor.UseCodeInterface`
 - `Design.MissingCodeInterface`
 - `Design.MissingPrimaryAction`
 - `Design.MissingTimestamps`
+- `Design.MissingIdentity`
+- `Warning.NoActions`
+- `Warning.AuthorizerWithoutPolicies`
 
 **Your project must be compiled before running `mix credo`**, otherwise
 these checks emit a configuration diagnostic and become a no-op. Typically
