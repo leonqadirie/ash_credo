@@ -625,6 +625,63 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
 
       assert issue.message =~ "Could not load"
     end
+
+    test "default true flags a change module in the resource's domain namespace" do
+      # `AshCredoFixtures.Blog.Changes.Archive` is a fixture `Ash.Resource.Change`
+      # module. Its namespace sits under `AshCredoFixtures.Blog`, which is a
+      # loaded `Ash.Domain`, so the check classifies it as in-domain and
+      # flags the call under default settings.
+      source = """
+      defmodule AshCredoFixtures.Blog.Changes.Archive do
+        use Ash.Resource.Change
+
+        def change(changeset, _opts, _context) do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :published)
+          changeset
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.read!"
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.published_posts!"
+    end
+
+    test "false exempts a change module calling a resource in its own domain" do
+      source = """
+      defmodule AshCredoFixtures.Blog.Changes.Archive do
+        use Ash.Resource.Change
+
+        def change(changeset, _opts, _context) do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :published)
+          changeset
+        end
+      end
+      """
+
+      assert [] =
+               run_check(UseCodeInterface, source, enforce_code_interface_in_domain: false)
+    end
+
+    test "false still flags a change module calling a cross-domain resource" do
+      # The change module is in AshCredoFixtures.Blog's namespace but it's
+      # calling AshCredoFixtures.Accounts.User, which belongs to a different
+      # domain. Opinion A wants cross-domain calls caught even from change
+      # modules — verify the in_domain=false setting doesn't silence this.
+      source = """
+      defmodule AshCredoFixtures.Blog.Changes.Archive do
+        use Ash.Resource.Change
+
+        def change(changeset, _opts, _context) do
+          Ash.read!(AshCredoFixtures.Accounts.User, action: :read)
+          changeset
+        end
+      end
+      """
+
+      assert [_issue] =
+               run_check(UseCodeInterface, source, enforce_code_interface_in_domain: false)
+    end
   end
 
   # ── Configuration: enforce_code_interface_outside_domain ──────────────────

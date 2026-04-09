@@ -89,3 +89,17 @@ defmodule AshCredoFixtures.Plain do
 
   def hello, do: :world
 end
+
+defmodule AshCredoFixtures.Blog.Changes.Archive do
+  @moduledoc """
+  Fixture `Ash.Resource.Change` module used to exercise the "callback module
+  belongs to its namespace's domain" caller classification. Its name puts it
+  under `AshCredoFixtures.Blog`, so the check should treat it as in-domain
+  for `AshCredoFixtures.Blog` resources and outside-domain for everything else.
+  """
+
+  use Ash.Resource.Change
+
+  @impl true
+  def change(changeset, _opts, _context), do: changeset
+end
