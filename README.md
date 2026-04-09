@@ -113,45 +113,61 @@ defp aliases do
 end
 ```
 
-If a referenced resource cannot be loaded, the check emits a per-call-site "could not load" issue pointing at the resource. If Ash itself is not available in the VM running Credo (why are you using `ash_credo` without depending on Ash?), all four checks emit a single shared diagnostic and become no-ops. You can disable any of them in `.credo.exs` if your workflow can't run `mix compile` beforehand.
+If a referenced resource cannot be loaded, the check emits a per-call-site "could not load" issue pointing at the resource. If Ash itself is not available in the VM running Credo (why are you using `ash_credo` without depending on Ash?), all seven checks emit a single shared diagnostic and become no-ops. You can disable any of them in `.credo.exs` if your workflow can't run `mix compile` beforehand.
 
 ### Adapting `UseCodeInterface` to your team's conventions
 
 `UseCodeInterface` accepts three params that map to common code-interface
-philosophies:
+philosophies. The two `enforce_*` flags decide *which call sites* the check
+fires on; `prefer_interface_scope` decides *which interface* the suggestion
+points at. They compose freely.
 
 ```elixir
+# Default - "in-domain caller → resource interface,
+#            outside-domain caller → domain interface" hierarchy.
+{AshCredo.Check.Refactor.UseCodeInterface, []},
+
 # Opinion A - raw Ash.* calls are OK when the caller is in the resource's
-# domain (e.g. inside a Change / Preparation / Validation module).
+# domain (e.g. inside a Change / Preparation / Validation module). Only
+# flag callers from outside the domain.
 {AshCredo.Check.Refactor.UseCodeInterface,
  [enforce_code_interface_in_domain: false]},
 
 # Opinion B - code interfaces are only defined on resources; never suggest
-# reaching for a domain-level interface.
+# reaching for a domain-level interface, regardless of the call site.
 {AshCredo.Check.Refactor.UseCodeInterface,
  [prefer_interface_scope: :resource]},
+
+# Opinion C - the inverse of Opinion A. Strict inside the domain (changes,
+# preparations, validations, sibling resources must use code interfaces),
+# but permissive outside (controllers, LiveViews, workers can call Ash.*
+# directly without a nag). Useful for incremental adoption - enforce the
+# pattern in the resource layer first, clean up the web layer later.
+{AshCredo.Check.Refactor.UseCodeInterface,
+ [enforce_code_interface_outside_domain: false]},
 
 # Opinion A + B - allow same-domain raw calls AND always direct the rest
 # at the resource-level interface.
 {AshCredo.Check.Refactor.UseCodeInterface,
  [enforce_code_interface_in_domain: false, prefer_interface_scope: :resource]},
-
-# Default - "in-domain → resource, outside-domain → domain" hierarchy.
-{AshCredo.Check.Refactor.UseCodeInterface, []},
 ```
 
 - **`enforce_code_interface_in_domain`** (`true` default) - when `false`, leaves
-  callers that share a domain with the resource alone.
+  callers that share a domain with the resource alone (Opinion A).
 - **`enforce_code_interface_outside_domain`** (`true` default) - when `false`,
   silences every case where the caller is not confirmed to be in the resource's
   domain (different domain, plain controller/LiveView, domainless resource,
-  `:not_loadable` resource).
+  `:not_loadable` resource) (Opinion C).
 - **`prefer_interface_scope`** (`:auto | :resource | :domain`, default `:auto`)
   - overrides which interface the check points at. `:auto` follows the
   in-domain/outside-domain heuristic; `:resource` always suggests a
-  resource-level function; `:domain` always suggests a domain-level function.
+  resource-level function (Opinion B); `:domain` always suggests a
+  domain-level function.
 
-Unknown-action issues (e.g. `Ash.read!(Post, action: :publishd)`) are always emitted when the resource loads - disable the whole check to silence them.
+Setting both `enforce_*` flags to `false` effectively disables the check for
+loadable resources, leaving only unknown-action diagnostics. Unknown-action
+issues (e.g. `Ash.read!(Post, action: :publishd)`) are always emitted when
+the resource loads — disable the whole check in `.credo.exs` to silence them.
 
 ## Configuration
 
