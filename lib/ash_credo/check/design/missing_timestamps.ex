@@ -74,7 +74,9 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
         end
 
       {:error, :not_loadable} ->
-        [not_loadable_issue(resource, context, issue_meta)]
+        CompiledIntrospection.with_unique_not_loadable(resource, fn ->
+          not_loadable_issue(resource, context, issue_meta)
+        end)
 
       {:error, _} ->
         []

@@ -68,9 +68,16 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
     resource = Module.concat(segments)
 
     case CompiledIntrospection.inspect_module(resource) do
-      {:ok, info} -> flag_missing_interfaces(resource, info, module_ast, context, issue_meta)
-      {:error, :not_loadable} -> [not_loadable_issue(resource, context, issue_meta)]
-      {:error, _} -> []
+      {:ok, info} ->
+        flag_missing_interfaces(resource, info, module_ast, context, issue_meta)
+
+      {:error, :not_loadable} ->
+        CompiledIntrospection.with_unique_not_loadable(resource, fn ->
+          not_loadable_issue(resource, context, issue_meta)
+        end)
+
+      {:error, _} ->
+        []
     end
   end
 

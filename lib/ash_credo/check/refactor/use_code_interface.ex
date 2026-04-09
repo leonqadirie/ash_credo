@@ -300,9 +300,12 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       :error ->
         # Unloadable resources fall into the "outside domain" bucket - we
         # cannot confirm the caller shares a domain with something we can't
-        # introspect.
+        # introspect. The dedup wrapper ensures one diagnostic per unique
+        # broken module across all compile-dependent checks.
         if ctx.config.outside_domain do
-          [not_loadable_issue(resource, ctx)]
+          CompiledIntrospection.with_unique_not_loadable(resource, fn ->
+            not_loadable_issue(resource, ctx)
+          end)
         else
           []
         end

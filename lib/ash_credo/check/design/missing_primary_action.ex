@@ -66,7 +66,9 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
         flag_missing_primaries(actions, module_ast, context, issue_meta)
 
       {:error, :not_loadable} ->
-        [not_loadable_issue(resource, context, issue_meta)]
+        CompiledIntrospection.with_unique_not_loadable(resource, fn ->
+          not_loadable_issue(resource, context, issue_meta)
+        end)
 
       {:error, _} ->
         []
