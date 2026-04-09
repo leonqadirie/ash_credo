@@ -421,6 +421,9 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   defp pick_suggestion(%{scope: :domain, resource_domain: domain}) when not is_nil(domain),
     do: {:define, :domain}
 
+  # Resource has no domain at all → no domain interface to point at, so we
+  # fall back to suggesting a resource-level interface even though the user
+  # preferred :domain. There's no other meaningful answer here.
   defp pick_suggestion(%{scope: :domain}), do: {:define, :resource}
 
   # `:auto`: same-domain callers go to the resource, others to the domain.

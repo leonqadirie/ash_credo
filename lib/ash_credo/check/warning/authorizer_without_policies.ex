@@ -81,6 +81,13 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
          context,
          issue_meta
        ) do
+    # `Ash.Policy.Authorizer` here is intentionally a bare atom literal, not
+    # a remote call — Elixir compiles it to `:"Elixir.Ash.Policy.Authorizer"`
+    # without ever needing the module loaded, so this file compiles cleanly
+    # in projects that don't depend on Ash. If you ever turn this into a
+    # remote call (e.g. `Ash.Policy.Authorizer.something()`), make sure
+    # `AshCredo.Introspection.Compiled`'s `@compile {:no_warn_undefined,
+    # ...}` list still covers it (it currently does, defensively).
     if Ash.Policy.Authorizer in authorizers and policies == [] do
       [missing_policies_issue(context, issue_meta)]
     else

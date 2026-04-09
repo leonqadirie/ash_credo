@@ -7,8 +7,17 @@ defmodule AshCredo.Introspection.Compiled do
   `AshCredo.Introspection.AshApi` (AST-level Ash call discovery). This is
   the module that reaches for the compiled artifact: it loads target
   modules on demand, reads their DSL metadata through Ash's own
-  introspection API, and caches the results per-module in a lazy ETS table
+  introspection API, and caches the results per-module in `:persistent_term`
   so repeated lookups during a single `mix credo` run are cheap.
+
+  The cache lives in `:persistent_term` rather than ETS because Credo
+  dispatches each check × source_file pair into its own short-lived
+  `Task.Supervised` process. An ETS table would be owned by whichever task
+  created it first and would vanish the moment that task exited, crashing
+  every sibling task that still held the table name. `:persistent_term` is
+  process-independent and survives arbitrary task churn. Each cached entry
+  is a brand-new key (we never overwrite), so the well-known
+  `:persistent_term` GC penalty does not apply here.
 
   Checks in `AshCredo` that need authoritative metadata about a referenced
   module (its domain, its actions, its code interfaces, whether it is even
@@ -30,7 +39,8 @@ defmodule AshCredo.Introspection.Compiled do
   # Ash is not a runtime dependency of ash_credo - users bring their own.
   # Suppress compile-time warnings for the remote calls below; they are guarded
   # at runtime by `ash_available?/0`.
-  @compile {:no_warn_undefined, [Ash.Resource.Info, Ash.Domain.Info, Ash.Policy.Info]}
+  @compile {:no_warn_undefined,
+            [Ash.Resource.Info, Ash.Domain.Info, Ash.Policy.Info, Ash.Policy.Authorizer]}
 
   @cache_table :ash_credo_introspection_compiled_cache
   @ash_available_key {__MODULE__, :ash_available?}
@@ -318,6 +328,13 @@ defmodule AshCredo.Introspection.Compiled do
     end
   end
 
+  # Performance note: not cached. Each call walks the domain's full
+  # reference list. For files with many `Ash.*` calls into one large
+  # domain this becomes O(N*M). Acceptable at typical project scale and
+  # deferred until profiling shows it matters; if/when it does, the
+  # cleanest fix is a parallel `inspect_domain/1` that caches the
+  # resolved reference list per-domain in an info map (mirroring
+  # `inspect_module/1` for resources).
   defp resource_reference(domain, resource) do
     domain
     |> Ash.Domain.Info.resource_references()
@@ -446,9 +463,17 @@ defmodule AshCredo.Introspection.Compiled do
   that is a loaded `Ash.Domain`, or `nil` if none is found.
 
   Used to give Ash callback modules (`Change`/`Preparation`/`Validation`/
-  `Calculation`/`Manual*`) a domain by namespace convention - e.g.
+  `Calculation`/`Manual*`) a domain by namespace convention — e.g.
   `MyApp.Blog.Changes.Archive` resolves to `MyApp.Blog` when that module is
   a loaded domain.
+
+  **Heuristic, not authoritative.** This is a namespace-convention guess,
+  not a reverse lookup of which resources actually reference the callback
+  module. A "shared infrastructure" change module nested under one domain's
+  namespace but used by resources in multiple domains will be classified as
+  belonging to the namespace's domain, which can occasionally surface a
+  misleading suggestion. Acceptable tradeoff for the common case of teams
+  that organise callback modules under their owning domain.
   """
   @spec enclosing_domain(module()) :: module() | nil
   def enclosing_domain(module) when is_atom(module) do
