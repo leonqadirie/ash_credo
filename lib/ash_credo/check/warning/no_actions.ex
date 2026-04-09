@@ -14,33 +14,90 @@ defmodule AshCredo.Check.Warning.NoActions do
           actions do
             defaults [:read, :destroy, create: :*, update: :*]
           end
+
+      This check uses Ash's runtime introspection (`Ash.Resource.Info.actions/1`)
+      to see the fully-resolved action list. That means it correctly handles
+      resources whose actions are spliced in via `Spark.Dsl.Fragment` or
+      injected by extensions — cases the AST scanner would miss and
+      false-positive on.
+
+      ## Requirements
+
+      Your project must be compiled before running `mix credo`. If Ash is
+      not available in the VM running Credo, the check is a no-op and emits
+      a single diagnostic.
       """
     ]
 
   alias AshCredo.Introspection
-  alias AshCredo.Orchestration
+  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   @impl true
-  def run(%SourceFile{} = source_file, params),
-    do: Orchestration.flat_map_resource_context(source_file, params, &no_action_issues/2)
+  def run(%SourceFile{} = source_file, params) do
+    issue_meta = IssueMeta.for(source_file, params)
 
-  defp no_action_issues(context, issue_meta) do
-    if Introspection.has_data_layer?(context) do
-      actions_ast = Introspection.resource_section(context, :actions)
-
-      if Introspection.actions_defined?(actions_ast) do
-        []
-      else
-        [
-          format_issue(issue_meta,
-            message: "Resource has a data layer but no actions defined.",
-            trigger: "use Ash.Resource",
-            line_no: Introspection.resource_issue_line(context, actions_ast)
-          )
-        ]
+    CompiledIntrospection.with_compiled_check(
+      fn ->
+        format_issue(issue_meta,
+          message:
+            "Ash is not loaded in the VM running Credo — `NoActions` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+          line_no: 1
+        )
+      end,
+      fn ->
+        source_file
+        |> Introspection.resource_contexts()
+        |> Enum.flat_map(&check_resource(&1, issue_meta))
       end
+    )
+  end
+
+  defp check_resource(%{absolute_segments: nil}, _issue_meta), do: []
+
+  defp check_resource(context, issue_meta) do
+    if Introspection.has_data_layer?(context) do
+      check_loaded_resource(context, issue_meta)
     else
       []
     end
+  end
+
+  defp check_loaded_resource(
+         %{absolute_segments: segments, module_ast: module_ast} = context,
+         issue_meta
+       ) do
+    resource = Module.concat(segments)
+
+    case CompiledIntrospection.actions(resource) do
+      {:ok, []} ->
+        [no_actions_issue(module_ast, context, issue_meta)]
+
+      {:ok, _actions} ->
+        []
+
+      {:error, :not_loadable} ->
+        [not_loadable_issue(resource, context, issue_meta)]
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  defp no_actions_issue(module_ast, context, issue_meta) do
+    actions_ast = Introspection.find_dsl_section(module_ast, :actions)
+
+    format_issue(issue_meta,
+      message: "Resource has a data layer but no actions defined.",
+      trigger: "use Ash.Resource",
+      line_no: Introspection.resource_issue_line(context, actions_ast)
+    )
+  end
+
+  defp not_loadable_issue(resource, context, issue_meta) do
+    format_issue(issue_meta,
+      message:
+        "Could not load `#{inspect(resource)}` for `NoActions`. Run `mix compile` before `mix credo`, or disable this check in `.credo.exs`.",
+      line_no: Map.get(context, :use_line) || 1
+    )
   end
 end
