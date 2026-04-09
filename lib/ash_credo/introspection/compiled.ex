@@ -34,6 +34,7 @@ defmodule AshCredo.Introspection.Compiled do
 
   @cache_table :ash_credo_introspection_compiled_cache
   @ash_available_key {__MODULE__, :ash_available?}
+  @ash_missing_warned_key {__MODULE__, :ash_missing_warned}
 
   # Behaviours that mark a module as an Ash resource auxiliary — i.e. a
   # module that gets attached to a resource via `change`, `preparation`,
@@ -55,10 +56,13 @@ defmodule AshCredo.Introspection.Compiled do
           resource?: boolean(),
           domain: module() | nil,
           interfaces: [struct()],
-          actions: [struct()]
+          actions: [struct()],
+          attributes: [struct()],
+          primary_key: [atom()]
         }
 
-  @type error :: :ash_missing | :not_loadable | :not_a_resource | :unknown_action
+  @type error ::
+          :ash_missing | :not_loadable | :not_a_resource | :not_a_domain | :unknown_action
 
   @doc """
   Returns `true` if `Ash.Resource.Info` is loadable in the current VM.
@@ -119,6 +123,47 @@ defmodule AshCredo.Introspection.Compiled do
     case inspect_module(module) do
       {:ok, %{interfaces: interfaces}} -> {:ok, interfaces}
       error -> error
+    end
+  end
+
+  @doc "Returns the resource's list of action structs (fully resolved)."
+  @spec actions(module()) :: {:ok, [struct()]} | {:error, error()}
+  def actions(module) do
+    case inspect_module(module) do
+      {:ok, %{actions: actions}} -> {:ok, actions}
+      error -> error
+    end
+  end
+
+  @doc "Returns the resource's list of attribute structs (fully resolved)."
+  @spec attributes(module()) :: {:ok, [struct()]} | {:error, error()}
+  def attributes(module) do
+    case inspect_module(module) do
+      {:ok, %{attributes: attributes}} -> {:ok, attributes}
+      error -> error
+    end
+  end
+
+  @doc "Returns the resource's primary key attribute names as a list of atoms."
+  @spec primary_key(module()) :: {:ok, [atom()]} | {:error, error()}
+  def primary_key(module) do
+    case inspect_module(module) do
+      {:ok, %{primary_key: keys}} -> {:ok, keys}
+      error -> error
+    end
+  end
+
+  @doc """
+  Returns the list of resources registered inside `domain`'s `resources do
+  ... end` block, or an error tuple if `domain` is not a loaded Ash.Domain.
+  """
+  @spec domain_resources(module()) :: {:ok, [module()]} | {:error, error()}
+  def domain_resources(module) when is_atom(module) do
+    cond do
+      not ash_available?() -> {:error, :ash_missing}
+      not match?({:module, _}, Code.ensure_compiled(module)) -> {:error, :not_loadable}
+      not domain?(module) -> {:error, :not_a_domain}
+      true -> {:ok, Ash.Domain.Info.resources(module)}
     end
   end
 
@@ -221,10 +266,67 @@ defmodule AshCredo.Introspection.Compiled do
     end
   end
 
+  @doc """
+  Returns all domain-level interface definitions (as `%Ash.Resource.Interface{}`)
+  declared for `resource` inside `domain`'s `resources do ... end` block, or
+  `[]` if the resource is not referenced.
+  """
+  @spec domain_interfaces(module() | nil, module()) :: [struct()]
+  def domain_interfaces(nil, _resource), do: []
+
+  def domain_interfaces(domain, resource) when is_atom(domain) and is_atom(resource) do
+    with true <- ash_available?(),
+         {:module, _} <- Code.ensure_compiled(domain),
+         ref when not is_nil(ref) <- resource_reference(domain, resource) do
+      ref.definitions
+    else
+      _ -> []
+    end
+  end
+
   defp resource_reference(domain, resource) do
     domain
     |> Ash.Domain.Info.resource_references()
     |> Enum.find(fn ref -> ref.resource == resource end)
+  end
+
+  @doc """
+  Given a list of action structs and a target action name, returns the name of
+  the action whose name is most similar to `target_name` (jaro distance ≥ 0.75),
+  or `nil` if no close match exists. Used to suggest typo fixes in issue
+  messages.
+  """
+  @spec suggest_action_name([struct()], atom()) :: atom() | nil
+  def suggest_action_name(known_actions, target_name)
+      when is_list(known_actions) and is_atom(target_name) do
+    target_str = Atom.to_string(target_name)
+
+    known_actions
+    |> Enum.map(fn action ->
+      {action.name, String.jaro_distance(target_str, Atom.to_string(action.name))}
+    end)
+    |> Enum.filter(fn {_, score} -> score >= 0.75 end)
+    |> case do
+      [] -> nil
+      scored -> scored |> Enum.max_by(&elem(&1, 1)) |> elem(0)
+    end
+  end
+
+  @doc """
+  Returns `true` if an `:ash_missing` diagnostic has already been emitted for
+  this run. Shared across every compile-dependent check via `:persistent_term`
+  so the diagnostic fires at most once per `mix credo` invocation.
+  """
+  @spec ash_missing_warned?() :: boolean()
+  def ash_missing_warned? do
+    :persistent_term.get(@ash_missing_warned_key, false)
+  end
+
+  @doc "Marks the `:ash_missing` diagnostic as already emitted for this run."
+  @spec mark_ash_missing_warned() :: :ok
+  def mark_ash_missing_warned do
+    :persistent_term.put(@ash_missing_warned_key, true)
+    :ok
   end
 
   @doc """
@@ -263,6 +365,7 @@ defmodule AshCredo.Introspection.Compiled do
     end
 
     :persistent_term.erase(@ash_available_key)
+    :persistent_term.erase(@ash_missing_warned_key)
     :ok
   end
 
@@ -277,7 +380,9 @@ defmodule AshCredo.Introspection.Compiled do
              resource?: true,
              domain: Ash.Resource.Info.domain(module),
              interfaces: Ash.Resource.Info.interfaces(module),
-             actions: Ash.Resource.Info.actions(module)
+             actions: Ash.Resource.Info.actions(module),
+             attributes: Ash.Resource.Info.attributes(module),
+             primary_key: Ash.Resource.Info.primary_key(module)
            }}
         else
           {:error, :not_a_resource}
