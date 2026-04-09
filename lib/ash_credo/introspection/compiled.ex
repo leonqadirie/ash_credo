@@ -30,7 +30,7 @@ defmodule AshCredo.Introspection.Compiled do
   # Ash is not a runtime dependency of ash_credo — users bring their own.
   # Suppress compile-time warnings for the remote calls below; they are guarded
   # at runtime by `ash_available?/0`.
-  @compile {:no_warn_undefined, [Ash.Resource.Info, Ash.Domain.Info]}
+  @compile {:no_warn_undefined, [Ash.Resource.Info, Ash.Domain.Info, Ash.Policy.Info]}
 
   @cache_table :ash_credo_introspection_compiled_cache
   @ash_available_key {__MODULE__, :ash_available?}
@@ -58,7 +58,10 @@ defmodule AshCredo.Introspection.Compiled do
           interfaces: [struct()],
           actions: [struct()],
           attributes: [struct()],
-          primary_key: [atom()]
+          primary_key: [atom()],
+          identities: [struct()],
+          authorizers: [module()],
+          policies: [struct()]
         }
 
   @type error ::
@@ -149,6 +152,36 @@ defmodule AshCredo.Introspection.Compiled do
   def primary_key(module) do
     case inspect_module(module) do
       {:ok, %{primary_key: keys}} -> {:ok, keys}
+      error -> error
+    end
+  end
+
+  @doc "Returns the resource's identity entries (each with `:name` and `:keys`)."
+  @spec identities(module()) :: {:ok, [struct()]} | {:error, error()}
+  def identities(module) do
+    case inspect_module(module) do
+      {:ok, %{identities: identities}} -> {:ok, identities}
+      error -> error
+    end
+  end
+
+  @doc "Returns the resource's list of authorizer modules (e.g. `Ash.Policy.Authorizer`)."
+  @spec authorizers(module()) :: {:ok, [module()]} | {:error, error()}
+  def authorizers(module) do
+    case inspect_module(module) do
+      {:ok, %{authorizers: authorizers}} -> {:ok, authorizers}
+      error -> error
+    end
+  end
+
+  @doc """
+  Returns the resource's policy entries from `Ash.Policy.Info.policies/1`.
+  Returns `[]` for resources without `Ash.Policy.Authorizer` declared.
+  """
+  @spec policies(module()) :: {:ok, [struct()]} | {:error, error()}
+  def policies(module) do
+    case inspect_module(module) do
+      {:ok, %{policies: policies}} -> {:ok, policies}
       error -> error
     end
   end
@@ -416,7 +449,10 @@ defmodule AshCredo.Introspection.Compiled do
              interfaces: Ash.Resource.Info.interfaces(module),
              actions: Ash.Resource.Info.actions(module),
              attributes: Ash.Resource.Info.attributes(module),
-             primary_key: Ash.Resource.Info.primary_key(module)
+             primary_key: Ash.Resource.Info.primary_key(module),
+             identities: Ash.Resource.Info.identities(module),
+             authorizers: Ash.Resource.Info.authorizers(module),
+             policies: read_policies(module)
            }}
         else
           {:error, :not_a_resource}
@@ -425,6 +461,15 @@ defmodule AshCredo.Introspection.Compiled do
       {:error, _reason} ->
         {:error, :not_loadable}
     end
+  end
+
+  # Policies live in `Ash.Policy.Info` (a separate module from `Ash.Resource.Info`).
+  # `Ash.Policy.Info.policies/1` always returns a list — `[]` for resources
+  # without `Ash.Policy.Authorizer`.
+  defp read_policies(module) do
+    Ash.Policy.Info.policies(module)
+  rescue
+    _ -> []
   end
 
   defp cache_table do
