@@ -32,6 +32,23 @@ defmodule AshCredo.Check.Design.MissingTimestampsTest do
     assert issue.message =~ "missing timestamps"
   end
 
+  test "reports an issue when only `update_timestamp` is present" do
+    # Regression: the UUID primary key (`:id`) is non-writable and has a
+    # default function, which used to falsely satisfy the create-timestamp
+    # predicate. The datetime-type filter fixes this, so this fixture -
+    # which has only `update_timestamp :updated_at` - must now be flagged.
+    source = """
+    defmodule AshCredoFixtures.Blog.PartialTimestamps do
+      use Ash.Resource,
+        domain: AshCredoFixtures.Blog,
+        data_layer: AshPostgres.DataLayer
+    end
+    """
+
+    assert [issue] = run_check(MissingTimestamps, source)
+    assert issue.message =~ "missing timestamps"
+  end
+
   test "no issue when the resource uses `timestamps()`" do
     source = """
     defmodule AshCredoFixtures.Blog.Article do

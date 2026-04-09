@@ -83,15 +83,18 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
     end
   end
 
-  # A resource has timestamps when it contains BOTH:
-  #   * at least one auto-generated, non-writable attribute with a default
-  #     function (create_timestamp pattern), AND
-  #   * at least one non-writable attribute with an update_default function
-  #     (update_timestamp pattern).
+  # A resource has timestamps when it contains TWO DISTINCT datetime
+  # attributes:
+  #   * one matching the create_timestamp pattern (non-writable, default
+  #     function, no update_default - so we don't count an update_timestamp
+  #     as doubling for create), AND
+  #   * one matching the update_timestamp pattern (non-writable,
+  #     update_default function).
   #
   # This matches Ash's `timestamps()` macro and direct
   # `create_timestamp`/`update_timestamp` DSL entries without hard-coding
-  # specific attribute names.
+  # specific attribute names, while still catching partial setups where
+  # only one side is present.
   defp has_timestamps?(attributes) do
     Enum.any?(attributes, &create_timestamp_attribute?/1) and
       Enum.any?(attributes, &update_timestamp_attribute?/1)
@@ -99,13 +102,29 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
 
   defp create_timestamp_attribute?(attribute) do
     Map.get(attribute, :writable?) == false and
-      is_function(Map.get(attribute, :default))
+      is_function(Map.get(attribute, :default)) and
+      not is_function(Map.get(attribute, :update_default)) and
+      datetime_attribute_type?(Map.get(attribute, :type))
   end
 
   defp update_timestamp_attribute?(attribute) do
     Map.get(attribute, :writable?) == false and
-      is_function(Map.get(attribute, :update_default))
+      is_function(Map.get(attribute, :update_default)) and
+      datetime_attribute_type?(Map.get(attribute, :type))
   end
+
+  # Restrict timestamp detection to datetime-typed attributes so that
+  # PK attributes produced by e.g. `uuid_primary_key :id` - which are
+  # also non-writable with a default function - don't satisfy the
+  # create-timestamp predicate and mask a missing `create_timestamp`.
+  defp datetime_attribute_type?(type) when is_atom(type) and not is_nil(type) do
+    type
+    |> Atom.to_string()
+    |> String.downcase()
+    |> String.contains?("datetime")
+  end
+
+  defp datetime_attribute_type?(_), do: false
 
   defp missing_timestamps_issue(module_ast, context, issue_meta) do
     attrs_ast = Introspection.find_dsl_section(module_ast, :attributes)

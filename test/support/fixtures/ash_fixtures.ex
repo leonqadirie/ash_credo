@@ -55,6 +55,7 @@ defmodule AshCredoFixtures.Blog do
     end
 
     resource AshCredoFixtures.Blog.Article
+    resource AshCredoFixtures.Blog.PartialTimestamps
     resource AshCredoFixtures.Blog.Tag
     resource AshCredoFixtures.Blog.Empty
     resource AshCredoFixtures.Blog.WithAuthorizer
@@ -178,6 +179,30 @@ defmodule AshCredoFixtures.Blog.Article do
     uuid_primary_key :id
     attribute :title, :string, public?: true
     timestamps()
+  end
+end
+
+defmodule AshCredoFixtures.Blog.PartialTimestamps do
+  @moduledoc """
+  `MissingTimestamps` regression fixture: has an `update_timestamp` but no
+  `create_timestamp`. Before the datetime-type filter, `:id` from
+  `uuid_primary_key` (non-writable, default function) would falsely satisfy
+  the create-timestamp predicate and mask the missing create timestamp.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  actions do
+    defaults [:read]
+    default_accept []
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :title, :string, public?: true
+    update_timestamp :updated_at
   end
 end
 
