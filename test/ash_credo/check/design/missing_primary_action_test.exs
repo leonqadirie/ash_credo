@@ -57,6 +57,26 @@ defmodule AshCredo.Check.Design.MissingPrimaryActionTest do
     assert issue.message =~ "primary?"
   end
 
+  test "alias-expands a top-level aliased defmodule name to the real module" do
+    # Regression: `Introspection.all_modules_with_path/1` used to treat the
+    # literal segments of a `defmodule` name as absolute, so a top-level
+    # `defmodule Tag` that depended on a preceding `alias ..., as: Tag`
+    # would be classified as `Tag` (unloadable) instead of the real
+    # `AshCredoFixtures.Blog.Tag` module. The check would then emit a
+    # `:not_loadable` diagnostic instead of the actual lint result.
+    source = """
+    alias AshCredoFixtures.Blog.Tag
+
+    defmodule Tag do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+    end
+    """
+
+    assert [issue] = run_check(MissingPrimaryAction, source)
+    assert issue.trigger == "create"
+    assert issue.message =~ "Multiple `create` actions"
+  end
+
   test "ignores modules that are not Ash resources" do
     source = """
     defmodule MyApp.Utils do

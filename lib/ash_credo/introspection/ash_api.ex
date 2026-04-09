@@ -150,11 +150,30 @@ defmodule AshCredo.Introspection.AshApi do
 
     parent_absolute =
       case state.module_stack do
-        [top | _] -> top || []
+        [top | _] -> top
         [] -> []
       end
 
-    absolute = if literal, do: parent_absolute ++ literal
+    absolute =
+      cond do
+        is_nil(literal) ->
+          nil
+
+        is_nil(parent_absolute) ->
+          nil
+
+        parent_absolute == [] ->
+          # Top-level defmodule: apply any visible aliases (file-level or
+          # outer-scope `alias` entries) so `alias MyApp.Blog; defmodule
+          # Blog.Caller` resolves to `MyApp.Blog.Caller`, matching Elixir.
+          Aliases.expand_alias(literal, current_aliases(state))
+
+        true ->
+          # Nested defmodule: aliases are ignored for the name, and the
+          # enclosing module is prepended.
+          parent_absolute ++ literal
+      end
+
     %{state | module_stack: [absolute | state.module_stack]}
   end
 

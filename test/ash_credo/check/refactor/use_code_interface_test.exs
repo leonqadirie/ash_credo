@@ -153,6 +153,29 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       assert issue.message =~ "AshCredoFixtures.Accounts.User"
       assert issue.message =~ "define :read"
     end
+
+    test "aliased top-level defmodule caller is classified via its real module" do
+      # Regression: `AshApi.push_module_stack` previously stored raw literal
+      # segments of the `defmodule` name. A top-level `defmodule User` that
+      # relied on a preceding `alias ..., as: User` was classified as the
+      # bare `User`, which failed domain lookup and fell through to the
+      # wrong branch. With alias expansion it must resolve to the real
+      # `AshCredoFixtures.Accounts.User` and emit the same-domain suggestion.
+      source = """
+      alias AshCredoFixtures.Accounts.User
+
+      defmodule User do
+        def list_published do
+          Ash.read!(AshCredoFixtures.Accounts.User, action: :read)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "Prefer a code interface on"
+      assert issue.message =~ "AshCredoFixtures.Accounts.User"
+      assert issue.message =~ "define :read"
+    end
   end
 
   # ── Same-domain: resource interface missing, domain interface exists ───────

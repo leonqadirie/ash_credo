@@ -6,6 +6,8 @@ defmodule AshCredo.Introspection do
   alias Credo.SourceFile
 
   @action_entities ~w(create read update destroy action)a
+  @scope_keys ~w(do else after rescue catch)a
+  @lexical_scope_nodes ~w(defmodule def defp defmacro defmacrop fn if unless case cond with try receive for)a
 
   @doc "Returns all modules in the source file that directly `use Ash.Resource`."
   def resource_modules(source_file), do: modules_using(source_file, [:Ash, :Resource])
@@ -38,12 +40,20 @@ defmodule AshCredo.Introspection do
       source_file
       |> Credo.SourceFile.ast()
       |> Macro.traverse(
-        %{stack: [], out: []},
+        %{stack: [], alias_stack: [[]], out: []},
         &enter_module_for_path/2,
         &leave_module_for_path/2
       )
 
     Enum.reverse(out)
+  end
+
+  defp enter_module_for_path({scope_key, _body} = ast, state) when scope_key in @scope_keys do
+    {ast, push_alias_frame(state)}
+  end
+
+  defp enter_module_for_path({:->, _, [_args, _body]} = ast, state) do
+    {ast, push_alias_frame(state)}
   end
 
   defp enter_module_for_path({:defmodule, _, [{:__aliases__, _, segs}, [do: _body]]} = ast, state)
@@ -56,32 +66,91 @@ defmodule AshCredo.Introspection do
 
     absolute =
       cond do
-        not Enum.all?(segs, &is_atom/1) -> nil
-        is_nil(parent_absolute) -> nil
-        true -> parent_absolute ++ segs
+        not Enum.all?(segs, &is_atom/1) ->
+          nil
+
+        is_nil(parent_absolute) ->
+          nil
+
+        parent_absolute == [] ->
+          # Top-level defmodule: Elixir applies visible aliases to the
+          # defmodule name, so `alias MyApp.Blog; defmodule Blog.Post` compiles
+          # as `MyApp.Blog.Post`. Mirror that here using the alias frames
+          # collected outside any defmodule.
+          Aliases.expand_alias(segs, current_aliases(state))
+
+        true ->
+          # Nested defmodule: Elixir ignores lexical aliases for the name and
+          # prepends the enclosing module, so `alias Foo, as: Bar; defmodule
+          # Bar.Inner` nested in `Outer` is `Outer.Bar.Inner`.
+          parent_absolute ++ segs
       end
 
     new_state = %{
       state
       | stack: [absolute | state.stack],
+        alias_stack: [[] | state.alias_stack],
         out: [{ast, absolute} | state.out]
     }
 
     {ast, new_state}
   end
 
+  defp enter_module_for_path({node_name, _, _} = ast, state)
+       when node_name in @lexical_scope_nodes and node_name != :defmodule do
+    {ast, push_alias_frame(state)}
+  end
+
   defp enter_module_for_path({:defmodule, _, _} = ast, state) do
-    new_state = %{state | stack: [nil | state.stack]}
+    new_state = %{
+      state
+      | stack: [nil | state.stack],
+        alias_stack: [[] | state.alias_stack]
+    }
+
     {ast, new_state}
+  end
+
+  defp enter_module_for_path({:alias, _, _} = ast, %{alias_stack: [top | rest]} = state) do
+    entries = Aliases.alias_entries(ast)
+    {ast, %{state | alias_stack: [entries ++ top | rest]}}
   end
 
   defp enter_module_for_path(ast, state), do: {ast, state}
 
-  defp leave_module_for_path({:defmodule, _, _} = ast, %{stack: [_ | rest]} = state) do
-    {ast, %{state | stack: rest}}
+  defp leave_module_for_path({scope_key, _body} = ast, state) when scope_key in @scope_keys do
+    {ast, pop_alias_frame(state)}
+  end
+
+  defp leave_module_for_path({:->, _, [_args, _body]} = ast, state) do
+    {ast, pop_alias_frame(state)}
+  end
+
+  defp leave_module_for_path(
+         {:defmodule, _, _} = ast,
+         %{stack: [_ | s_rest], alias_stack: [_ | a_rest]} = state
+       ) do
+    {ast, %{state | stack: s_rest, alias_stack: a_rest}}
+  end
+
+  defp leave_module_for_path({node_name, _, _} = ast, state)
+       when node_name in @lexical_scope_nodes and node_name != :defmodule do
+    {ast, pop_alias_frame(state)}
   end
 
   defp leave_module_for_path(ast, state), do: {ast, state}
+
+  defp push_alias_frame(state) do
+    update_in(state.alias_stack, &[[] | &1])
+  end
+
+  defp pop_alias_frame(%{alias_stack: [_current | frames]} = state) do
+    %{state | alias_stack: frames}
+  end
+
+  defp current_aliases(%{alias_stack: frames}) do
+    Enum.concat(frames)
+  end
 
   defp resource_context_with_segments(module_ast, absolute_segments) do
     use_metadata = find_use(module_ast, [:Ash, :Resource])
