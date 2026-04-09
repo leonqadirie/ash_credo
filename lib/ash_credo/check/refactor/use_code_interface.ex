@@ -52,10 +52,10 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
         * Calls made via `import Ash; read!(...)` are not traced — only
           fully qualified `Ash.*` (or aliased) module calls are detected.
-        * Unqualified resource references (e.g. `Post` inside
-          `defmodule MyApp.Blog`) are not implicitly resolved against the
-          enclosing module; write the full name or add an explicit `alias`.
-        * `__MODULE__` references in the resource position are not traced.
+        * Records obtained via pattern matching (e.g.
+          `{:ok, post} = Ash.get(...)`) or helper functions are not traced
+          through bindings; only direct `post = Ash.get!(...)` / `Ash.get(...)`
+          assignments and pipe chains are recognised.
       """
     ]
 
@@ -89,6 +89,20 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
                          {[:Ash, :Query], :for_read},
                          {[:Ash, :ActionInput], :for_action}
                        ])
+
+  # Builders whose arg 0 is typically a record (struct or variable bound to
+  # one) rather than a literal resource module. For these we additionally try
+  # to trace the argument's provenance back to a literal resource origin.
+  @record_first_builders MapSet.new([
+                           {[:Ash, :Changeset], :for_update},
+                           {[:Ash, :Changeset], :for_destroy}
+                         ])
+
+  # Origin calls from which a bound variable carries a single record whose
+  # resource type is the first argument (e.g. `post = Ash.get!(MyApp.Post, id)`).
+  # Only the bang variant qualifies: `Ash.get/3` returns `{:ok, record}`, so a
+  # binding like `post = Ash.get(Post, id)` holds a result tuple, not a record.
+  @record_origin_funs ~w(get!)a
 
   @ash_missing_key {__MODULE__, :ash_missing_warned}
 
@@ -136,7 +150,8 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       call_meta: call_meta,
       call_info: call_info,
       issue_meta: issue_meta,
-      builder_prefix: nil
+      builder_prefix: nil,
+      trace_record?: false
     }
 
     cond do
@@ -150,7 +165,11 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
         handle_bulk_query(args, ctx)
 
       MapSet.member?(@positional_0_1_funs, {expanded_module, fun_name}) ->
-        handle_positional(args, 0, 1, %{ctx | builder_prefix: builder_prefix(expanded_module)})
+        handle_positional(args, 0, 1, %{
+          ctx
+          | builder_prefix: builder_prefix(expanded_module),
+            trace_record?: MapSet.member?(@record_first_builders, {expanded_module, fun_name})
+        })
 
       true ->
         []
@@ -159,7 +178,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   defp handle_action_in_opts(args, ctx) do
     with {:ok, resource_ast} <- arg_at(args, 0),
-         {:ok, segs} <- literal_segments(resource_ast, ctx.call_info.aliases),
+         {:ok, segs} <- literal_segments(resource_ast, ast_context(ctx.call_info)),
          action when is_atom(action) and not is_nil(action) <- action_from_opts(args) do
       classify_and_emit(segs, action, ctx)
     else
@@ -168,8 +187,10 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   end
 
   defp handle_positional(args, resource_idx, action_idx, ctx) do
+    context = ast_context(ctx.call_info)
+
     with {:ok, resource_ast} <- arg_at(args, resource_idx),
-         {:ok, segs} <- literal_segments(resource_ast, ctx.call_info.aliases),
+         {:ok, segs} <- resolve_positional_segments(resource_ast, context, ctx.trace_record?),
          {:ok, action} <- arg_at(args, action_idx),
          true <- is_atom(action) do
       classify_and_emit(segs, action, ctx)
@@ -178,8 +199,17 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     end
   end
 
+  defp resolve_positional_segments(ast, context, true) do
+    case literal_segments(ast, context) do
+      {:ok, segs} -> {:ok, segs}
+      :error -> trace_origin_to_literal(ast, context)
+    end
+  end
+
+  defp resolve_positional_segments(ast, context, false), do: literal_segments(ast, context)
+
   defp handle_bulk_query(args, ctx) do
-    context = %{aliases: ctx.call_info.aliases, bindings: ctx.call_info.bindings}
+    context = ast_context(ctx.call_info)
 
     with {:ok, query_or_stream} <- arg_at(args, 0),
          {:ok, segs} <- trace_origin_to_literal(query_or_stream, context),
@@ -191,18 +221,51 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     end
   end
 
+  defp ast_context(call_info) do
+    %{
+      aliases: call_info.aliases,
+      bindings: call_info.bindings,
+      enclosing_module_segments: call_info.enclosing_module_segments
+    }
+  end
+
   # ── Classification + issue building ──
 
   defp classify_and_emit(segments, action_name, ctx) do
     resource = Module.concat(segments)
 
     case RuntimeIntrospection.inspect_module(resource) do
-      {:ok, info} -> handle_loaded(resource, action_name, info, ctx)
-      {:error, :not_a_resource} -> []
-      {:error, :ash_missing} -> []
-      {:error, :not_loadable} -> [not_loadable_issue(resource, ctx)]
+      {:ok, info} ->
+        handle_loaded(resource, action_name, info, ctx)
+
+      {:error, :not_a_resource} ->
+        []
+
+      {:error, :ash_missing} ->
+        []
+
+      {:error, :not_loadable} ->
+        case try_implicit_resolution(segments, ctx) do
+          {:ok, atom, info} -> handle_loaded(atom, action_name, info, ctx)
+          :error -> [not_loadable_issue(resource, ctx)]
+        end
     end
   end
+
+  # Elixir implicitly aliases direct sub-modules: inside `defmodule MyApp.Blog`,
+  # `Post` refers to `MyApp.Blog.Post`. If the direct resolution of `segments`
+  # is not loadable, try prepending the enclosing defmodule's absolute segments.
+  defp try_implicit_resolution(segments, %{call_info: %{enclosing_module_segments: enclosing}})
+       when is_list(enclosing) and enclosing != [] do
+    candidate = Module.concat(enclosing ++ segments)
+
+    case RuntimeIntrospection.inspect_module(candidate) do
+      {:ok, info} -> {:ok, candidate, info}
+      _ -> :error
+    end
+  end
+
+  defp try_implicit_resolution(_segments, _ctx), do: :error
 
   defp handle_loaded(resource, action_name, info, ctx) do
     case RuntimeIntrospection.action(resource, action_name) do
@@ -414,13 +477,36 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   # ── AST helpers ──
 
-  defp literal_segments({:__aliases__, _, segs}, aliases) when is_list(segs) do
-    if Enum.all?(segs, &is_atom/1) do
-      {:ok, Introspection.expand_alias(segs, aliases)}
+  defp literal_segments({:__MODULE__, _, _}, context) do
+    case context.enclosing_module_segments do
+      segs when is_list(segs) and segs != [] -> {:ok, segs}
+      _ -> :error
+    end
+  end
+
+  defp literal_segments({:__aliases__, _, [{:__MODULE__, _, _} | rest]}, context)
+       when is_list(rest) do
+    if Enum.all?(rest, &is_atom/1) do
+      case context.enclosing_module_segments do
+        segs when is_list(segs) and segs != [] -> {:ok, segs ++ rest}
+        _ -> :error
+      end
     else
       :error
     end
   end
+
+  defp literal_segments({:__aliases__, _, segs}, context) when is_list(segs) do
+    if Enum.all?(segs, &is_atom/1) do
+      {:ok, Introspection.expand_alias(segs, context.aliases)}
+    else
+      :error
+    end
+  end
+
+  # Struct literal: `%MyApp.Post{...}` — extract the inner alias AST.
+  defp literal_segments({:%, _, [alias_ast, {:%{}, _, _}]}, context),
+    do: literal_segments(alias_ast, context)
 
   defp literal_segments(_, _), do: :error
 
@@ -455,24 +541,24 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   defp trace_origin(_ast, _context, _seen), do: :error
 
-  defp trace_call_origin([:Ash, :Query], _fun_name, args, context, seen) do
-    case arg_at(args, 0) do
-      {:ok, resource_or_query} -> literal_or_traced(resource_or_query, context, seen)
-      _ -> :error
-    end
-  end
+  defp trace_call_origin([:Ash, :Query], _fun_name, args, context, seen),
+    do: trace_arg0(args, context, seen)
 
-  defp trace_call_origin([:Ash], fun_name, args, context, seen) when fun_name in @stream_funs do
-    case arg_at(args, 0) do
-      {:ok, resource_or_query} -> literal_or_traced(resource_or_query, context, seen)
-      _ -> :error
-    end
-  end
+  defp trace_call_origin([:Ash], fun_name, args, context, seen)
+       when fun_name in @stream_funs or fun_name in @record_origin_funs,
+       do: trace_arg0(args, context, seen)
 
   defp trace_call_origin(_module, _fun_name, _args, _context, _seen), do: :error
 
+  defp trace_arg0(args, context, seen) do
+    case arg_at(args, 0) do
+      {:ok, resource_or_query} -> literal_or_traced(resource_or_query, context, seen)
+      _ -> :error
+    end
+  end
+
   defp literal_or_traced(ast, context, seen) do
-    case literal_segments(ast, context.aliases) do
+    case literal_segments(ast, context) do
       {:ok, segs} -> {:ok, segs}
       :error -> trace_origin(ast, context, seen)
     end
