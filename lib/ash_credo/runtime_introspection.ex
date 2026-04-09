@@ -183,6 +183,70 @@ defmodule AshCredo.RuntimeIntrospection do
   end
 
   @doc """
+  Given a resource's `interfaces` list (as returned by `interfaces/1`) and an
+  action name, returns the `%Ash.Resource.Interface{}` whose action matches
+  (either via the explicit `:action` field or by name equality when the
+  interface uses its own name as the action). Returns `nil` if no match.
+  """
+  @spec find_interface([struct()], atom()) :: struct() | nil
+  def find_interface(interfaces, action_name) when is_list(interfaces) and is_atom(action_name) do
+    Enum.find(interfaces, fn iface ->
+      (iface.action || iface.name) == action_name
+    end)
+  end
+
+  @doc """
+  Returns the domain-level interface definition for `resource`'s `action_name`
+  declared inside `domain`'s `resources do ... end` block, or `nil` if no
+  matching definition exists. `domain == nil` is handled gracefully.
+  """
+  @spec domain_interface(module() | nil, module(), atom()) :: struct() | nil
+  def domain_interface(nil, _resource, _action_name), do: nil
+
+  def domain_interface(domain, resource, action_name)
+      when is_atom(domain) and is_atom(resource) and is_atom(action_name) do
+    with true <- ash_available?(),
+         {:module, _} <- Code.ensure_compiled(domain),
+         ref when not is_nil(ref) <- resource_reference(domain, resource) do
+      Enum.find(ref.definitions, fn def ->
+        (def.action || def.name) == action_name
+      end)
+    else
+      _ -> nil
+    end
+  end
+
+  defp resource_reference(domain, resource) do
+    domain
+    |> Ash.Domain.Info.resource_references()
+    |> Enum.find(fn ref -> ref.resource == resource end)
+  end
+
+  @doc """
+  Walks `module`'s name segments upward and returns the innermost ancestor
+  that is a loaded `Ash.Domain`, or `nil` if none is found.
+
+  Used to give Ash callback modules (`Change`/`Preparation`/`Validation`/
+  `Calculation`/`Manual*`) a domain by namespace convention — e.g.
+  `MyApp.Blog.Changes.Archive` resolves to `MyApp.Blog` when that module is
+  a loaded domain.
+  """
+  @spec enclosing_domain(module()) :: module() | nil
+  def enclosing_domain(module) when is_atom(module) do
+    module
+    |> Module.split()
+    |> Enum.drop(-1)
+    |> name_ancestors()
+    |> Enum.find_value(fn segs ->
+      candidate = Module.concat(segs)
+      if domain?(candidate), do: candidate
+    end)
+  end
+
+  defp name_ancestors([]), do: []
+  defp name_ancestors(segs), do: [segs | name_ancestors(Enum.drop(segs, -1))]
+
+  @doc """
   Clears the per-module cache. Intended for tests that compile fixture
   resources after first use of the cache.
   """

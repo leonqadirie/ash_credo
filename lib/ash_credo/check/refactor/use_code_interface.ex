@@ -104,15 +104,9 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       ]
     ]
 
-  # Ash is not a runtime dependency of ash_credo (see RuntimeIntrospection);
-  # suppress the warning for the `AshDomainInfo.resource_references/1` call
-  # below, which is guarded by `RuntimeIntrospection.ash_available?/0`.
-  alias Ash.Domain.Info, as: AshDomainInfo
   alias AshCredo.Introspection
   alias AshCredo.RuntimeIntrospection
   alias Credo.Code.Name
-
-  @compile {:no_warn_undefined, Ash.Domain.Info}
 
   # Pattern A: resource at arg 0, action in keyword opts (:action key)
   @action_in_opts ~w(read read! get get! stream!)a
@@ -378,8 +372,8 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       resource: resource,
       action: action_name,
       resource_domain: resource_domain,
-      resource_iface: find_resource_interface(info.interfaces, action_name),
-      domain_iface: find_domain_interface(resource_domain, resource, action_name),
+      resource_iface: RuntimeIntrospection.find_interface(info.interfaces, action_name),
+      domain_iface: RuntimeIntrospection.domain_interface(resource_domain, resource, action_name),
       same_domain?: same_domain?,
       scope: ctx.config.scope,
       bang?: bang?(ctx.fun_name, ctx.builder_prefix),
@@ -401,7 +395,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
         module
 
       RuntimeIntrospection.ash_callback_module?(module) ->
-        enclosing_domain(module)
+        RuntimeIntrospection.enclosing_domain(module)
 
       true ->
         case RuntimeIntrospection.domain(module) do
@@ -409,50 +403,6 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
           _ -> nil
         end
     end
-  end
-
-  # Walks the module's name segments upward and returns the innermost
-  # ancestor that is a loaded `Ash.Domain`. Used to give callback modules
-  # (`change`/`preparation`/`validation`/`calculation`/`manual*`) a domain
-  # by namespace convention, so `MyApp.Blog.Changes.Archive` is treated as
-  # in-domain for `MyApp.Blog` resources.
-  defp enclosing_domain(module) do
-    module
-    |> Module.split()
-    |> Enum.drop(-1)
-    |> name_ancestors()
-    |> Enum.find_value(fn segs ->
-      candidate = Module.concat(segs)
-      if RuntimeIntrospection.domain?(candidate), do: candidate
-    end)
-  end
-
-  defp name_ancestors([]), do: []
-  defp name_ancestors(segs), do: [segs | name_ancestors(Enum.drop(segs, -1))]
-
-  defp find_resource_interface(interfaces, action_name) do
-    Enum.find(interfaces, fn iface ->
-      (iface.action || iface.name) == action_name
-    end)
-  end
-
-  defp find_domain_interface(nil, _resource, _action_name), do: nil
-
-  defp find_domain_interface(domain, resource, action_name) do
-    with {:module, _} <- Code.ensure_compiled(domain),
-         ref when not is_nil(ref) <- resource_reference(domain, resource) do
-      Enum.find(ref.definitions, fn def ->
-        (def.action || def.name) == action_name
-      end)
-    else
-      _ -> nil
-    end
-  end
-
-  defp resource_reference(domain, resource) do
-    domain
-    |> AshDomainInfo.resource_references()
-    |> Enum.find(fn ref -> ref.resource == resource end)
   end
 
   defp build_issue(classification, ctx) do
