@@ -53,6 +53,9 @@ defmodule AshCredoFixtures.Blog do
       define :list_posts, action: :read
       define :publish_post, action: :publish
     end
+
+    resource AshCredoFixtures.Blog.Article
+    resource AshCredoFixtures.Blog.Tag
   end
 end
 
@@ -102,4 +105,52 @@ defmodule AshCredoFixtures.Blog.Changes.Archive do
 
   @impl true
   def change(changeset, _opts, _context), do: changeset
+end
+
+defmodule AshCredoFixtures.Blog.Article do
+  @moduledoc """
+  Resource with timestamps via the `timestamps()` macro. Used by
+  `Design.MissingTimestamps` happy-path tests (the existing `Blog.Post`
+  fixture has no timestamps — that covers the failure path).
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  actions do
+    defaults [:read]
+    default_accept []
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :title, :string, public?: true
+    timestamps()
+  end
+end
+
+defmodule AshCredoFixtures.Blog.Tag do
+  @moduledoc """
+  Resource with multiple `:create` actions and no `primary?: true`. Ash
+  emits a verification warning but compiles the module, so we can
+  introspect it via `Ash.Resource.Info.actions/1` for the
+  `Design.MissingPrimaryAction` failure-path test.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  actions do
+    default_accept []
+    defaults [:read]
+    create :create_basic
+    create :create_with_slug
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :name, :string, public?: true
+  end
 end
