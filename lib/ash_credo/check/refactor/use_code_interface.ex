@@ -143,8 +143,6 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   # binding like `post = Ash.get(Post, id)` holds a result tuple, not a record.
   @record_origin_funs ~w(get!)a
 
-  @ash_missing_key {__MODULE__, :ash_missing_warned}
-
   @impl true
   def run(%SourceFile{} = source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
@@ -173,10 +171,10 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   end
 
   defp ash_missing_diagnostic(issue_meta) do
-    if :persistent_term.get(@ash_missing_key, false) do
+    if CompiledIntrospection.ash_missing_warned?() do
       []
     else
-      :persistent_term.put(@ash_missing_key, true)
+      CompiledIntrospection.mark_ash_missing_warned()
 
       [
         format_issue(issue_meta,
@@ -510,7 +508,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   defp unknown_action_issue(resource, action, known_actions, ctx) do
     qualified = qualified_call(ctx.module, ctx.fun_name)
-    suggestion = closest_action(action, known_actions)
+    suggestion = CompiledIntrospection.suggest_action_name(known_actions, action)
 
     hint =
       case suggestion do
@@ -535,20 +533,6 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       trigger: qualified,
       line_no: ctx.call_meta[:line]
     )
-  end
-
-  defp closest_action(target, known_actions) do
-    target_str = Atom.to_string(target)
-
-    known_actions
-    |> Enum.map(fn action ->
-      {action.name, String.jaro_distance(target_str, Atom.to_string(action.name))}
-    end)
-    |> Enum.filter(fn {_, score} -> score >= 0.75 end)
-    |> case do
-      [] -> nil
-      scored -> scored |> Enum.max_by(&elem(&1, 1)) |> elem(0)
-    end
   end
 
   # ── AST helpers ──
