@@ -79,21 +79,30 @@ mix credo
 | `SensitiveAttributeExposed` | Warning | High | No | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
 | `SensitiveFieldInAccept` | Warning | High | No | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
 | `WildcardAcceptOnAction` | Warning | High | No | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
-| `MissingCodeInterface` | Design | Low | No | Suggests adding a `code_interface` for resources with actions |
+| `MissingCodeInterface` | Design | Low | No | Flags each action that has no code interface (resource- or domain-level). **Requires compiled project.** |
 | `MissingIdentity` | Design | Normal | No | Suggests identities for attributes like `email`, `username`, `slug` |
-| `MissingPrimaryAction` | Design | Normal | No | Flags missing `primary?: true` when multiple actions of the same type exist |
-| `MissingTimestamps` | Design | Normal | No | Suggests adding `timestamps()` to persisted resources |
+| `MissingPrimaryAction` | Design | Normal | No | Flags missing `primary?: true` when multiple actions of the same type exist. **Requires compiled project.** |
+| `MissingTimestamps` | Design | Normal | No | Suggests adding `timestamps()` to persisted resources. **Requires compiled project.** |
 | `ActionMissingDescription` | Readability | Low | No | Flags actions without a `description` |
 | `BelongsToMissingAllowNil` | Readability | Normal | No | Flags `belongs_to` without explicit `allow_nil?` |
 | `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |
 | `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals — names the exact code interface function to call instead. **Requires compiled project** and **configurable** (see below). |
 
-## Running `UseCodeInterface`
+## Checks that require a compiled project
 
-`UseCodeInterface` queries Ash's runtime introspection (`Ash.Resource.Info` and
-`Ash.Domain.Info`) to look up the caller's domain, the resource's declared
-actions, and any existing code interfaces. This means **your project must be
-compiled before running `mix credo`** — typically chain them in a Mix alias:
+Four checks read Ash's runtime introspection (`Ash.Resource.Info` and
+`Ash.Domain.Info`) rather than source AST. They see the fully-resolved
+resource state — including anything Spark transformers or extensions
+contribute — and catch bugs that pure AST scanning would miss.
+
+- `Refactor.UseCodeInterface`
+- `Design.MissingCodeInterface`
+- `Design.MissingPrimaryAction`
+- `Design.MissingTimestamps`
+
+**Your project must be compiled before running `mix credo`**, otherwise
+these checks emit a configuration diagnostic and become a no-op. Typically
+chain the two commands in a Mix alias:
 
 ```elixir
 # mix.exs
@@ -104,13 +113,14 @@ defp aliases do
 end
 ```
 
-If a referenced resource cannot be loaded, the check emits a configuration
-issue pointing at the call site. If Ash itself is not available in the VM
-running Credo, the check is a no-op and emits a single diagnostic. You can
-always disable the check in `.credo.exs` if your workflow can't run `mix
-compile` beforehand.
+If a referenced resource cannot be loaded, the check emits a per-call-site
+"could not load" issue pointing at the resource. If Ash itself is not
+available in the VM running Credo (unusual — requires a project that uses
+`ash_credo` without depending on Ash), all four checks emit a single shared
+diagnostic and become no-ops. You can disable any of them in `.credo.exs`
+if your workflow can't run `mix compile` beforehand.
 
-### Adapting the check to your team's conventions
+### Adapting `UseCodeInterface` to your team's conventions
 
 `UseCodeInterface` accepts three params that map to common code-interface
 philosophies:
