@@ -30,6 +30,22 @@ defmodule AshCredo.RuntimeIntrospection do
   @cache_table :ash_credo_runtime_introspection_cache
   @ash_available_key {__MODULE__, :ash_available?}
 
+  # Behaviours that mark a module as an Ash resource auxiliary — i.e. a
+  # module that gets attached to a resource via `change`, `preparation`,
+  # `validation`, `calculate`, or a `manual` action option. These modules
+  # don't themselves declare a `:domain`, but conventionally belong to the
+  # domain of the resource that references them.
+  @ash_callback_behaviours [
+    Ash.Resource.Change,
+    Ash.Resource.Preparation,
+    Ash.Resource.Validation,
+    Ash.Resource.Calculation,
+    Ash.Resource.ManualCreate,
+    Ash.Resource.ManualUpdate,
+    Ash.Resource.ManualDestroy,
+    Ash.Resource.ManualRead
+  ]
+
   @type info_map :: %{
           resource?: boolean(),
           domain: module() | nil,
@@ -137,6 +153,33 @@ defmodule AshCredo.RuntimeIntrospection do
       match?({:module, _}, Code.ensure_compiled(module)) and
       function_exported?(module, :spark_is, 0) and
       module.spark_is() == Ash.Domain
+  end
+
+  @doc """
+  Returns `true` if `module` implements one of the Ash resource auxiliary
+  behaviours (`Ash.Resource.Change`, `Preparation`, `Validation`,
+  `Calculation`, or any of the `Manual*` action behaviours).
+
+  Detected by inspecting the module's `:behaviour` attribute, populated by
+  `use Ash.Resource.Change` and siblings at compile time.
+  """
+  @spec ash_callback_module?(module()) :: boolean()
+  def ash_callback_module?(module) when is_atom(module) do
+    with true <- ash_available?(),
+         {:module, _} <- Code.ensure_compiled(module) do
+      module_behaviours(module)
+      |> Enum.any?(&(&1 in @ash_callback_behaviours))
+    else
+      _ -> false
+    end
+  end
+
+  defp module_behaviours(module) do
+    module.module_info(:attributes)
+    |> Keyword.get_values(:behaviour)
+    |> List.flatten()
+  rescue
+    _ -> []
   end
 
   @doc """

@@ -396,15 +396,39 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   defp caller_domain(nil), do: nil
 
   defp caller_domain(module) do
-    if RuntimeIntrospection.domain?(module) do
-      module
-    else
-      case RuntimeIntrospection.domain(module) do
-        {:ok, domain} -> domain
-        _ -> nil
-      end
+    cond do
+      RuntimeIntrospection.domain?(module) ->
+        module
+
+      RuntimeIntrospection.ash_callback_module?(module) ->
+        enclosing_domain(module)
+
+      true ->
+        case RuntimeIntrospection.domain(module) do
+          {:ok, domain} -> domain
+          _ -> nil
+        end
     end
   end
+
+  # Walks the module's name segments upward and returns the innermost
+  # ancestor that is a loaded `Ash.Domain`. Used to give callback modules
+  # (`change`/`preparation`/`validation`/`calculation`/`manual*`) a domain
+  # by namespace convention, so `MyApp.Blog.Changes.Archive` is treated as
+  # in-domain for `MyApp.Blog` resources.
+  defp enclosing_domain(module) do
+    module
+    |> Module.split()
+    |> Enum.drop(-1)
+    |> name_ancestors()
+    |> Enum.find_value(fn segs ->
+      candidate = Module.concat(segs)
+      if RuntimeIntrospection.domain?(candidate), do: candidate
+    end)
+  end
+
+  defp name_ancestors([]), do: []
+  defp name_ancestors(segs), do: [segs | name_ancestors(Enum.drop(segs, -1))]
 
   defp find_resource_interface(interfaces, action_name) do
     Enum.find(interfaces, fn iface ->
