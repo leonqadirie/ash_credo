@@ -53,6 +53,13 @@ defmodule AshCredo.Introspection.AshApi do
     {ast, push_alias_frame(state)}
   end
 
+  defp enter_node({:defmodule, _, _} = ast, state, _collect_fn) do
+    {ast,
+     state
+     |> maybe_enter_lexical_scope(:defmodule)
+     |> push_module_stack(ast)}
+  end
+
   defp enter_node({node_name, _, _} = ast, state, _collect_fn)
        when node_name in @lexical_scope_nodes do
     {ast, maybe_enter_lexical_scope(state, node_name)}
@@ -65,13 +72,6 @@ defmodule AshCredo.Introspection.AshApi do
   defp enter_node({:|>, _, [left, {{:., _, _}, meta, _}]} = ast, state, _collect_fn)
        when is_list(meta) do
     {ast, maybe_track_pipe_origin(state, meta, left)}
-  end
-
-  defp enter_node({:defmodule, _, _} = ast, state, _collect_fn) do
-    {ast,
-     state
-     |> maybe_enter_lexical_scope(:defmodule)
-     |> push_module_stack(ast)}
   end
 
   defp enter_node({{:., _, [module_ast, _fun_name]}, _meta, args} = call_ast, state, collect_fn)
@@ -106,7 +106,8 @@ defmodule AshCredo.Introspection.AshApi do
      |> maybe_leave_lexical_scope(:defmodule)}
   end
 
-  defp leave_node({node_name, _, _} = ast, state) when node_name in @lexical_scope_nodes do
+  defp leave_node({node_name, _, _} = ast, state)
+       when node_name in @lexical_scope_nodes and node_name != :defmodule do
     {ast, maybe_leave_lexical_scope(state, node_name)}
   end
 
