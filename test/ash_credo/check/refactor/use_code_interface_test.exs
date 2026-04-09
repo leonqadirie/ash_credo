@@ -682,6 +682,78 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       assert [_issue] =
                run_check(UseCodeInterface, source, enforce_code_interface_in_domain: false)
     end
+
+    test "default true flags an inline `change fn` inside a resource DSL" do
+      # Inline changes (defined via an anonymous function directly in the
+      # resource's `actions` block) are lexically inside the resource's
+      # `defmodule`, so the innermost enclosing module IS the resource
+      # itself. `caller_domain/1` resolves it through the "caller is an
+      # Ash.Resource" branch without needing the callback-module heuristic.
+      source = """
+      defmodule AshCredoFixtures.Blog.Post do
+        use Ash.Resource,
+          domain: AshCredoFixtures.Blog,
+          validate_domain_inclusion?: false
+
+        actions do
+          update :archive do
+            change fn changeset, _context ->
+              Ash.read!(AshCredoFixtures.Blog.Post, action: :published)
+              changeset
+            end
+          end
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.read!"
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.published_posts!"
+    end
+
+    test "false exempts an inline `change fn` calling a resource in the same domain" do
+      source = """
+      defmodule AshCredoFixtures.Blog.Post do
+        use Ash.Resource,
+          domain: AshCredoFixtures.Blog,
+          validate_domain_inclusion?: false
+
+        actions do
+          update :archive do
+            change fn changeset, _context ->
+              Ash.read!(AshCredoFixtures.Blog.Post, action: :published)
+              changeset
+            end
+          end
+        end
+      end
+      """
+
+      assert [] =
+               run_check(UseCodeInterface, source, enforce_code_interface_in_domain: false)
+    end
+
+    test "false still flags an inline `change fn` calling a cross-domain resource" do
+      source = """
+      defmodule AshCredoFixtures.Blog.Post do
+        use Ash.Resource,
+          domain: AshCredoFixtures.Blog,
+          validate_domain_inclusion?: false
+
+        actions do
+          update :archive do
+            change fn changeset, _context ->
+              Ash.read!(AshCredoFixtures.Accounts.User, action: :read)
+              changeset
+            end
+          end
+        end
+      end
+      """
+
+      assert [_issue] =
+               run_check(UseCodeInterface, source, enforce_code_interface_in_domain: false)
+    end
   end
 
   # ── Configuration: enforce_code_interface_outside_domain ──────────────────
