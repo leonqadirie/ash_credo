@@ -37,29 +37,20 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
   def run(%SourceFile{} = source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
 
-    if CompiledIntrospection.ash_available?() do
-      source_file
-      |> Introspection.resource_contexts()
-      |> Enum.flat_map(&check_resource(&1, issue_meta))
-    else
-      ash_missing_diagnostic(issue_meta)
-    end
-  end
-
-  defp ash_missing_diagnostic(issue_meta) do
-    if CompiledIntrospection.ash_missing_warned?() do
-      []
-    else
-      CompiledIntrospection.mark_ash_missing_warned()
-
-      [
+    CompiledIntrospection.with_compiled_check(
+      fn ->
         format_issue(issue_meta,
           message:
-            "Ash is not loaded in the VM running Credo — `MissingPrimaryAction` is a no-op in this project. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+            "Ash is not loaded in the VM running Credo — `MissingPrimaryAction` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
           line_no: 1
         )
-      ]
-    end
+      end,
+      fn ->
+        source_file
+        |> Introspection.resource_contexts()
+        |> Enum.flat_map(&check_resource(&1, issue_meta))
+      end
+    )
   end
 
   defp check_resource(%{absolute_segments: nil}, _issue_meta), do: []
