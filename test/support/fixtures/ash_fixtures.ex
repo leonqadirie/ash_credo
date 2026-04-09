@@ -56,6 +56,8 @@ defmodule AshCredoFixtures.Blog do
 
     resource AshCredoFixtures.Blog.Article
     resource AshCredoFixtures.Blog.Tag
+    resource AshCredoFixtures.Blog.Empty
+    resource AshCredoFixtures.Blog.WithAuthorizer
   end
 end
 
@@ -77,6 +79,53 @@ defmodule AshCredoFixtures.Accounts.User do
   end
 end
 
+defmodule AshCredoFixtures.Accounts.Member do
+  @moduledoc """
+  `MissingIdentity` failure-path fixture: has `:email` and `:username` attributes
+  but no identity covering either of them.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Accounts,
+    validate_domain_inclusion?: false
+
+  actions do
+    defaults [:read]
+    default_accept []
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :email, :string, public?: true
+    attribute :username, :string, public?: true
+  end
+end
+
+defmodule AshCredoFixtures.Accounts.Profile do
+  @moduledoc """
+  `MissingIdentity` happy-path fixture: has `:email` attribute AND an
+  `:unique_email` identity covering it.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Accounts,
+    validate_domain_inclusion?: false
+
+  actions do
+    defaults [:read]
+    default_accept []
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :email, :string, public?: true
+  end
+
+  identities do
+    identity :unique_email, [:email]
+  end
+end
+
 defmodule AshCredoFixtures.Accounts do
   @moduledoc "Fixture domain for cross-domain tests."
 
@@ -84,6 +133,8 @@ defmodule AshCredoFixtures.Accounts do
 
   resources do
     resource AshCredoFixtures.Accounts.User
+    resource AshCredoFixtures.Accounts.Member
+    resource AshCredoFixtures.Accounts.Profile
   end
 end
 
@@ -127,6 +178,43 @@ defmodule AshCredoFixtures.Blog.Article do
     uuid_primary_key :id
     attribute :title, :string, public?: true
     timestamps()
+  end
+end
+
+defmodule AshCredoFixtures.Blog.Empty do
+  @moduledoc """
+  `NoActions` failure-path fixture: has a (default) data layer but no `actions`
+  block at all. Compiles fine — Ash does not require actions.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  attributes do
+    uuid_primary_key :id
+  end
+end
+
+defmodule AshCredoFixtures.Blog.WithAuthorizer do
+  @moduledoc """
+  `AuthorizerWithoutPolicies` failure-path fixture: declares
+  `Ash.Policy.Authorizer` but does not define a `policies` block. Compiles
+  fine — empty policies list is a runtime concern, not a compile error.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false,
+    authorizers: [Ash.Policy.Authorizer]
+
+  actions do
+    defaults [:read]
+    default_accept []
+  end
+
+  attributes do
+    uuid_primary_key :id
   end
 end
 
