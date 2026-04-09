@@ -7,7 +7,9 @@ defmodule AshCredoFixtures.Blog.Post do
     * `:published` — resource-level interface, name differs (`published_posts`).
     * `:publish` — only a **domain**-level interface exists (`publish_post`).
     * `:draft`   — action exists, no interface anywhere.
-    * `:read`    — default action, only a domain-level interface (`list_posts`).
+    * `:read`    — default action, BOTH a resource-level (`all_posts`) AND a
+      domain-level (`list_posts`) interface — used to exercise
+      `prefer_interface_scope` overrides.
   """
 
   use Ash.Resource,
@@ -17,6 +19,7 @@ defmodule AshCredoFixtures.Blog.Post do
   code_interface do
     define :archive
     define :published_posts, action: :published
+    define :all_posts, action: :read
   end
 
   actions do

@@ -564,4 +564,300 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       assert Enum.any?(issues, &(&1.trigger == "Ash.bulk_destroy!"))
     end
   end
+
+  # ── Configuration: enforce_code_interface_in_domain ────────────────────────
+
+  describe "enforce_code_interface_in_domain" do
+    test "false silences in-domain callers but still flags callers outside the domain" do
+      in_domain = """
+      defmodule AshCredoFixtures.Blog do
+        def list_published do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :published)
+        end
+      end
+      """
+
+      outside_domain = """
+      defmodule AshCredoFixtures.Accounts do
+        def list_published do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+        end
+      end
+      """
+
+      assert [] =
+               run_check(UseCodeInterface, in_domain, enforce_code_interface_in_domain: false)
+
+      assert [_issue] =
+               run_check(UseCodeInterface, outside_domain,
+                 enforce_code_interface_in_domain: false
+               )
+    end
+
+    test "false still emits unknown-action issues on in-domain callers" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def list do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :publishd)
+        end
+      end
+      """
+
+      assert [issue] =
+               run_check(UseCodeInterface, source, enforce_code_interface_in_domain: false)
+
+      assert issue.message =~ "Unknown action"
+      assert issue.message =~ ":publishd"
+    end
+
+    test "false does not suppress the :not_loadable config error" do
+      # :not_loadable is gated by outside_domain, not in_domain.
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def list do
+          Ash.read!(Totally.Fake.Module, action: :x)
+        end
+      end
+      """
+
+      assert [issue] =
+               run_check(UseCodeInterface, source, enforce_code_interface_in_domain: false)
+
+      assert issue.message =~ "Could not load"
+    end
+  end
+
+  # ── Configuration: enforce_code_interface_outside_domain ──────────────────
+
+  describe "enforce_code_interface_outside_domain" do
+    test "false silences a caller in a different known domain" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def list_published do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+        end
+      end
+      """
+
+      assert [] =
+               run_check(UseCodeInterface, source, enforce_code_interface_outside_domain: false)
+    end
+
+    test "false silences plain (no-domain) callers" do
+      source = """
+      defmodule SomeController do
+        def list do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+        end
+      end
+      """
+
+      assert [] =
+               run_check(UseCodeInterface, source, enforce_code_interface_outside_domain: false)
+    end
+
+    test "false silences :not_loadable config errors" do
+      source = """
+      defmodule SomeController do
+        def list do
+          Ash.read!(Totally.Fake.Module, action: :x)
+        end
+      end
+      """
+
+      assert [] =
+               run_check(UseCodeInterface, source, enforce_code_interface_outside_domain: false)
+    end
+
+    test "false still flags in-domain callers" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def list do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :published)
+        end
+      end
+      """
+
+      assert [_issue] =
+               run_check(UseCodeInterface, source, enforce_code_interface_outside_domain: false)
+    end
+
+    test "false still emits unknown-action issues on outside callers" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def list do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :publishd)
+        end
+      end
+      """
+
+      assert [issue] =
+               run_check(UseCodeInterface, source, enforce_code_interface_outside_domain: false)
+
+      assert issue.message =~ "Unknown action"
+    end
+  end
+
+  # ── Configuration: prefer_interface_scope ──────────────────────────────────
+
+  describe "prefer_interface_scope" do
+    test ":auto (default) suggests the resource interface for in-domain callers on :read" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def list do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :read)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.all_posts!"
+    end
+
+    test ":auto suggests the domain interface for outside-domain callers on :read" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def list do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :read)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "AshCredoFixtures.Blog.list_posts!"
+    end
+
+    test ":resource overrides auto for outside-domain callers on :read" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def list do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :read)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source, prefer_interface_scope: :resource)
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.all_posts!"
+    end
+
+    test ":domain overrides auto for in-domain callers on :read" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def list do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :read)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source, prefer_interface_scope: :domain)
+      assert issue.message =~ "AshCredoFixtures.Blog.list_posts!"
+    end
+
+    test ":resource suggests 'define :publish' when no resource iface exists" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def run do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source, prefer_interface_scope: :resource)
+      assert issue.message =~ "Prefer a code interface on"
+      assert issue.message =~ "AshCredoFixtures.Blog.Post"
+      assert issue.message =~ "define :publish"
+    end
+
+    test ":domain suggests 'define a domain interface for :published' when no domain iface exists" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def run do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :published)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source, prefer_interface_scope: :domain)
+      assert issue.message =~ "Prefer a code interface on"
+      assert issue.message =~ "AshCredoFixtures.Blog"
+      assert issue.message =~ "define :some_name, action: :published"
+    end
+  end
+
+  # ── Configuration: combinations ────────────────────────────────────────────
+
+  describe "configuration combinations" do
+    test "both enforce flags false produces no issues at all" do
+      sources = [
+        # in-domain caller
+        """
+        defmodule AshCredoFixtures.Blog do
+          def a do
+            Ash.read!(AshCredoFixtures.Blog.Post, action: :published)
+          end
+        end
+        """,
+        # outside-domain caller
+        """
+        defmodule AshCredoFixtures.Accounts do
+          def a do
+            Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+          end
+        end
+        """,
+        # plain caller
+        """
+        defmodule SomeController do
+          def a do
+            Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+          end
+        end
+        """,
+        # :not_loadable
+        """
+        defmodule SomeController do
+          def a do
+            Ash.read!(Totally.Fake.Module, action: :x)
+          end
+        end
+        """
+      ]
+
+      for source <- sources do
+        assert [] =
+                 run_check(UseCodeInterface, source,
+                   enforce_code_interface_in_domain: false,
+                   enforce_code_interface_outside_domain: false
+                 )
+      end
+    end
+
+    test "enforce_code_interface_outside_domain false + prefer_interface_scope :resource — only in-domain flagged, suggesting resource" do
+      in_domain = """
+      defmodule AshCredoFixtures.Blog do
+        def list do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :read)
+        end
+      end
+      """
+
+      outside_domain = """
+      defmodule AshCredoFixtures.Accounts do
+        def list do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :read)
+        end
+      end
+      """
+
+      opts = [
+        enforce_code_interface_outside_domain: false,
+        prefer_interface_scope: :resource
+      ]
+
+      assert [issue] = run_check(UseCodeInterface, in_domain, opts)
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.all_posts!"
+
+      assert [] = run_check(UseCodeInterface, outside_domain, opts)
+    end
+  end
 end
