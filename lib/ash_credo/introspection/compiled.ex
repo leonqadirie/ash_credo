@@ -423,7 +423,7 @@ defmodule AshCredo.Introspection.Compiled do
   unique broken module instead of N×checks worth of identical noise.
 
   `build_issue_fn` is a 0-arity function that returns a single
-  `Credo.Issue.t()` — typically a `format_issue/2` call inside the calling
+  `Credo.Issue.t()` - typically a `format_issue/2` call inside the calling
   check module (since `format_issue/2` is a macro from `use Credo.Check` and
   can only be built from there).
   """
@@ -477,7 +477,7 @@ defmodule AshCredo.Introspection.Compiled do
   that is a loaded `Ash.Domain`, or `nil` if none is found.
 
   Used to give Ash callback modules (`Change`/`Preparation`/`Validation`/
-  `Calculation`/`Manual*`) a domain by namespace convention — e.g.
+  `Calculation`/`Manual*`) a domain by namespace convention - e.g.
   `MyApp.Blog.Changes.Archive` resolves to `MyApp.Blog` when that module is
   a loaded domain.
 
@@ -506,7 +506,7 @@ defmodule AshCredo.Introspection.Compiled do
 
   # Test helper. Clears the per-module and per-domain persistent_term cache
   # entries and the one-shot diagnostic flags so each test runs with a fresh
-  # `Compiled` state. Intentionally `@doc false` — not part of the public API.
+  # `Compiled` state. Intentionally `@doc false` - not part of the public API.
   @doc false
   @spec clear_cache() :: :ok
   def clear_cache do

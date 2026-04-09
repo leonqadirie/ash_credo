@@ -299,7 +299,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     end
   end
 
-  # Unloadable resources fall into the "outside domain" bucket — we cannot
+  # Unloadable resources fall into the "outside domain" bucket - we cannot
   # confirm the caller shares a domain with something we can't introspect.
   # The dedup wrapper ensures one diagnostic per unique broken module across
   # all compile-dependent checks.

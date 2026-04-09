@@ -82,7 +82,7 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
          issue_meta
        ) do
     # `Ash.Policy.Authorizer` here is intentionally a bare atom literal, not
-    # a remote call — Elixir compiles it to `:"Elixir.Ash.Policy.Authorizer"`
+    # a remote call - Elixir compiles it to `:"Elixir.Ash.Policy.Authorizer"`
     # without ever needing the module loaded, so this file compiles cleanly
     # in projects that don't depend on Ash. If you ever turn this into a
     # remote call (e.g. `Ash.Policy.Authorizer.something()`), make sure

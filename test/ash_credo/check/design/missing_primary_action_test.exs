@@ -100,7 +100,7 @@ defmodule AshCredo.Check.Design.MissingPrimaryActionTest do
     assert issue.message =~ "Could not load"
     assert issue.message =~ "Totally.Fake.Dedup"
 
-    # Second invocation against the same broken module — already warned, so
+    # Second invocation against the same broken module - already warned, so
     # the dedup helper returns [] without re-emitting.
     assert [] = run_check(MissingPrimaryAction, second_source)
   end
