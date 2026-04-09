@@ -164,10 +164,13 @@ points at. They compose freely.
   resource-level function (Opinion B); `:domain` always suggests a
   domain-level function.
 
-Setting both `enforce_*` flags to `false` effectively disables the check for
-loadable resources, leaving only unknown-action diagnostics. Unknown-action
-issues (e.g. `Ash.read!(Post, action: :publishd)`) are always emitted when
-the resource loads — disable the whole check in `.credo.exs` to silence them.
+Setting both `enforce_*` flags to `false` effectively disables the check
+for loadable resources, leaving only unknown-action diagnostics. In this
+configuration `prefer_interface_scope` becomes inert - no suggestion path
+fires, so combining Opinions A + B + C is observationally identical to
+A + C alone. Unknown-action issues (e.g. `Ash.read!(Post, action: :publishd)`)
+are always emitted when the resource loads - disable the whole check in
+`.credo.exs` to silence them.
 
 ## Configuration
 
