@@ -9,15 +9,15 @@ defmodule AshCredo.Check.Warning.MissingChangeWrapper do
       `relate_actor` must be wrapped in `change` when used inside an action body.
 
       Without the wrapper, the function call returns a change reference tuple that
-      is silently discarded — the change never runs and no error is raised.
+      is silently discarded - the change never runs and no error is raised.
 
-          # Bad — compiles but silently does nothing
+          # Bad - compiles but silently does nothing
           create :some_action do
             argument :thing, :map
             manage_relationship(:thing, :thing, type: :create)
           end
 
-          # Good — wrapped in change
+          # Good - wrapped in change
           create :some_action do
             argument :thing, :map
             change manage_relationship(:thing, :thing, type: :create)

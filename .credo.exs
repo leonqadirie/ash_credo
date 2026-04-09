@@ -16,14 +16,14 @@
       color: true,
       checks: %{
         extra: [
-          # ExSlop — Warning Checks
+          # ExSlop - Warning Checks
           {ExSlop.Check.Warning.BlanketRescue, []},
           {ExSlop.Check.Warning.RescueWithoutReraise, []},
           {ExSlop.Check.Warning.RepoAllThenFilter, []},
           {ExSlop.Check.Warning.QueryInEnumMap, []},
           {ExSlop.Check.Warning.GenserverAsKvStore, []},
 
-          # ExSlop — Refactoring Checks
+          # ExSlop - Refactoring Checks
           {ExSlop.Check.Refactor.FilterNil, []},
           {ExSlop.Check.Refactor.RejectNil, []},
           {ExSlop.Check.Refactor.ReduceAsMap, []},
@@ -37,7 +37,7 @@
           {ExSlop.Check.Refactor.SortThenReverse, []},
           {ExSlop.Check.Refactor.StringConcatInReduce, []},
 
-          # ExSlop — Readability Checks
+          # ExSlop - Readability Checks
           {ExSlop.Check.Readability.NarratorDoc, []},
           {ExSlop.Check.Readability.DocFalseOnPublicFunction, []},
           {ExSlop.Check.Readability.BoilerplateDocParams, []},

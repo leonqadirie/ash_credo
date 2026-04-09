@@ -6,9 +6,9 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPoliciesTest do
 
   # Tests reference real fixture modules from `test/support/fixtures/ash_fixtures.ex`:
   #
-  #   * `AshCredoFixtures.Blog.WithAuthorizer` — declares `Ash.Policy.Authorizer`
+  #   * `AshCredoFixtures.Blog.WithAuthorizer` - declares `Ash.Policy.Authorizer`
   #     but defines NO policies block. Failure-path fixture.
-  #   * `AshCredoFixtures.Blog.Post`            — has no authorizer at all.
+  #   * `AshCredoFixtures.Blog.Post`            - has no authorizer at all.
   #     Happy-path fixture (check should silently skip).
 
   setup do

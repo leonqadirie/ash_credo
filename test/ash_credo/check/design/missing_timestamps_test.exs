@@ -6,8 +6,8 @@ defmodule AshCredo.Check.Design.MissingTimestampsTest do
 
   # Tests reference real fixture modules from `test/support/fixtures/ash_fixtures.ex`:
   #
-  #   * `AshCredoFixtures.Blog.Post`    — has no timestamps (failure-path).
-  #   * `AshCredoFixtures.Blog.Article` — uses `timestamps()` (happy-path).
+  #   * `AshCredoFixtures.Blog.Post`    - has no timestamps (failure-path).
+  #   * `AshCredoFixtures.Blog.Article` - uses `timestamps()` (happy-path).
 
   setup do
     CompiledIntrospection.clear_cache()

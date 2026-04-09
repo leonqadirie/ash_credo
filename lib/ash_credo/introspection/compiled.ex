@@ -1,6 +1,6 @@
 defmodule AshCredo.Introspection.Compiled do
   @moduledoc """
-  Introspection that reads **compiled BEAM metadata** — a wrapper around
+  Introspection that reads **compiled BEAM metadata** - a wrapper around
   `Ash.Resource.Info` and `Ash.Domain.Info`.
 
   Sibling of `AshCredo.Introspection` (AST-level) and
@@ -16,18 +16,18 @@ defmodule AshCredo.Introspection.Compiled do
 
   ## Error modes
 
-    * `{:error, :ash_missing}` — Ash itself is not loaded in the VM running
+    * `{:error, :ash_missing}` - Ash itself is not loaded in the VM running
       Credo. This happens when `ash_credo` is used in a project that does not
       depend on Ash. Callers should treat this as "Ash-aware checks are a
       no-op in this project" and emit a single diagnostic.
-    * `{:error, :not_loadable}` — `Code.ensure_compiled/1` returned an error,
+    * `{:error, :not_loadable}` - `Code.ensure_compiled/1` returned an error,
       typically because the host project has not been compiled yet. The
       caller should surface a "run `mix compile` first" hint.
-    * `{:error, :not_a_resource}` — the module loaded successfully but is
+    * `{:error, :not_a_resource}` - the module loaded successfully but is
       not an Ash resource. Checks targeting resources should silently skip.
   """
 
-  # Ash is not a runtime dependency of ash_credo — users bring their own.
+  # Ash is not a runtime dependency of ash_credo - users bring their own.
   # Suppress compile-time warnings for the remote calls below; they are guarded
   # at runtime by `ash_available?/0`.
   @compile {:no_warn_undefined, [Ash.Resource.Info, Ash.Domain.Info, Ash.Policy.Info]}
@@ -36,7 +36,7 @@ defmodule AshCredo.Introspection.Compiled do
   @ash_available_key {__MODULE__, :ash_available?}
   @ash_missing_warned_key {__MODULE__, :ash_missing_warned}
 
-  # Behaviours that mark a module as an Ash resource auxiliary — i.e. a
+  # Behaviours that mark a module as an Ash resource auxiliary - i.e. a
   # module that gets attached to a resource via `change`, `preparation`,
   # `validation`, `calculate`, or a `manual` action option. These modules
   # don't themselves declare a `:domain`, but conventionally belong to the
@@ -228,7 +228,7 @@ defmodule AshCredo.Introspection.Compiled do
   Returns `true` if `module` is an Ash domain loadable in this VM.
 
   Determined by the `spark_is/0` function that Spark DSL modules inject.
-  Not cached — the check is cheap (already-loaded module attribute read).
+  Not cached - the check is cheap (already-loaded module attribute read).
   """
   @spec domain?(module()) :: boolean()
   def domain?(module) when is_atom(module) do
@@ -371,7 +371,7 @@ defmodule AshCredo.Introspection.Compiled do
     * otherwise run the check body.
 
   `missing_issue_fn` must be a 0-arity function that returns a single
-  `Credo.Issue.t()` (typically a `format_issue/2` call — which is a macro
+  `Credo.Issue.t()` (typically a `format_issue/2` call - which is a macro
   from `use Credo.Check`, so it can only be built from inside the check
   module itself).
 
@@ -401,7 +401,7 @@ defmodule AshCredo.Introspection.Compiled do
   that is a loaded `Ash.Domain`, or `nil` if none is found.
 
   Used to give Ash callback modules (`Change`/`Preparation`/`Validation`/
-  `Calculation`/`Manual*`) a domain by namespace convention — e.g.
+  `Calculation`/`Manual*`) a domain by namespace convention - e.g.
   `MyApp.Blog.Changes.Archive` resolves to `MyApp.Blog` when that module is
   a loaded domain.
   """
@@ -464,7 +464,7 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   # Policies live in `Ash.Policy.Info` (a separate module from `Ash.Resource.Info`).
-  # `Ash.Policy.Info.policies/1` always returns a list — `[]` for resources
+  # `Ash.Policy.Info.policies/1` always returns a list - `[]` for resources
   # without `Ash.Policy.Authorizer`.
   defp read_policies(module) do
     Ash.Policy.Info.policies(module)

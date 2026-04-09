@@ -6,7 +6,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
 
   # Tests reference real fixture modules from `test/support/fixtures/ash_fixtures.ex`:
   #
-  #   * `AshCredoFixtures.Blog.Post` — has actions `:create`, `:update`, `:destroy`
+  #   * `AshCredoFixtures.Blog.Post` - has actions `:create`, `:update`, `:destroy`
   #     (via defaults), `:read`, `:published`, `:draft`, `:archive`, `:publish`.
   #     Interfaces:
   #       - resource-level: `:archive` (→ :archive), `:published_posts` (→ :published),
@@ -14,7 +14,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
   #       - domain-level:  `:list_posts` (→ :read), `:publish_post` (→ :publish)
   #     Actions with NO interface anywhere: `:create`, `:update`, `:destroy`, `:draft`.
   #
-  #   * `AshCredoFixtures.Accounts.User` — has `:create`, `:read`, `:update`,
+  #   * `AshCredoFixtures.Accounts.User` - has `:create`, `:read`, `:update`,
   #     `:destroy` (via defaults). ZERO interfaces. All 4 actions should be flagged.
 
   setup do
@@ -68,7 +68,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
     triggers = Enum.map(issues, & &1.trigger)
 
     # :archive, :published, and :read all have interfaces (resource-level)
-    # — neither should appear in the issue list.
+    # - neither should appear in the issue list.
     refute "archive" in triggers
     refute "published" in triggers
     refute "read" in triggers

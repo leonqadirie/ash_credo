@@ -6,9 +6,9 @@ defmodule AshCredo.Check.Design.MissingIdentityTest do
 
   # Tests reference real fixture modules from `test/support/fixtures/ash_fixtures.ex`:
   #
-  #   * `AshCredoFixtures.Accounts.Member`  — has `:email` and `:username`
+  #   * `AshCredoFixtures.Accounts.Member`  - has `:email` and `:username`
   #     attributes, no identities. Failure-path fixture for the migration.
-  #   * `AshCredoFixtures.Accounts.Profile` — has `:email` attribute AND
+  #   * `AshCredoFixtures.Accounts.Profile` - has `:email` attribute AND
   #     `:unique_email` identity covering it. Happy-path fixture.
 
   setup do

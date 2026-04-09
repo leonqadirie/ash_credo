@@ -12,8 +12,8 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
       `create_timestamp :inserted_at` and `update_timestamp :updated_at`.
 
       This check uses Ash's runtime introspection (`Ash.Resource.Info.attributes/1`)
-      to detect timestamp attributes — including ones contributed by Spark
-      transformers or extensions — rather than scanning the source AST. This
+      to detect timestamp attributes - including ones contributed by Spark
+      transformers or extensions - rather than scanning the source AST. This
       means custom timestamp entity names are caught as long as they produce
       attributes with an auto-generated `default` (for create timestamps) or
       `update_default` (for update timestamps).
@@ -37,7 +37,7 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
       fn ->
         format_issue(issue_meta,
           message:
-            "Ash is not loaded in the VM running Credo — `MissingTimestamps` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+            "Ash is not loaded in the VM running Credo - `MissingTimestamps` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
           line_no: 1
         )
       end,

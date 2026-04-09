@@ -3,12 +3,12 @@ defmodule AshCredoFixtures.Blog.Post do
   Fixture resource used by `UseCodeInterface` tests. Intentionally covers
   every classification variant the check needs to exercise:
 
-    * `:archive` — resource-level interface, name == action name.
-    * `:published` — resource-level interface, name differs (`published_posts`).
-    * `:publish` — only a **domain**-level interface exists (`publish_post`).
-    * `:draft`   — action exists, no interface anywhere.
-    * `:read`    — default action, BOTH a resource-level (`all_posts`) AND a
-      domain-level (`list_posts`) interface — used to exercise
+    * `:archive` - resource-level interface, name == action name.
+    * `:published` - resource-level interface, name differs (`published_posts`).
+    * `:publish` - only a **domain**-level interface exists (`publish_post`).
+    * `:draft`   - action exists, no interface anywhere.
+    * `:read`    - default action, BOTH a resource-level (`all_posts`) AND a
+      domain-level (`list_posts`) interface - used to exercise
       `prefer_interface_scope` overrides.
   """
 
@@ -162,7 +162,7 @@ defmodule AshCredoFixtures.Blog.Article do
   @moduledoc """
   Resource with timestamps via the `timestamps()` macro. Used by
   `Design.MissingTimestamps` happy-path tests (the existing `Blog.Post`
-  fixture has no timestamps — that covers the failure path).
+  fixture has no timestamps - that covers the failure path).
   """
 
   use Ash.Resource,
@@ -184,7 +184,7 @@ end
 defmodule AshCredoFixtures.Blog.Empty do
   @moduledoc """
   `NoActions` failure-path fixture: has a (default) data layer but no `actions`
-  block at all. Compiles fine — Ash does not require actions.
+  block at all. Compiles fine - Ash does not require actions.
   """
 
   use Ash.Resource,
@@ -200,7 +200,7 @@ defmodule AshCredoFixtures.Blog.WithAuthorizer do
   @moduledoc """
   `AuthorizerWithoutPolicies` failure-path fixture: declares
   `Ash.Policy.Authorizer` but does not define a `policies` block. Compiles
-  fine — empty policies list is a runtime concern, not a compile error.
+  fine - empty policies list is a runtime concern, not a compile error.
   """
 
   use Ash.Resource,

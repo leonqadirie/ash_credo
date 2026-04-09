@@ -6,9 +6,9 @@ defmodule AshCredo.Check.Warning.NoActionsTest do
 
   # Tests reference real fixture modules from `test/support/fixtures/ash_fixtures.ex`:
   #
-  #   * `AshCredoFixtures.Blog.Empty` — has a (default) data layer and **no
+  #   * `AshCredoFixtures.Blog.Empty` - has a (default) data layer and **no
   #     actions block**. Failure-path fixture for the migration.
-  #   * `AshCredoFixtures.Blog.Post`  — has actions via `defaults [...]` and
+  #   * `AshCredoFixtures.Blog.Post`  - has actions via `defaults [...]` and
   #     explicit `read`/`update` entries. Happy-path fixture.
   #
   # Note: the test source needs `data_layer:` set so the AST-level

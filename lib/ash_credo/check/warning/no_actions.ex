@@ -18,7 +18,7 @@ defmodule AshCredo.Check.Warning.NoActions do
       This check uses Ash's runtime introspection (`Ash.Resource.Info.actions/1`)
       to see the fully-resolved action list. That means it correctly handles
       resources whose actions are spliced in via `Spark.Dsl.Fragment` or
-      injected by extensions — cases the AST scanner would miss and
+      injected by extensions - cases the AST scanner would miss and
       false-positive on.
 
       ## Requirements
@@ -40,7 +40,7 @@ defmodule AshCredo.Check.Warning.NoActions do
       fn ->
         format_issue(issue_meta,
           message:
-            "Ash is not loaded in the VM running Credo — `NoActions` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+            "Ash is not loaded in the VM running Credo - `NoActions` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
           line_no: 1
         )
       end,

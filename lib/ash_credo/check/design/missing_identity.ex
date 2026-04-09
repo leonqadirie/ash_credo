@@ -16,7 +16,7 @@ defmodule AshCredo.Check.Design.MissingIdentity do
           end
 
       This check uses Ash's runtime introspection (`Ash.Resource.Info`) to
-      see the fully-resolved attribute and identity lists — including
+      see the fully-resolved attribute and identity lists - including
       contributions from extensions like `AshAuthentication`, which adds an
       `:email` attribute via a transformer that the AST scanner cannot see.
       Migrating to compiled introspection turns this check from "scans the
@@ -46,7 +46,7 @@ defmodule AshCredo.Check.Design.MissingIdentity do
       fn ->
         format_issue(issue_meta,
           message:
-            "Ash is not loaded in the VM running Credo — `MissingIdentity` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+            "Ash is not loaded in the VM running Credo - `MissingIdentity` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
           line_no: 1
         )
       end,

@@ -12,7 +12,7 @@ defmodule AshCredo.Introspection do
 
   @doc """
   Returns resource contexts for all resource modules in the source file, in
-  file order. Each context now includes `:absolute_segments` — the full
+  file order. Each context now includes `:absolute_segments` - the full
   enclosing path of the resource's `defmodule` name (e.g. `[:MyApp, :Blog, :Post]`
   for a nested `defmodule Post` inside `defmodule MyApp.Blog`). This lets
   compiled-introspection checks resolve the resource to its runtime module atom.

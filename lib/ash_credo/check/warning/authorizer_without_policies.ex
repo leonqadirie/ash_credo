@@ -22,7 +22,7 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
       This check uses Ash's runtime introspection (`Ash.Resource.Info.authorizers/1`
       and `Ash.Policy.Info.policies/1`) to see the fully-resolved authorizer
       and policy lists. That means it correctly handles authorizers added by
-      extensions and policies declared in `Spark.Dsl.Fragment` modules — cases
+      extensions and policies declared in `Spark.Dsl.Fragment` modules - cases
       the AST scanner would silently miss.
 
       ## Requirements
@@ -44,7 +44,7 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
       fn ->
         format_issue(issue_meta,
           message:
-            "Ash is not loaded in the VM running Credo — `AuthorizerWithoutPolicies` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+            "Ash is not loaded in the VM running Credo - `AuthorizerWithoutPolicies` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
           line_no: 1
         )
       end,

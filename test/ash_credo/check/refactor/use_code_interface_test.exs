@@ -7,11 +7,11 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
   # The synthetic source strings in these tests reference real fixture modules
   # loaded from `test/support/fixtures/ash_fixtures.ex`:
   #
-  #   * `AshCredoFixtures.Blog`           — a domain
-  #   * `AshCredoFixtures.Blog.Post`      — a resource in Blog
-  #   * `AshCredoFixtures.Accounts`       — a second domain
-  #   * `AshCredoFixtures.Accounts.User`  — a resource in Accounts
-  #   * `AshCredoFixtures.Plain`          — a non-Ash module
+  #   * `AshCredoFixtures.Blog`           - a domain
+  #   * `AshCredoFixtures.Blog.Post`      - a resource in Blog
+  #   * `AshCredoFixtures.Accounts`       - a second domain
+  #   * `AshCredoFixtures.Accounts.User`  - a resource in Accounts
+  #   * `AshCredoFixtures.Plain`          - a non-Ash module
   #
   # The check resolves each referenced name to an atom and then queries the
   # compiled-BEAM introspection, exercising the real classification path.
@@ -146,7 +146,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       """
 
       # Accounts.User has no interfaces at all, but AshCredoFixtures.Accounts
-      # also has no domain-level interface for :read — so we fall through to
+      # also has no domain-level interface for :read - so we fall through to
       # "define a resource-level interface".
       assert [issue] = run_check(UseCodeInterface, source)
       assert issue.message =~ "Prefer a code interface on"
@@ -668,7 +668,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       # The change module is in AshCredoFixtures.Blog's namespace but it's
       # calling AshCredoFixtures.Accounts.User, which belongs to a different
       # domain. Opinion A wants cross-domain calls caught even from change
-      # modules — verify the in_domain=false setting doesn't silence this.
+      # modules - verify the in_domain=false setting doesn't silence this.
       source = """
       defmodule AshCredoFixtures.Blog.Changes.Archive do
         use Ash.Resource.Change
@@ -962,7 +962,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       end
     end
 
-    test "enforce_code_interface_outside_domain false + prefer_interface_scope :resource — only in-domain flagged, suggesting resource" do
+    test "enforce_code_interface_outside_domain false + prefer_interface_scope :resource - only in-domain flagged, suggesting resource" do
       in_domain = """
       defmodule AshCredoFixtures.Blog do
         def list do

@@ -12,12 +12,12 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
       interface targeting it, emits a dedicated issue naming the missing
       action.
 
-          # Flagged — action `:published` has no interface anywhere
+          # Flagged - action `:published` has no interface anywhere
           actions do
             read :published
           end
 
-          # Preferred — one of:
+          # Preferred - one of:
           code_interface do
             define :published
           end
@@ -47,7 +47,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
       fn ->
         format_issue(issue_meta,
           message:
-            "Ash is not loaded in the VM running Credo — `MissingCodeInterface` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+            "Ash is not loaded in the VM running Credo - `MissingCodeInterface` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
           line_no: 1
         )
       end,

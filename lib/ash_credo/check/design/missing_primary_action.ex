@@ -15,8 +15,8 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
           end
 
       This check uses Ash's runtime introspection (`Ash.Resource.Info.actions/1`)
-      to see the fully-resolved action list — including actions contributed by
-      Spark transformers and extensions — so it catches cases where a
+      to see the fully-resolved action list - including actions contributed by
+      Spark transformers and extensions - so it catches cases where a
       transformer adds an action that breaks the primary-action invariant.
 
       ## Requirements
@@ -41,7 +41,7 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
       fn ->
         format_issue(issue_meta,
           message:
-            "Ash is not loaded in the VM running Credo — `MissingPrimaryAction` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+            "Ash is not loaded in the VM running Credo - `MissingPrimaryAction` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
           line_no: 1
         )
       end,

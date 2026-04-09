@@ -48,24 +48,24 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       Three params let you adapt the check to a team's code-interface
       conventions:
 
-        * `enforce_code_interface_in_domain` (default `true`) — when
+        * `enforce_code_interface_in_domain` (default `true`) - when
           `false`, the check leaves callers that share a domain with the
           resource alone. Useful for teams that consider raw `Ash.*` calls
           inside `Change`/`Preparation`/`Validation` modules acceptable.
-        * `enforce_code_interface_outside_domain` (default `true`) — when
+        * `enforce_code_interface_outside_domain` (default `true`) - when
           `false`, the check silences every case where the caller is not
           confirmed to be in the resource's domain: different known domain,
           plain caller (controller, LiveView, worker), caller that is an
           `Ash.Resource` with no `:domain`, and resources that cannot be
           loaded.
         * `prefer_interface_scope` (`:auto` | `:resource` | `:domain`,
-          default `:auto`) — overrides which interface the check points at.
+          default `:auto`) - overrides which interface the check points at.
           `:auto` follows the domain-aware heuristic above. `:resource`
           always suggests a resource-level interface (useful if you only
           define code interfaces on resources). `:domain` always suggests a
           domain-level interface.
 
-      Example — a team that allows raw calls inside their domain and only
+      Example - a team that allows raw calls inside their domain and only
       defines interfaces on resources:
 
           {AshCredo.Check.Refactor.UseCodeInterface,
@@ -79,7 +79,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
       The check calls `Code.ensure_compiled/1` on every referenced resource
       to query Ash's introspection API. This means **your project must be
-      compiled before running `mix credo`** — typically `mix compile && mix
+      compiled before running `mix credo`** - typically `mix compile && mix
       credo` or a Mix alias that chains the two.
 
       If Ash is not available in the VM running Credo, the check is a
@@ -87,7 +87,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
       ## Known limitations
 
-        * Calls made via `import Ash; read!(...)` are not traced — only
+        * Calls made via `import Ash; read!(...)` are not traced - only
           fully qualified `Ash.*` (or aliased) module calls are detected.
         * Records obtained via pattern matching (e.g.
           `{:ok, post} = Ash.get(...)`) or helper functions are not traced
@@ -111,10 +111,10 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   # Pattern A: resource at arg 0, action in keyword opts (:action key)
   @action_in_opts ~w(read read! get get! stream!)a
 
-  # Pattern B: bulk_create — resource at arg 1, action at arg 2
+  # Pattern B: bulk_create - resource at arg 1, action at arg 2
   @bulk_create_funs ~w(bulk_create bulk_create!)a
 
-  # Pattern C: bulk_update/destroy — query_or_stream at arg 0, action at arg 1
+  # Pattern C: bulk_update/destroy - query_or_stream at arg 0, action at arg 1
   @bulk_query_funs ~w(bulk_update bulk_update! bulk_destroy bulk_destroy!)a
 
   @stream_funs ~w(stream!)a
@@ -153,7 +153,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
         fn ->
           format_issue(issue_meta,
             message:
-              "Ash is not loaded in the VM running Credo — `UseCodeInterface` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+              "Ash is not loaded in the VM running Credo - `UseCodeInterface` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
             line_no: 1
           )
         end,
@@ -298,7 +298,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
         handle_loaded(atom, action_name, info, ctx)
 
       :error ->
-        # Unloadable resources fall into the "outside domain" bucket — we
+        # Unloadable resources fall into the "outside domain" bucket - we
         # cannot confirm the caller shares a domain with something we can't
         # introspect.
         if ctx.config.outside_domain do
@@ -336,7 +336,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
         end
 
       {:error, :unknown_action} ->
-        # Always emitted — orthogonal to the enforcement flags.
+        # Always emitted - orthogonal to the enforcement flags.
         [unknown_action_issue(resource, action_name, info.actions, ctx)]
 
       {:error, _} ->
@@ -554,7 +554,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     end
   end
 
-  # Struct literal: `%MyApp.Post{...}` — extract the inner alias AST.
+  # Struct literal: `%MyApp.Post{...}` - extract the inner alias AST.
   defp literal_segments({:%, _, [alias_ast, {:%{}, _, _}]}, context),
     do: literal_segments(alias_ast, context)
 

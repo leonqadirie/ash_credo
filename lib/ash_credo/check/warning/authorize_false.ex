@@ -10,10 +10,10 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
       easy to accidentally skip policy checks. Instead, use system actors with
       bypass policies so that authorization is always enforced and auditable.
 
-          # Bad — skips all authorization
+          # Bad - skips all authorization
           Ash.read!(query, authorize?: false)
 
-          # Good — uses a named system actor
+          # Good - uses a named system actor
           Ash.read!(query, actor: %{system: :my_context})
 
           # In resource policies:
@@ -27,7 +27,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
           Ash.get!(Resource, id, scope: context)
 
       **Note:** By default this check flags `authorize?: false` anywhere it appears as a
-      literal — Ash API calls, action DSL definitions, variable assignments, and
+      literal - Ash API calls, action DSL definitions, variable assignments, and
       wrapper functions. Set `include_non_ash_calls: false` to restrict detection
       to Ash API calls and action DSL definitions only.
 

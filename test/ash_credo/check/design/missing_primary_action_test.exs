@@ -8,12 +8,12 @@ defmodule AshCredo.Check.Design.MissingPrimaryActionTest do
   # so that compiled-introspection (`Ash.Resource.Info.actions/1`) returns the
   # fully-resolved action list:
   #
-  #   * `AshCredoFixtures.Blog.Post` — has `read :read, primary?: true` plus
+  #   * `AshCredoFixtures.Blog.Post` - has `read :read, primary?: true` plus
   #     multiple non-primary reads and multiple non-primary updates, and a
   #     primary `:create` via `defaults [:create, :update, :destroy]`.
-  #   * `AshCredoFixtures.Blog.Tag` — has `create :create_basic` and
+  #   * `AshCredoFixtures.Blog.Tag` - has `create :create_basic` and
   #     `create :create_with_slug`, neither primary. Failure-path fixture.
-  #   * `AshCredoFixtures.Accounts.User` — `defaults [:create, :read, :update, :destroy]`,
+  #   * `AshCredoFixtures.Accounts.User` - `defaults [:create, :read, :update, :destroy]`,
   #     single action of each type. Happy-path fixture.
 
   setup do
@@ -32,7 +32,7 @@ defmodule AshCredo.Check.Design.MissingPrimaryActionTest do
   end
 
   test "no issue when multiple reads exist but one is marked primary" do
-    # Blog.Post has :read (primary), :published, :draft — three reads total
+    # Blog.Post has :read (primary), :published, :draft - three reads total
     # but :read is primary so no issue should fire for the read type.
     source = """
     defmodule AshCredoFixtures.Blog.Post do

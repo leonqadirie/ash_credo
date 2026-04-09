@@ -11,7 +11,7 @@ AshCredo detects common anti-patterns, security pitfalls, and missing best pract
 > [!WARNING]
 > This project is experimental and might break frequently.
 
-**Note: Only `MissingChangeWrapper` is enabled by default.** All other checks are opt-in — enable them individually in your `.credo.exs` (see [Configuration](#configuration)).
+**Note: Only `MissingChangeWrapper` is enabled by default.** All other checks are opt-in - enable them individually in your `.credo.exs` (see [Configuration](#configuration)).
 
 ## Installation
 
@@ -86,12 +86,12 @@ mix credo
 | `ActionMissingDescription` | Readability | Low | No | Flags actions without a `description` |
 | `BelongsToMissingAllowNil` | Readability | Normal | No | Flags `belongs_to` without explicit `allow_nil?` |
 | `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |
-| `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals — names the exact code interface function to call instead. **Requires compiled project** and **configurable** (see below). |
+| `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals - names the exact code interface function to call instead. **Requires compiled project** and **configurable** (see below). |
 
 ## Checks that require a compiled project
 
 Seven checks read Ash's runtime introspection (`Ash.Resource.Info`, `Ash.Domain.Info`, and `Ash.Policy.Info`) rather than source AST.
-They see the fully-resolved resource state — including anything Spark transformers or extensions contribute — and catch bugs that pure AST scanning would miss (e.g. identities on AshAuthentication-injected `:email` attributes, fragment-spliced actions, extension-added authorizers).
+They see the fully-resolved resource state - including anything Spark transformers or extensions contribute - and catch bugs that pure AST scanning would miss (e.g. identities on AshAuthentication-injected `:email` attributes, fragment-spliced actions, extension-added authorizers).
 
 - `Refactor.UseCodeInterface`
 - `Design.MissingCodeInterface`
@@ -121,37 +121,37 @@ If a referenced resource cannot be loaded, the check emits a per-call-site "coul
 philosophies:
 
 ```elixir
-# Opinion A — raw Ash.* calls are OK when the caller is in the resource's
+# Opinion A - raw Ash.* calls are OK when the caller is in the resource's
 # domain (e.g. inside a Change / Preparation / Validation module).
 {AshCredo.Check.Refactor.UseCodeInterface,
  [enforce_code_interface_in_domain: false]},
 
-# Opinion B — code interfaces are only defined on resources; never suggest
+# Opinion B - code interfaces are only defined on resources; never suggest
 # reaching for a domain-level interface.
 {AshCredo.Check.Refactor.UseCodeInterface,
  [prefer_interface_scope: :resource]},
 
-# Opinion A + B — allow same-domain raw calls AND always direct the rest
+# Opinion A + B - allow same-domain raw calls AND always direct the rest
 # at the resource-level interface.
 {AshCredo.Check.Refactor.UseCodeInterface,
  [enforce_code_interface_in_domain: false, prefer_interface_scope: :resource]},
 
-# Default — "in-domain → resource, outside-domain → domain" hierarchy.
+# Default - "in-domain → resource, outside-domain → domain" hierarchy.
 {AshCredo.Check.Refactor.UseCodeInterface, []},
 ```
 
-- **`enforce_code_interface_in_domain`** (`true` default) — when `false`, leaves
+- **`enforce_code_interface_in_domain`** (`true` default) - when `false`, leaves
   callers that share a domain with the resource alone.
-- **`enforce_code_interface_outside_domain`** (`true` default) — when `false`,
+- **`enforce_code_interface_outside_domain`** (`true` default) - when `false`,
   silences every case where the caller is not confirmed to be in the resource's
   domain (different domain, plain controller/LiveView, domainless resource,
   `:not_loadable` resource).
 - **`prefer_interface_scope`** (`:auto | :resource | :domain`, default `:auto`)
-  — overrides which interface the check points at. `:auto` follows the
+  - overrides which interface the check points at. `:auto` follows the
   in-domain/outside-domain heuristic; `:resource` always suggests a
   resource-level function; `:domain` always suggests a domain-level function.
 
-Unknown-action issues (e.g. `Ash.read!(Post, action: :publishd)`) are always emitted when the resource loads — disable the whole check to silence them.
+Unknown-action issues (e.g. `Ash.read!(Post, action: :publishd)`) are always emitted when the resource loads - disable the whole check to silence them.
 
 ## Configuration
 
@@ -234,7 +234,7 @@ The following checks accept custom parameters:
 2. Create your feature branch (`git switch -c my-new-check`)
 3. Apply formatting and make sure tests and lints pass (`mix format`, `mix test`, `mix lint`)
 4. Commit your changes
-5. Open a pull request — PR titles must follow the [Conventional Commits](https://www.conventionalcommits.org) format (e.g. `feat: add check for XY`, `fix: handle XY edge case`)
+5. Open a pull request - PR titles must follow the [Conventional Commits](https://www.conventionalcommits.org) format (e.g. `feat: add check for XY`, `fix: handle XY edge case`)
 
 ## License
 
