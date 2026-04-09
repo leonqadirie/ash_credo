@@ -35,6 +35,7 @@ defmodule AshCredo.Introspection.Compiled do
   @cache_table :ash_credo_introspection_compiled_cache
   @ash_available_key {__MODULE__, :ash_available?}
   @ash_missing_warned_key {__MODULE__, :ash_missing_warned}
+  @not_loadable_warned_key {__MODULE__, :not_loadable_warned}
 
   # Behaviours that mark a module as an Ash resource auxiliary - i.e. a
   # module that gets attached to a resource via `change`, `preparation`,
@@ -363,6 +364,50 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
+  Returns `true` if a `:not_loadable` diagnostic for `module` has already been
+  emitted for this run. Tracked as a set in `:persistent_term` so the same
+  unloadable resource produces at most ONE diagnostic across all
+  compile-dependent checks per `mix credo` invocation.
+  """
+  @spec not_loadable_warned?(module()) :: boolean()
+  def not_loadable_warned?(module) when is_atom(module) do
+    @not_loadable_warned_key
+    |> :persistent_term.get(MapSet.new())
+    |> MapSet.member?(module)
+  end
+
+  @doc "Marks `module` as already having emitted a `:not_loadable` diagnostic."
+  @spec mark_not_loadable_warned(module()) :: :ok
+  def mark_not_loadable_warned(module) when is_atom(module) do
+    current = :persistent_term.get(@not_loadable_warned_key, MapSet.new())
+    :persistent_term.put(@not_loadable_warned_key, MapSet.put(current, module))
+    :ok
+  end
+
+  @doc """
+  Builds a `:not_loadable` diagnostic for `module` only the first time it is
+  seen this run. Subsequent calls for the same module return `[]`. Used by
+  every compile-dependent check's `{:error, :not_loadable}` branch so a user
+  who runs `mix credo` without `mix compile` first sees ONE diagnostic per
+  unique broken module instead of N×checks worth of identical noise.
+
+  `build_issue_fn` is a 0-arity function that returns a single
+  `Credo.Issue.t()` — typically a `format_issue/2` call inside the calling
+  check module (since `format_issue/2` is a macro from `use Credo.Check` and
+  can only be built from there).
+  """
+  @spec with_unique_not_loadable(module(), (-> struct())) :: [struct()]
+  def with_unique_not_loadable(module, build_issue_fn)
+      when is_atom(module) and is_function(build_issue_fn, 0) do
+    if not_loadable_warned?(module) do
+      []
+    else
+      mark_not_loadable_warned(module)
+      [build_issue_fn.()]
+    end
+  end
+
+  @doc """
   Shared scaffold for compile-dependent checks. Wraps the common pattern of:
 
     * bail out early with an `:ash_missing` diagnostic (emitted at most once
@@ -420,10 +465,10 @@ defmodule AshCredo.Introspection.Compiled do
   defp name_ancestors([]), do: []
   defp name_ancestors(segs), do: [segs | name_ancestors(Enum.drop(segs, -1))]
 
-  @doc """
-  Clears the per-module cache. Intended for tests that compile fixture
-  resources after first use of the cache.
-  """
+  # Test helper. Clears the per-module ETS cache and the persistent_term
+  # one-shot diagnostic flags so each test runs with a fresh `Compiled` state.
+  # Intentionally `@doc false` — not part of the public API surface.
+  @doc false
   @spec clear_cache() :: :ok
   def clear_cache do
     case :ets.whereis(@cache_table) do
@@ -433,6 +478,7 @@ defmodule AshCredo.Introspection.Compiled do
 
     :persistent_term.erase(@ash_available_key)
     :persistent_term.erase(@ash_missing_warned_key)
+    :persistent_term.erase(@not_loadable_warned_key)
     :ok
   end
 
