@@ -1,7 +1,7 @@
 defmodule AshCredo.Introspection do
   @moduledoc "Utilities for inspecting Ash DSL constructs in source AST."
 
-  alias AshCredo.Introspection.{Aliases, AshApi}
+  alias AshCredo.Introspection.{Aliases, AshApi, LexicalAliases}
   alias Credo.Code.Block
   alias Credo.SourceFile
 
@@ -40,7 +40,7 @@ defmodule AshCredo.Introspection do
       source_file
       |> Credo.SourceFile.ast()
       |> Macro.traverse(
-        %{stack: [], alias_stack: [[]], out: []},
+        %{stack: [], alias_frames: [[]], out: []},
         &enter_module_for_path/2,
         &leave_module_for_path/2
       )
@@ -64,32 +64,12 @@ defmodule AshCredo.Introspection do
         [] -> []
       end
 
-    absolute =
-      cond do
-        not Enum.all?(segs, &is_atom/1) ->
-          nil
-
-        is_nil(parent_absolute) ->
-          nil
-
-        parent_absolute == [] ->
-          # Top-level defmodule: Elixir applies visible aliases to the
-          # defmodule name, so `alias MyApp.Blog; defmodule Blog.Post` compiles
-          # as `MyApp.Blog.Post`. Mirror that here using the alias frames
-          # collected outside any defmodule.
-          Aliases.expand_alias(segs, current_aliases(state))
-
-        true ->
-          # Nested defmodule: Elixir ignores lexical aliases for the name and
-          # prepends the enclosing module, so `alias Foo, as: Bar; defmodule
-          # Bar.Inner` nested in `Outer` is `Outer.Bar.Inner`.
-          parent_absolute ++ segs
-      end
+    absolute = LexicalAliases.absolute_module_segments(segs, parent_absolute, state.alias_frames)
 
     new_state = %{
       state
       | stack: [absolute | state.stack],
-        alias_stack: [[] | state.alias_stack],
+        alias_frames: LexicalAliases.push_frame(state.alias_frames),
         out: [{ast, absolute} | state.out]
     }
 
@@ -105,15 +85,15 @@ defmodule AshCredo.Introspection do
     new_state = %{
       state
       | stack: [nil | state.stack],
-        alias_stack: [[] | state.alias_stack]
+        alias_frames: LexicalAliases.push_frame(state.alias_frames)
     }
 
     {ast, new_state}
   end
 
-  defp enter_module_for_path({:alias, _, _} = ast, %{alias_stack: [top | rest]} = state) do
+  defp enter_module_for_path({:alias, _, _} = ast, state) do
     entries = Aliases.alias_entries(ast)
-    {ast, %{state | alias_stack: [entries ++ top | rest]}}
+    {ast, %{state | alias_frames: LexicalAliases.put_aliases(state.alias_frames, entries)}}
   end
 
   defp enter_module_for_path(ast, state), do: {ast, state}
@@ -128,9 +108,9 @@ defmodule AshCredo.Introspection do
 
   defp leave_module_for_path(
          {:defmodule, _, _} = ast,
-         %{stack: [_ | s_rest], alias_stack: [_ | a_rest]} = state
+         %{stack: [_ | s_rest], alias_frames: alias_frames} = state
        ) do
-    {ast, %{state | stack: s_rest, alias_stack: a_rest}}
+    {ast, %{state | stack: s_rest, alias_frames: LexicalAliases.pop_frame(alias_frames)}}
   end
 
   defp leave_module_for_path({node_name, _, _} = ast, state)
@@ -141,15 +121,11 @@ defmodule AshCredo.Introspection do
   defp leave_module_for_path(ast, state), do: {ast, state}
 
   defp push_alias_frame(state) do
-    update_in(state.alias_stack, &[[] | &1])
+    update_in(state.alias_frames, &LexicalAliases.push_frame/1)
   end
 
-  defp pop_alias_frame(%{alias_stack: [_current | frames]} = state) do
-    %{state | alias_stack: frames}
-  end
-
-  defp current_aliases(%{alias_stack: frames}) do
-    Enum.concat(frames)
+  defp pop_alias_frame(%{alias_frames: frames} = state) do
+    %{state | alias_frames: LexicalAliases.pop_frame(frames)}
   end
 
   defp resource_context_with_segments(module_ast, absolute_segments) do

@@ -1,7 +1,7 @@
 defmodule AshCredo.Introspection.AshApi do
   @moduledoc false
 
-  alias AshCredo.Introspection.Aliases
+  alias AshCredo.Introspection.{Aliases, LexicalAliases}
 
   @scope_keys ~w(do else after rescue catch)a
   @lexical_scope_nodes ~w(defmodule def defp defmacro defmacrop fn if unless case cond with try receive for)a
@@ -155,24 +155,7 @@ defmodule AshCredo.Introspection.AshApi do
       end
 
     absolute =
-      cond do
-        is_nil(literal) ->
-          nil
-
-        is_nil(parent_absolute) ->
-          nil
-
-        parent_absolute == [] ->
-          # Top-level defmodule: apply any visible aliases (file-level or
-          # outer-scope `alias` entries) so `alias MyApp.Blog; defmodule
-          # Blog.Caller` resolves to `MyApp.Blog.Caller`, matching Elixir.
-          Aliases.expand_alias(literal, current_aliases(state))
-
-        true ->
-          # Nested defmodule: aliases are ignored for the name, and the
-          # enclosing module is prepended.
-          parent_absolute ++ literal
-      end
+      LexicalAliases.absolute_module_segments(literal, parent_absolute, state.alias_frames)
 
     %{state | module_stack: [absolute | state.module_stack]}
   end
@@ -214,19 +197,19 @@ defmodule AshCredo.Introspection.AshApi do
   end
 
   defp push_alias_frame(state) do
-    update_in(state.alias_frames, &[[] | &1])
+    update_in(state.alias_frames, &LexicalAliases.push_frame/1)
   end
 
-  defp pop_alias_frame(%{alias_frames: [_current | frames]} = state) do
-    %{state | alias_frames: frames}
+  defp pop_alias_frame(%{alias_frames: frames} = state) do
+    %{state | alias_frames: LexicalAliases.pop_frame(frames)}
   end
 
-  defp put_aliases(%{alias_frames: [current | frames]} = state, new_aliases) do
-    %{state | alias_frames: [new_aliases ++ current | frames]}
+  defp put_aliases(%{alias_frames: _frames} = state, new_aliases) do
+    %{state | alias_frames: LexicalAliases.put_aliases(state.alias_frames, new_aliases)}
   end
 
   defp current_aliases(%{alias_frames: frames}) do
-    Enum.concat(frames)
+    LexicalAliases.current_aliases(frames)
   end
 
   defp normalized_call_args(args, call_meta, pipe_origins) do
