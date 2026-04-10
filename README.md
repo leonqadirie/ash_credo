@@ -74,6 +74,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `EmptyDomain` | Warning | Normal | No | Flags domains with no resources registered |
 | `MissingChangeWrapper` | Warning | High | Yes | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions |
 | `MissingDomain` | Warning | Normal | No | Ensures non-embedded resources set the `domain:` option |
+| `MissingMacroRequire` | Warning | High | No | Flags qualified calls to `Ash.Query`/`Ash.Expr` macros (`filter`, `expr`, ...) when the enclosing module does not have a matching module-level `require`/`import`. Catches the runtime `UndefinedFunctionError` that slips past the compiler when the macro argument is a bare runtime value. **Requires compiled project** and **configurable**. |
 | `MissingPrimaryKey` | Warning | High | No | Ensures resources with data layers have a primary key |
 | `NoActions` | Warning | Normal | No | Flags resources with data layers but no actions defined. **Requires compiled project.** |
 | `OverlyPermissivePolicy` | Warning | High | No | Flags unscoped `authorize_if always()` policies |
@@ -101,6 +102,7 @@ They see the fully-resolved resource state - including anything Spark transforme
 - `Design.MissingPrimaryAction`
 - `Design.MissingTimestamps`
 - `Design.MissingIdentity`
+- `Warning.MissingMacroRequire`
 - `Warning.NoActions`
 - `Warning.AuthorizerWithoutPolicies`
 - `Warning.UnknownAction`
@@ -171,6 +173,7 @@ checks: %{
     {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
     {AshCredo.Check.Warning.EmptyDomain, []},
     {AshCredo.Check.Warning.MissingDomain, []},
+    {AshCredo.Check.Warning.MissingMacroRequire, []},
     {AshCredo.Check.Warning.MissingPrimaryKey, []},
     {AshCredo.Check.Warning.NoActions, []},
     {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
@@ -199,6 +202,7 @@ The following checks accept custom parameters:
 |---|---|---|---|
 | `Warning.AuthorizeFalse` | `include_non_ash_calls` | `true` | When `false`, only checks Ash API calls and action DSL definitions |
 | `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
+| `Warning.MissingMacroRequire` | `macro_modules` | `[Ash.Query, Ash.Expr]` | Modules whose qualified macro calls require a matching module-level `require`/`import`. The exact set of macros on each module is read from compiled-BEAM introspection (`module.__info__(:macros)`), so only real macros are flagged - regular functions on the same module are ignored, including on user-supplied entries |
 | `Refactor.LargeResource` | `max_lines` | `400` | Maximum line count before triggering |
 | `Refactor.UseCodeInterface` | `enforce_code_interface_in_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
 | `Refactor.UseCodeInterface` | `enforce_code_interface_outside_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
