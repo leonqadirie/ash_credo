@@ -59,9 +59,10 @@ defmodule AshCredo.Check.Refactor.DirectiveInFunctionBody do
           {AshCredo.Check.Refactor.DirectiveInFunctionBody,
            [directive_modules: [Ash.Query, Ash.Expr, MyApp.CustomMacros]]}
 
-      The check matches the exact module specified. With `[Ash.Query]`
-      configured, `require Ash.Query.Aggregation` is NOT flagged - that's
-      a different module with its own reasons to be required.
+      The check matches the exact module specified. Only modules that
+      appear literally in the list are flagged; child modules are not.
+      For example, with `[Ash.Query]` configured, `require Ash.Query`
+      is flagged but `require Ash.Query.Some.Child` is not.
 
       The default reflects the most common cases in Ash codebases (the
       `require Ash.Query` and `require Ash.Expr` repetition AI assistants
