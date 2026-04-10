@@ -191,6 +191,21 @@ checks: %{
 }
 ```
 
+### Configurable parameters
+
+The following checks accept custom parameters:
+
+| Check | Parameter | Default | Description |
+|---|---|---|---|
+| `Warning.AuthorizeFalse` | `include_non_ash_calls` | `true` | When `false`, only checks Ash API calls and action DSL definitions |
+| `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
+| `Refactor.LargeResource` | `max_lines` | `400` | Maximum line count before triggering |
+| `Refactor.UseCodeInterface` | `enforce_code_interface_in_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
+| `Refactor.UseCodeInterface` | `enforce_code_interface_outside_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
+| `Refactor.UseCodeInterface` | `prefer_interface_scope` | `:auto` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
+| `Warning.SensitiveAttributeExposed` | `sensitive_names` | `~w(password hashed_password password_hash token secret api_key private_key ssn)a` | Attribute names to flag when not marked `sensitive?: true` |
+| `Warning.SensitiveFieldInAccept` | `dangerous_fields` | `~w(is_admin admin permissions api_key secret_key)a` | Field names to flag when found in `accept` lists |
+
 ### Adapting `UseCodeInterface` to your team's conventions
 
 `UseCodeInterface` accepts three params that map to common code-interface
@@ -244,21 +259,6 @@ Setting both `enforce_*` flags to `false` effectively disables the check
 for loadable resources. In this configuration `prefer_interface_scope`
 becomes inert - no suggestion path fires, so combining Opinions A + B + C
 is observationally identical to A + C alone.
-
-### Configurable parameters
-
-The following checks accept custom parameters:
-
-| Check | Parameter | Default | Description |
-|---|---|---|---|
-| `Warning.AuthorizeFalse` | `include_non_ash_calls` | `true` | When `false`, only checks Ash API calls and action DSL definitions |
-| `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
-| `Refactor.LargeResource` | `max_lines` | `400` | Maximum line count before triggering |
-| `Refactor.UseCodeInterface` | `enforce_code_interface_in_domain` | `true` | When `false`, leaves callers that share a domain with the resource alone (useful when raw `Ash.*` calls inside `Change`/`Preparation`/`Validation` modules are considered acceptable) |
-| `Refactor.UseCodeInterface` | `enforce_code_interface_outside_domain` | `true` | When `false`, silences every case where the caller is not confirmed to be in the resource's domain (different known domain, plain caller, `Ash.Resource` without a `:domain`, `:not_loadable` resource) |
-| `Refactor.UseCodeInterface` | `prefer_interface_scope` | `:auto` | Overrides which interface is suggested. `:auto` follows the in-domain/outside-domain heuristic. `:resource` always suggests a resource-level interface. `:domain` always suggests a domain-level interface |
-| `Warning.SensitiveAttributeExposed` | `sensitive_names` | `~w(password hashed_password password_hash token secret api_key private_key ssn)a` | Attribute names to flag when not marked `sensitive?: true` |
-| `Warning.SensitiveFieldInAccept` | `dangerous_fields` | `~w(is_admin admin permissions api_key secret_key)a` | Field names to flag when found in `accept` lists |
 
 ## Contributing
 
