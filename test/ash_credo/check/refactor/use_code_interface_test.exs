@@ -283,40 +283,6 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
     end
   end
 
-  # ── Unknown action detection ───────────────────────────────────────────────
-
-  describe "unknown action" do
-    test "emits an unknown-action issue with a jaro-distance suggestion" do
-      source = """
-      defmodule AshCredoFixtures.Blog do
-        def list do
-          Ash.read!(AshCredoFixtures.Blog.Post, action: :publishd)
-        end
-      end
-      """
-
-      assert [issue] = run_check(UseCodeInterface, source)
-      assert issue.message =~ "Unknown action"
-      assert issue.message =~ ":publishd"
-      assert issue.message =~ "Did you mean"
-      assert issue.message =~ ":published"
-    end
-
-    test "omits the hint when no close match exists" do
-      source = """
-      defmodule AshCredoFixtures.Blog do
-        def list do
-          Ash.read!(AshCredoFixtures.Blog.Post, action: :xyzzyqqq)
-        end
-      end
-      """
-
-      assert [issue] = run_check(UseCodeInterface, source)
-      assert issue.message =~ "Unknown action"
-      refute issue.message =~ "Did you mean"
-    end
-  end
-
   # ── Builder calls ──────────────────────────────────────────────────────────
 
   describe "builder calls" do
@@ -618,7 +584,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
                )
     end
 
-    test "false still emits unknown-action issues on in-domain callers" do
+    test "false silently ignores in-domain unknown-action calls (owned by UnknownAction)" do
       source = """
       defmodule AshCredoFixtures.Blog do
         def list do
@@ -627,11 +593,11 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       end
       """
 
-      assert [issue] =
+      # `UseCodeInterface` no longer emits unknown-action issues; the
+      # `Warning.UnknownAction` check owns that diagnostic. With the
+      # in-domain enforcement off, this call site is silent here.
+      assert [] =
                run_check(UseCodeInterface, source, enforce_code_interface_in_domain: false)
-
-      assert issue.message =~ "Unknown action"
-      assert issue.message =~ ":publishd"
     end
 
     test "false does not suppress the :not_loadable config error" do
@@ -835,7 +801,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
                run_check(UseCodeInterface, source, enforce_code_interface_outside_domain: false)
     end
 
-    test "false still emits unknown-action issues on outside callers" do
+    test "false silently ignores outside-domain unknown-action calls (owned by UnknownAction)" do
       source = """
       defmodule AshCredoFixtures.Accounts do
         def list do
@@ -844,10 +810,11 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       end
       """
 
-      assert [issue] =
+      # `UseCodeInterface` no longer emits unknown-action issues; the
+      # `Warning.UnknownAction` check owns that diagnostic. With the
+      # outside-domain enforcement off, this call site is silent here.
+      assert [] =
                run_check(UseCodeInterface, source, enforce_code_interface_outside_domain: false)
-
-      assert issue.message =~ "Unknown action"
     end
   end
 

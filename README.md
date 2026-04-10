@@ -78,6 +78,7 @@ mix credo
 | `PinnedTimeInExpression` | Warning | High | No | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
 | `SensitiveAttributeExposed` | Warning | High | No | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
 | `SensitiveFieldInAccept` | Warning | High | No | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
+| `UnknownAction` | Warning | High | No | Flags `Ash.*` calls referencing actions that do not exist on the resolved resource, with a fuzzy `Did you mean` hint. **Requires compiled project.** |
 | `WildcardAcceptOnAction` | Warning | High | No | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
 | `MissingCodeInterface` | Design | Low | No | Flags each action that has no code interface (resource- or domain-level). **Requires compiled project.** |
 | `MissingIdentity` | Design | Normal | No | Suggests identities for attributes like `email`, `username`, `slug`. **Requires compiled project.** |
@@ -86,11 +87,11 @@ mix credo
 | `ActionMissingDescription` | Readability | Low | No | Flags actions without a `description` |
 | `BelongsToMissingAllowNil` | Readability | Normal | No | Flags `belongs_to` without explicit `allow_nil?` |
 | `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |
-| `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals - names the exact code interface function to call instead. **Requires compiled project** and **configurable** (see below). |
+| `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals - names the exact code interface function to call instead. **Requires compiled project** and **configurable** (see below). Pair with `Warning.UnknownAction` for typo detection. |
 
 ## Checks that require a compiled project
 
-Seven checks read Ash's runtime introspection (`Ash.Resource.Info`, `Ash.Domain.Info`, and `Ash.Policy.Info`) rather than source AST.
+Eight checks read Ash's runtime introspection (`Ash.Resource.Info`, `Ash.Domain.Info`, and `Ash.Policy.Info`) rather than source AST.
 They see the fully-resolved resource state - including anything Spark transformers or extensions contribute - and catch bugs that pure AST scanning would miss (e.g. identities on AshAuthentication-injected `:email` attributes, fragment-spliced actions, extension-added authorizers).
 
 - `Refactor.UseCodeInterface`
@@ -100,6 +101,7 @@ They see the fully-resolved resource state - including anything Spark transforme
 - `Design.MissingIdentity`
 - `Warning.NoActions`
 - `Warning.AuthorizerWithoutPolicies`
+- `Warning.UnknownAction`
 
 **Your project must be compiled before running `mix credo`**, otherwise these checks emit a configuration diagnostic and become a no-op.
 Typically chain the two commands in a Mix alias:
@@ -113,7 +115,7 @@ defp aliases do
 end
 ```
 
-If a referenced resource cannot be loaded, the check emits a per-call-site "could not load" issue pointing at the resource. If Ash itself is not available in the VM running Credo (why are you using `ash_credo` without depending on Ash?), all seven checks emit a single shared diagnostic and become no-ops. You can disable any of them in `.credo.exs` if your workflow can't run `mix compile` beforehand.
+If a referenced resource cannot be loaded, the check emits a per-call-site "could not load" issue pointing at the resource. If Ash itself is not available in the VM running Credo (why are you using `ash_credo` without depending on Ash?), all eight checks emit a single shared diagnostic and become no-ops. You can disable any of them in `.credo.exs` if your workflow can't run `mix compile` beforehand.
 
 ### Caching and long-lived VMs
 
@@ -176,12 +178,9 @@ points at. They compose freely.
   domain-level function.
 
 Setting both `enforce_*` flags to `false` effectively disables the check
-for loadable resources, leaving only unknown-action diagnostics. In this
-configuration `prefer_interface_scope` becomes inert - no suggestion path
-fires, so combining Opinions A + B + C is observationally identical to
-A + C alone. Unknown-action issues (e.g. `Ash.read!(Post, action: :publishd)`)
-are always emitted when the resource loads - disable the whole check in
-`.credo.exs` to silence them.
+for loadable resources. In this configuration `prefer_interface_scope`
+becomes inert - no suggestion path fires, so combining Opinions A + B + C
+is observationally identical to A + C alone.
 
 ## Configuration
 
@@ -230,6 +229,7 @@ checks: %{
     {AshCredo.Check.Warning.PinnedTimeInExpression, []},
     {AshCredo.Check.Warning.SensitiveAttributeExposed, []},
     {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
+    {AshCredo.Check.Warning.UnknownAction, []},
     {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
     {AshCredo.Check.Design.MissingCodeInterface, []},
     {AshCredo.Check.Design.MissingIdentity, []},

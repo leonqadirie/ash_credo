@@ -1,7 +1,7 @@
 defmodule AshCredo.Introspection.LexicalAliases do
   @moduledoc """
   Shared helpers for the parts of Elixir's lexical alias behavior that
-  `AshCredo.Introspection` and `AshCredo.Introspection.AshApi` both need.
+  `AshCredo.Introspection` and `AshCredo.Introspection.AshCallScanner` both need.
 
   This module does not attempt to model the full lexical environment. It only
   tracks alias frames and resolves literal `defmodule` names into absolute

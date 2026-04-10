@@ -36,6 +36,7 @@ defmodule AshCredo do
             {AshCredo.Check.Warning.PinnedTimeInExpression, false},
             {AshCredo.Check.Warning.SensitiveAttributeExposed, false},
             {AshCredo.Check.Warning.SensitiveFieldInAccept, false},
+            {AshCredo.Check.Warning.UnknownAction, false},
             {AshCredo.Check.Warning.WildcardAcceptOnAction, false},
             # Design
             {AshCredo.Check.Design.MissingCodeInterface, false},

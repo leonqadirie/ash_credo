@@ -4,7 +4,7 @@ defmodule AshCredo.Introspection.Compiled do
   `Ash.Resource.Info` and `Ash.Domain.Info`.
 
   Sibling of `AshCredo.Introspection` (AST-level) and
-  `AshCredo.Introspection.AshApi` (AST-level Ash call discovery). This is
+  `AshCredo.Introspection.AshCallScanner` (AST-level Ash call discovery). This is
   the module that reaches for the compiled artifact: it loads target
   modules on demand, reads their DSL metadata through Ash's own
   introspection API, and caches the results per-module in `:persistent_term`
