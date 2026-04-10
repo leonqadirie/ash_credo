@@ -35,7 +35,7 @@ defmodule AshCredo.Introspection.LexicalAliases do
   Adds alias entries to the current lexical frame.
 
   Alias entries use the `{alias_segments, target_segments}` shape returned by
-  `AshCredo.Introspection.Aliases.alias_entries/1`.
+  AshCredo.Introspection.Aliases.alias_entries/1 (internal helper).
   """
   def put_aliases([current | frames], new_aliases) when is_list(new_aliases) do
     [new_aliases ++ current | frames]
