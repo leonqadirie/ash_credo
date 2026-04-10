@@ -6,7 +6,7 @@
 
 Unofficial static code analysis checks for the [Ash Framework](https://ash-hq.org), built as a [Credo](https://github.com/rrrene/credo) plugin.
 
-AshCredo detects common anti-patterns, security pitfalls, and missing best practices in your Ash resources and domains by analysing unexpanded source AST.
+AshCredo detects common anti-patterns, security pitfalls, and missing best practices in your Ash resources and domains. Some checks analyse unexpanded source AST; others read Ash's runtime introspection to see the fully-resolved DSL state, including anything Spark transformers and extensions contribute.
 
 > [!WARNING]
 > This project is experimental and might break frequently.
@@ -63,6 +63,8 @@ mix deps.get
 mix credo
 ```
 
+If you have any compiled-introspection checks enabled, run `mix compile` before `mix credo` - typically via a Mix alias like `lint: ["compile", "credo --strict"]`. See [Checks that require a compiled project](#checks-that-require-a-compiled-project) for the full list and the rationale.
+
 ## Checks
 
 | Check | Category | Priority | Default | Description |
@@ -91,7 +93,7 @@ mix credo
 
 ## Checks that require a compiled project
 
-Eight checks read Ash's runtime introspection (`Ash.Resource.Info`, `Ash.Domain.Info`, and `Ash.Policy.Info`) rather than source AST.
+Several checks read Ash's runtime introspection (`Ash.Resource.Info`, `Ash.Domain.Info`, and `Ash.Policy.Info`) rather than source AST.
 They see the fully-resolved resource state - including anything Spark transformers or extensions contribute - and catch bugs that pure AST scanning would miss (e.g. identities on AshAuthentication-injected `:email` attributes, fragment-spliced actions, extension-added authorizers).
 
 - `Refactor.UseCodeInterface`
@@ -115,7 +117,7 @@ defp aliases do
 end
 ```
 
-If a referenced resource cannot be loaded, the check emits a per-call-site "could not load" issue pointing at the resource. If Ash itself is not available in the VM running Credo (why are you using `ash_credo` without depending on Ash?), all eight checks emit a single shared diagnostic and become no-ops. You can disable any of them in `.credo.exs` if your workflow can't run `mix compile` beforehand.
+If a referenced resource cannot be loaded, the check emits a per-call-site "could not load" issue pointing at the resource. If Ash itself is not available in the VM running Credo (why are you using `ash_credo` without depending on Ash?), these checks emit a single shared diagnostic and become no-ops. You can disable any of them in `.credo.exs` if your workflow can't run `mix compile` beforehand.
 
 ### Caching and long-lived VMs
 
@@ -127,6 +129,82 @@ This has ramifications for setups that reuse a single BEAM across multiple Credo
 - **Long-running `iex -S mix` sessions that invoke Credo repeatedly, file-watchers, custom Mix tasks that call Credo in-process** - the cache persists across runs in the same VM. After you edit a resource and recompile, the code reload refreshes the modules themselves, but the cached introspection snapshots under the old module versions remain in `:persistent_term` until the VM exits. Compiled checks may then report on stale DSL state (missing an action you just added, flagging an identity you just introduced, etc.).
 
 If you hit stale results in a long-lived VM, restart it or run `AshCredo.Introspection.Compiled.clear_cache/0`.
+
+## Configuration
+
+Enable additional checks by adding them to the `extra` section of your `.credo.exs`:
+
+```elixir
+%{
+  configs: [
+    %{
+      name: "default",
+      plugins: [{AshCredo, []}],
+      checks: %{
+        extra: [
+          # Enable checks
+          {AshCredo.Check.Warning.AuthorizeFalse, []},
+          {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
+          {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
+
+          # Enable with custom parameters
+          {AshCredo.Check.Refactor.LargeResource, [max_lines: 250]},
+          {AshCredo.Check.Warning.SensitiveAttributeExposed, [
+            sensitive_names: ~w(password token secret api_key)a
+          ]},
+          {AshCredo.Check.Design.MissingIdentity, [
+            identity_candidates: ~w(email username slug)a
+          ]}
+        ]
+      }
+    }
+  ]
+}
+```
+
+To enable **all** checks at once (`Warning.MissingChangeWrapper` is already on by default and does not need an entry):
+
+```elixir
+checks: %{
+  extra: [
+    {AshCredo.Check.Warning.AuthorizeFalse, []},
+    {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
+    {AshCredo.Check.Warning.EmptyDomain, []},
+    {AshCredo.Check.Warning.MissingDomain, []},
+    {AshCredo.Check.Warning.MissingPrimaryKey, []},
+    {AshCredo.Check.Warning.NoActions, []},
+    {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
+    {AshCredo.Check.Warning.PinnedTimeInExpression, []},
+    {AshCredo.Check.Warning.SensitiveAttributeExposed, []},
+    {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
+    {AshCredo.Check.Warning.UnknownAction, []},
+    {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
+    {AshCredo.Check.Design.MissingCodeInterface, []},
+    {AshCredo.Check.Design.MissingIdentity, []},
+    {AshCredo.Check.Design.MissingPrimaryAction, []},
+    {AshCredo.Check.Design.MissingTimestamps, []},
+    {AshCredo.Check.Readability.ActionMissingDescription, []},
+    {AshCredo.Check.Readability.BelongsToMissingAllowNil, []},
+    {AshCredo.Check.Refactor.LargeResource, []},
+    {AshCredo.Check.Refactor.UseCodeInterface, []}
+  ]
+}
+```
+
+### Configurable parameters
+
+The following checks accept custom parameters:
+
+| Check | Parameter | Default | Description |
+|---|---|---|---|
+| `Warning.AuthorizeFalse` | `include_non_ash_calls` | `true` | When `false`, only checks Ash API calls and action DSL definitions |
+| `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
+| `Refactor.LargeResource` | `max_lines` | `400` | Maximum line count before triggering |
+| `Refactor.UseCodeInterface` | `enforce_code_interface_in_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
+| `Refactor.UseCodeInterface` | `enforce_code_interface_outside_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
+| `Refactor.UseCodeInterface` | `prefer_interface_scope` | `:auto` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
+| `Warning.SensitiveAttributeExposed` | `sensitive_names` | `~w(password hashed_password password_hash token secret api_key private_key ssn)a` | Attribute names to flag when not marked `sensitive?: true` |
+| `Warning.SensitiveFieldInAccept` | `dangerous_fields` | `~w(is_admin admin permissions api_key secret_key)a` | Field names to flag when found in `accept` lists |
 
 ### Adapting `UseCodeInterface` to your team's conventions
 
@@ -181,82 +259,6 @@ Setting both `enforce_*` flags to `false` effectively disables the check
 for loadable resources. In this configuration `prefer_interface_scope`
 becomes inert - no suggestion path fires, so combining Opinions A + B + C
 is observationally identical to A + C alone.
-
-## Configuration
-
-**Only `MissingChangeWrapper` is enabled by default.** Enable additional checks by adding them to the `extra` section of your `.credo.exs`:
-
-```elixir
-%{
-  configs: [
-    %{
-      name: "default",
-      plugins: [{AshCredo, []}],
-      checks: %{
-        extra: [
-          # Enable checks
-          {AshCredo.Check.Warning.AuthorizeFalse, []},
-          {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
-          {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
-
-          # Enable with custom parameters
-          {AshCredo.Check.Refactor.LargeResource, [max_lines: 250]},
-          {AshCredo.Check.Warning.SensitiveAttributeExposed, [
-            sensitive_names: ~w(password token secret api_key)a
-          ]},
-          {AshCredo.Check.Design.MissingIdentity, [
-            identity_candidates: ~w(email username slug)a
-          ]}
-        ]
-      }
-    }
-  ]
-}
-```
-
-To enable **all** checks at once:
-
-```elixir
-checks: %{
-  extra: [
-    {AshCredo.Check.Warning.AuthorizeFalse, []},
-    {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
-    {AshCredo.Check.Warning.EmptyDomain, []},
-    {AshCredo.Check.Warning.MissingDomain, []},
-    {AshCredo.Check.Warning.MissingPrimaryKey, []},
-    {AshCredo.Check.Warning.NoActions, []},
-    {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
-    {AshCredo.Check.Warning.PinnedTimeInExpression, []},
-    {AshCredo.Check.Warning.SensitiveAttributeExposed, []},
-    {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
-    {AshCredo.Check.Warning.UnknownAction, []},
-    {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
-    {AshCredo.Check.Design.MissingCodeInterface, []},
-    {AshCredo.Check.Design.MissingIdentity, []},
-    {AshCredo.Check.Design.MissingPrimaryAction, []},
-    {AshCredo.Check.Design.MissingTimestamps, []},
-    {AshCredo.Check.Readability.ActionMissingDescription, []},
-    {AshCredo.Check.Readability.BelongsToMissingAllowNil, []},
-    {AshCredo.Check.Refactor.LargeResource, []},
-    {AshCredo.Check.Refactor.UseCodeInterface, []}
-  ]
-}
-```
-
-### Configurable parameters
-
-The following checks accept custom parameters:
-
-| Check | Parameter | Default | Description |
-|---|---|---|---|
-| `Warning.AuthorizeFalse` | `include_non_ash_calls` | `true` | When `false`, only checks Ash API calls and action DSL definitions |
-| `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
-| `Refactor.LargeResource` | `max_lines` | `400` | Maximum line count before triggering |
-| `Refactor.UseCodeInterface` | `enforce_code_interface_in_domain` | `true` | When `false`, leaves callers that share a domain with the resource alone (useful when raw `Ash.*` calls inside `Change`/`Preparation`/`Validation` modules are considered acceptable) |
-| `Refactor.UseCodeInterface` | `enforce_code_interface_outside_domain` | `true` | When `false`, silences every case where the caller is not confirmed to be in the resource's domain (different known domain, plain caller, `Ash.Resource` without a `:domain`, `:not_loadable` resource) |
-| `Refactor.UseCodeInterface` | `prefer_interface_scope` | `:auto` | Overrides which interface is suggested. `:auto` follows the in-domain/outside-domain heuristic. `:resource` always suggests a resource-level interface. `:domain` always suggests a domain-level interface |
-| `Warning.SensitiveAttributeExposed` | `sensitive_names` | `~w(password hashed_password password_hash token secret api_key private_key ssn)a` | Attribute names to flag when not marked `sensitive?: true` |
-| `Warning.SensitiveFieldInAccept` | `dangerous_fields` | `~w(is_admin admin permissions api_key secret_key)a` | Field names to flag when found in `accept` lists |
 
 ## Contributing
 
