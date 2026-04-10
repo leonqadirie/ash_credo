@@ -6,7 +6,7 @@
 
 Unofficial static code analysis checks for the [Ash Framework](https://ash-hq.org), built as a [Credo](https://github.com/rrrene/credo) plugin.
 
-AshCredo detects common anti-patterns, security pitfalls, and missing best practices in your Ash resources and domains by analysing unexpanded source AST.
+AshCredo detects common anti-patterns, security pitfalls, and missing best practices in your Ash resources and domains. Some checks analyse unexpanded source AST; others read Ash's runtime introspection to see the fully-resolved DSL state, including anything Spark transformers and extensions contribute.
 
 > [!WARNING]
 > This project is experimental and might break frequently.
