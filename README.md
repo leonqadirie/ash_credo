@@ -83,6 +83,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `SensitiveFieldInAccept` | Warning | High | No | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
 | `UnknownAction` | Warning | High | No | Flags `Ash.*` calls referencing actions that do not exist on the resolved resource, with a fuzzy `Did you mean` hint. **Requires compiled project.** |
 | `WildcardAcceptOnAction` | Warning | High | No | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
+| `DirectiveInFunctionBody` | Refactor | Normal | No | Flags `require`/`import`/`alias` of configured modules (default `Ash.Query`, `Ash.Expr`) declared inside function bodies instead of at module level |
 | `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |
 | `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals - names the exact code interface function to call instead. **Requires compiled project** and **configurable** (see below). Pair with `Warning.UnknownAction` for typo detection. |
 | `MissingCodeInterface` | Design | Low | No | Flags each action that has no code interface (resource- or domain-level). **Requires compiled project.** |
@@ -181,6 +182,7 @@ checks: %{
     {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
     {AshCredo.Check.Warning.UnknownAction, []},
     {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
+    {AshCredo.Check.Refactor.DirectiveInFunctionBody, []},
     {AshCredo.Check.Refactor.LargeResource, []},
     {AshCredo.Check.Refactor.UseCodeInterface, []},
     {AshCredo.Check.Design.MissingCodeInterface, []},
@@ -203,6 +205,7 @@ The following checks accept custom parameters:
 | `Warning.MissingMacroDirective` | `macro_modules` | `[Ash.Query, Ash.Expr]` | Modules whose qualified macro calls the check validates. Macros are read from `module.__info__(:macros)`, so only real macros are flagged |
 | `Warning.SensitiveAttributeExposed` | `sensitive_names` | `~w(password hashed_password password_hash token secret api_key private_key ssn)a` | Attribute names to flag when not marked `sensitive?: true` |
 | `Warning.SensitiveFieldInAccept` | `dangerous_fields` | `~w(is_admin admin permissions api_key secret_key)a` | Field names to flag when found in `accept` lists |
+| `Refactor.DirectiveInFunctionBody` | `directive_modules` | `[Ash.Query, Ash.Expr]` | List of modules whose `require`/`import`/`alias` must live at module level. Add any other macro module your team treats the same way |
 | `Refactor.LargeResource` | `max_lines` | `400` | Maximum line count before triggering |
 | `Refactor.UseCodeInterface` | `enforce_code_interface_in_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
 | `Refactor.UseCodeInterface` | `enforce_code_interface_outside_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
