@@ -31,7 +31,7 @@ defmodule AshCredoTest do
   @compiled_annotation "**Requires compiled project"
 
   # Discovers all check modules from the filesystem. Returns a sorted list of
-  # `{category_module, check_module_name, file_path}` tuples — e.g.
+  # `{category_module, check_module_name, file_path}` tuples - e.g.
   # `{"Warning", "NoActions", "lib/ash_credo/check/warning/no_actions.ex"}`.
   defp discover_check_modules do
     Path.wildcard("#{@check_dir}/**/*.ex")
@@ -237,7 +237,7 @@ defmodule AshCredoTest do
       readme_content = File.read!(@readme_file)
 
       # Extract rows like: | `Warning.AuthorizeFalse` | `include_non_ash_calls` | ...
-      # Only matches the configurable-params table — rows in the main checks
+      # Only matches the configurable-params table - rows in the main checks
       # table have no dot in the first backticked column.
       readme_param_rows =
         Regex.scan(~r/\| `(\w+)\.(\w+)` \| `(\w+)` \|/, readme_content)
