@@ -115,6 +115,17 @@ end
 
 If a referenced resource cannot be loaded, the check emits a per-call-site "could not load" issue pointing at the resource. If Ash itself is not available in the VM running Credo (why are you using `ash_credo` without depending on Ash?), all seven checks emit a single shared diagnostic and become no-ops. You can disable any of them in `.credo.exs` if your workflow can't run `mix compile` beforehand.
 
+### Caching and long-lived VMs
+
+Compiled checks cache introspection results (per-module facts, per-domain resource references, and the `ash_available?` probe) in Erlang's `:persistent_term`. This keeps a single `mix credo` run cheap - Credo dispatches each check × file pair into its own short-lived task, and `:persistent_term` is the only process-independent store that survives that task churn without the ETS ownership problem.
+
+This has ramifications for setups that reuse a single BEAM across multiple Credo invocations:
+
+- **`mix credo` from the shell** - each invocation boots a fresh VM, so the cache is always empty at the start. No action needed.
+- **Long-running `iex -S mix` sessions that invoke Credo repeatedly, file-watchers, custom Mix tasks that call Credo in-process** - the cache persists across runs in the same VM. After you edit a resource and recompile, the code reload refreshes the modules themselves, but the cached introspection snapshots under the old module versions remain in `:persistent_term` until the VM exits. Compiled checks may then report on stale DSL state (missing an action you just added, flagging an identity you just introduced, etc.).
+
+If you hit stale results in a long-lived VM, restart it or run `AshCredo.Introspection.Compiled.clear_cache/0`.
+
 ### Adapting `UseCodeInterface` to your team's conventions
 
 `UseCodeInterface` accepts three params that map to common code-interface

@@ -504,10 +504,22 @@ defmodule AshCredo.Introspection.Compiled do
   defp name_ancestors([]), do: []
   defp name_ancestors(segs), do: [segs | name_ancestors(Enum.drop(segs, -1))]
 
-  # Test helper. Clears the per-module and per-domain persistent_term cache
-  # entries and the one-shot diagnostic flags so each test runs with a fresh
-  # `Compiled` state. Intentionally `@doc false` - not part of the public API.
-  @doc false
+  @doc """
+  Clears every `:persistent_term` entry this module owns: the per-module
+  introspection cache, the per-domain resource-reference cache, the
+  `ash_available?` probe result, and the one-shot `:ash_missing` /
+  `:not_loadable` diagnostic flags.
+
+  Intended for setups where Credo runs repeatedly inside a long-lived BEAM.
+  In those environments the cache survives across runs and can serve stale
+  DSL snapshots after you edit and recompile a resource.
+  Call this between runs - or wire it into your before-save /
+  after-compile hook - to force the next `mix credo` run to
+  re-read introspection from freshly compiled modules.
+
+  Not needed for plain `mix credo` invocations from the shell: each one
+  boots a fresh VM and starts with an empty cache.
+  """
   @spec clear_cache() :: :ok
   def clear_cache do
     for {key, _value} <- :persistent_term.get(),
