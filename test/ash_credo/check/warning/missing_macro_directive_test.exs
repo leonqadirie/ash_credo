@@ -1,7 +1,7 @@
-defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
+defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
   use AshCredo.CheckCase
 
-  alias AshCredo.Check.Warning.MissingMacroRequire
+  alias AshCredo.Check.Warning.MissingMacroDirective
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   setup do
@@ -21,7 +21,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [issue] = run_check(MissingMacroRequire, source)
+      assert [issue] = run_check(MissingMacroDirective, source)
       assert issue.trigger == "Ash.Query.filter"
       assert issue.message =~ "require Ash.Query"
       assert issue.line_no == 4
@@ -40,7 +40,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [] = run_check(MissingMacroRequire, source)
+      assert [] = run_check(MissingMacroDirective, source)
     end
 
     test "no issue when import Ash.Query is at module top level" do
@@ -54,7 +54,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [] = run_check(MissingMacroRequire, source)
+      assert [] = run_check(MissingMacroDirective, source)
     end
 
     test "import with :only still satisfies the check" do
@@ -68,7 +68,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [] = run_check(MissingMacroRequire, source)
+      assert [] = run_check(MissingMacroDirective, source)
     end
 
     test "require inside the same function body is NOT accepted (module-level-only rule)" do
@@ -81,7 +81,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [issue] = run_check(MissingMacroRequire, source)
+      assert [issue] = run_check(MissingMacroDirective, source)
       assert issue.trigger == "Ash.Query.filter"
       assert issue.line_no == 4
     end
@@ -100,7 +100,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [issue] = run_check(MissingMacroRequire, source)
+      assert [issue] = run_check(MissingMacroDirective, source)
       assert issue.line_no == 8
     end
 
@@ -117,7 +117,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      issues = run_check(MissingMacroRequire, source)
+      issues = run_check(MissingMacroDirective, source)
       triggers = issues |> Enum.map(& &1.trigger) |> Enum.sort()
 
       assert triggers == [
@@ -138,7 +138,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [] = run_check(MissingMacroRequire, source)
+      assert [] = run_check(MissingMacroDirective, source)
     end
 
     test "multiple offending call sites emit one issue each with correct line numbers" do
@@ -154,7 +154,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [first, second] = run_check(MissingMacroRequire, source)
+      assert [first, second] = run_check(MissingMacroDirective, source)
       assert first.line_no == 3
       assert second.line_no == 7
       assert Enum.all?([first, second], &(&1.trigger == "Ash.Query.filter"))
@@ -169,7 +169,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [issue] = run_check(MissingMacroRequire, source)
+      assert [issue] = run_check(MissingMacroDirective, source)
       assert issue.trigger == "Ash.Expr.expr"
       assert issue.message =~ "require Ash.Expr"
     end
@@ -183,7 +183,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      issues = run_check(MissingMacroRequire, source)
+      issues = run_check(MissingMacroDirective, source)
       triggers = issues |> Enum.map(& &1.trigger) |> Enum.sort()
       assert triggers == ["Ash.Expr.calc", "Ash.Expr.or_where", "Ash.Expr.where"]
     end
@@ -199,7 +199,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [issue] = run_check(MissingMacroRequire, source)
+      assert [issue] = run_check(MissingMacroDirective, source)
       assert issue.trigger == "Ash.Query.filter"
     end
 
@@ -216,7 +216,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [issue] = run_check(MissingMacroRequire, source)
+      assert [issue] = run_check(MissingMacroDirective, source)
       assert issue.trigger == "Ash.Expr.expr"
     end
 
@@ -234,7 +234,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [] = run_check(MissingMacroRequire, source)
+      assert [] = run_check(MissingMacroDirective, source)
     end
   end
 
@@ -250,7 +250,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [issue] = run_check(MissingMacroRequire, source)
+      assert [issue] = run_check(MissingMacroDirective, source)
       assert issue.trigger == "Ash.Query.filter"
       assert issue.line_no == 5
     end
@@ -265,7 +265,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [] = run_check(MissingMacroRequire, source)
+      assert [] = run_check(MissingMacroDirective, source)
     end
 
     test "outer module call is not misattributed to inner module" do
@@ -279,7 +279,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [issue] = run_check(MissingMacroRequire, source)
+      assert [issue] = run_check(MissingMacroDirective, source)
       assert issue.line_no == 6
     end
 
@@ -294,7 +294,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [] = run_check(MissingMacroRequire, source)
+      assert [] = run_check(MissingMacroDirective, source)
     end
 
     test "call inside a resource DSL callback (fn inside change) is flagged when module-level require missing" do
@@ -316,7 +316,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [issue] = run_check(MissingMacroRequire, source)
+      assert [issue] = run_check(MissingMacroDirective, source)
       assert issue.trigger == "Ash.Query.filter"
     end
 
@@ -337,7 +337,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [] = run_check(MissingMacroRequire, source)
+      assert [] = run_check(MissingMacroDirective, source)
     end
   end
 
@@ -358,7 +358,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       """
 
       issues =
-        run_check(MissingMacroRequire, source,
+        run_check(MissingMacroDirective, source,
           macro_modules: [AshCredoFixtures.FakeMacros]
         )
 
@@ -379,7 +379,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       """
 
       assert [] =
-               run_check(MissingMacroRequire, source,
+               run_check(MissingMacroDirective, source,
                  macro_modules: [AshCredoFixtures.FakeMacros]
                )
     end
@@ -391,7 +391,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       end
       """
 
-      assert [] = run_check(MissingMacroRequire, source, macro_modules: [Ash.Query])
+      assert [] = run_check(MissingMacroDirective, source, macro_modules: [Ash.Query])
     end
   end
 
@@ -405,7 +405,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequireTest do
       """
 
       issues =
-        run_check(MissingMacroRequire, source,
+        run_check(MissingMacroDirective, source,
           macro_modules: [Totally.Fake.Macros, Ash.Query]
         )
 

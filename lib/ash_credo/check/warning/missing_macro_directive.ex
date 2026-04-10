@@ -1,4 +1,4 @@
-defmodule AshCredo.Check.Warning.MissingMacroRequire do
+defmodule AshCredo.Check.Warning.MissingMacroDirective do
   use Credo.Check,
     base_priority: :high,
     category: :warning,
@@ -115,7 +115,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequire do
       `macro_modules` defaults to `[Ash.Query, Ash.Expr]`. Extend the list
       with additional macro modules your team uses:
 
-          {AshCredo.Check.Warning.MissingMacroRequire,
+          {AshCredo.Check.Warning.MissingMacroDirective,
            [macro_modules: [Ash.Query, Ash.Expr, MyApp.QueryMacros]]}
       """,
       params: [
@@ -141,7 +141,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequire do
       fn ->
         format_issue(issue_meta,
           message:
-            "Ash is not loaded in the VM running Credo - `MissingMacroRequire` " <>
+            "Ash is not loaded in the VM running Credo - `MissingMacroDirective` " <>
               "is a no-op. Add `:ash` as a dependency, or disable this check " <>
               "in `.credo.exs`.",
           line_no: 1
@@ -344,7 +344,7 @@ defmodule AshCredo.Check.Warning.MissingMacroRequire do
   defp not_loadable_issue(module, issue_meta) do
     format_issue(issue_meta,
       message:
-        "Could not load `#{inspect(module)}` for `MissingMacroRequire`. " <>
+        "Could not load `#{inspect(module)}` for `MissingMacroDirective`. " <>
           "Run `mix compile` before `mix credo`, remove it from " <>
           "`macro_modules`, or disable this check in `.credo.exs`.",
       line_no: 1

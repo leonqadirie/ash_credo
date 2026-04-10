@@ -271,7 +271,7 @@ end
 defmodule AshCredoFixtures.FakeMacros do
   @moduledoc """
   Plain (non-Ash) fixture module with a mix of real macros and regular
-  functions. Used by `Warning.MissingMacroRequire` tests to verify that
+  functions. Used by `Warning.MissingMacroDirective` tests to verify that
   user-supplied entries in `macro_modules` are introspected via
   `module.__info__(:macros)` and only their macros are flagged - not their
   regular functions.

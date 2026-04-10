@@ -241,7 +241,7 @@ defmodule AshCredo.Introspection.Compiled do
   ask "which functions on this module are macros?" without hardcoding a list
   that drifts from reality when upstream adds or renames macros.
 
-  Used by `Warning.MissingMacroRequire` to resolve its configured
+  Used by `Warning.MissingMacroDirective` to resolve its configured
   `macro_modules` list to exact macro sets per module.
   """
   @spec macros(module()) :: {:ok, MapSet.t(atom())} | {:error, :not_loadable}
