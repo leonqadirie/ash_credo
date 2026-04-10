@@ -63,7 +63,7 @@ mix deps.get
 mix credo
 ```
 
-Several checks read Ash's runtime introspection (compiled BEAM metadata, not source AST) and require the project to be compiled first. If you have any of those enabled, run `mix compile` before `mix credo` - typically via a Mix alias like `lint: ["compile", "credo --strict"]`. See [Checks that require a compiled project](#checks-that-require-a-compiled-project) for the full list and the rationale.
+If you have any compiled-introspection checks enabled, run `mix compile` before `mix credo` - typically via a Mix alias like `lint: ["compile", "credo --strict"]`. See [Checks that require a compiled project](#checks-that-require-a-compiled-project) for the full list and the rationale.
 
 ## Checks
 
@@ -132,7 +132,7 @@ If you hit stale results in a long-lived VM, restart it or run `AshCredo.Introsp
 
 ## Configuration
 
-**Only `MissingChangeWrapper` is enabled by default.** Enable additional checks by adding them to the `extra` section of your `.credo.exs`:
+Enable additional checks by adding them to the `extra` section of your `.credo.exs`:
 
 ```elixir
 %{
@@ -162,7 +162,7 @@ If you hit stale results in a long-lived VM, restart it or run `AshCredo.Introsp
 }
 ```
 
-To enable **all** checks at once:
+To enable **all** checks at once (`Warning.MissingChangeWrapper` is already on by default and does not need an entry):
 
 ```elixir
 checks: %{
