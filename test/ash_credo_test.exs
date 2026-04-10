@@ -11,38 +11,59 @@ defmodule AshCredoTest do
   # tolerated (they simply contribute zero rows).
   @category_order ["Warning", "Refactor", "Design", "Consistency", "Readability"]
 
-  # Discovers all check modules from the filesystem.
-  # Returns a map of %{category => [short_name, ...]} sorted within each category.
-  defp discover_checks do
+  # Checks that are enabled by default in `lib/ash_credo.ex` (registered with
+  # `[]` instead of `false`). These are intentionally omitted from the
+  # "enable all checks" README block.
+  @default_on_checks [
+    {"Warning", "MissingChangeWrapper"},
+    {"Warning", "MissingMacroDirective"}
+  ]
+
+  # A check requires a compiled project iff it aliases
+  # `AshCredo.Introspection.Compiled` at module level. Anchored to line start
+  # (plus optional leading whitespace) so comment/docstring mentions don't
+  # produce false positives.
+  @compiled_alias_regex ~r/^\s*alias AshCredo\.Introspection\.Compiled\b/m
+
+  # Inline annotation used in the main checks table in README.md. Matched
+  # loosely because some rows end with `.**` and others continue with
+  # ` and **configurable**`.
+  @compiled_annotation "**Requires compiled project"
+
+  # Discovers all check modules from the filesystem. Returns a sorted list of
+  # `{category_module, check_module_name, file_path}` tuples — e.g.
+  # `{"Warning", "NoActions", "lib/ash_credo/check/warning/no_actions.ex"}`.
+  defp discover_check_modules do
     Path.wildcard("#{@check_dir}/**/*.ex")
     |> Enum.map(fn path ->
-      # e.g. "lib/ash_credo/check/warning/no_actions.ex"
       relative = Path.relative_to(path, @check_dir)
-      # e.g. "warning/no_actions.ex"
       [category | rest] = Path.split(relative)
       name = rest |> Path.join() |> Path.rootname()
-      {category, name}
+      {to_module_name(category), to_module_name(name), path}
     end)
-    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
-    |> Map.new(fn {cat, names} -> {cat, Enum.sort(names)} end)
+    |> Enum.sort()
   end
 
-  # Converts a filesystem name like "no_actions" to a module short name like "NoActions"
+  # Source of truth for "requires a compiled project": every check file whose
+  # source aliases `AshCredo.Introspection.Compiled`.
+  defp compiled_check_modules do
+    for {cat, name, path} <- discover_check_modules(),
+        File.read!(path) =~ @compiled_alias_regex do
+      {cat, name}
+    end
+  end
+
+  # Converts a snake_case filesystem name ("no_actions") to a module short
+  # name ("NoActions"). Also used for category directory names.
   defp to_module_name(snake) do
     snake
     |> String.split("_")
     |> Enum.map_join(&String.capitalize/1)
   end
 
-  # Converts a category dir name to the module category name
-  defp to_category_module(cat) do
-    to_module_name(cat)
-  end
-
   describe "check registry consistency" do
     test "all checks in #{@plugin_file} match filesystem and are sorted within categories" do
-      expected = discover_checks()
-
+      expected = for {cat, name, _path} <- discover_check_modules(), do: {cat, name}
       plugin_content = File.read!(@plugin_file)
 
       # Extract entries like {AshCredo.Check.Warning.NoActions, []}
@@ -50,46 +71,22 @@ defmodule AshCredoTest do
         Regex.scan(~r/\{AshCredo\.Check\.(\w+)\.(\w+),\s*(?:\[\]|false)\}/, plugin_content)
         |> Enum.map(fn [_full, category, name] -> {category, name} end)
 
-      plugin_by_category =
-        plugin_entries
-        |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
-
-      # Check completeness: every filesystem check is in the plugin
-      for {cat_dir, names} <- expected do
-        cat_mod = to_category_module(cat_dir)
-
-        registered = Map.get(plugin_by_category, cat_mod, [])
-
-        for name <- names do
-          mod_name = to_module_name(name)
-
-          assert mod_name in registered,
-                 "AshCredo.Check.#{cat_mod}.#{mod_name} exists on disk but is missing from #{@plugin_file}"
-        end
-      end
-
-      # Check no extras: every plugin entry exists on disk
-      for {cat_mod, names} <- plugin_by_category do
-        cat_dir = Macro.underscore(cat_mod)
-        disk_names = Map.get(expected, cat_dir, []) |> Enum.map(&to_module_name/1)
-
-        for name <- names do
-          assert name in disk_names,
-                 "AshCredo.Check.#{cat_mod}.#{name} is in #{@plugin_file} but has no file in #{@check_dir}/#{cat_dir}/"
-        end
-      end
-
-      # Enforce canonical category order + alphabetical within each category.
-      assert_category_ordering(
+      assert_set_equality(
+        expected,
         plugin_entries,
-        @plugin_file,
-        "Checks in #{@plugin_file}"
+        fn {cat, name} ->
+          "AshCredo.Check.#{cat}.#{name} exists on disk but is missing from #{@plugin_file}"
+        end,
+        fn {cat, name} ->
+          "AshCredo.Check.#{cat}.#{name} is in #{@plugin_file} but has no file in #{@check_dir}/"
+        end
       )
+
+      assert_category_ordering(plugin_entries, "Checks in #{@plugin_file}")
     end
 
     test "all checks in #{@readme_file} match filesystem and are sorted within categories" do
-      expected = discover_checks()
-
+      expected = for {cat, name, _path} <- discover_check_modules(), do: {cat, name}
       readme_content = File.read!(@readme_file)
 
       # Extract rows like: | `AuthorizerWithoutPolicies` | Warning | ...
@@ -97,53 +94,27 @@ defmodule AshCredoTest do
         Regex.scan(~r/\| `(\w+)` \| (\w+) \|/, readme_content)
         |> Enum.map(fn [_full, name, category] -> {category, name} end)
 
-      readme_by_category =
-        readme_entries
-        |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
-
-      # Check completeness: every filesystem check is in the README
-      for {cat_dir, names} <- expected do
-        cat_mod = to_category_module(cat_dir)
-
-        registered = Map.get(readme_by_category, cat_mod, [])
-
-        for name <- names do
-          mod_name = to_module_name(name)
-
-          assert mod_name in registered,
-                 "AshCredo.Check.#{cat_mod}.#{mod_name} exists on disk but is missing from #{@readme_file}"
-        end
-      end
-
-      # Check no extras: every README entry exists on disk
-      for {cat_mod, names} <- readme_by_category do
-        cat_dir = Macro.underscore(cat_mod)
-        disk_names = Map.get(expected, cat_dir, []) |> Enum.map(&to_module_name/1)
-
-        for name <- names do
-          assert name in disk_names,
-                 "`#{name}` is in #{@readme_file} but has no file in #{@check_dir}/#{cat_dir}/"
-        end
-      end
-
-      # Enforce canonical category order + alphabetical within each category.
-      assert_category_ordering(
+      assert_set_equality(
+        expected,
         readme_entries,
-        @readme_file,
-        "Checks table in #{@readme_file}"
+        fn {cat, name} ->
+          "AshCredo.Check.#{cat}.#{name} exists on disk but is missing from #{@readme_file}"
+        end,
+        fn {cat, name} ->
+          "`#{name}` is in #{@readme_file} but has no file under `#{cat}` in #{@check_dir}/"
+        end
       )
+
+      assert_category_ordering(readme_entries, "Checks table in #{@readme_file}")
     end
 
-    # Checks that are enabled by default in `lib/ash_credo.ex` (registered with
-    # `[]` instead of `false`). These are intentionally omitted from the
-    # "enable all checks" README block.
-    @default_on_checks [
-      {"Warning", "MissingChangeWrapper"},
-      {"Warning", "MissingMacroDirective"}
-    ]
-
     test "\"enable all checks\" block in #{@readme_file} matches filesystem and is sorted within categories" do
-      expected = discover_checks()
+      expected =
+        for {cat, name, _path} <- discover_check_modules(),
+            {cat, name} not in @default_on_checks do
+          {cat, name}
+        end
+
       readme_content = File.read!(@readme_file)
 
       # Isolate the code block that follows the "To enable **all** checks at
@@ -166,56 +137,101 @@ defmodule AshCredoTest do
         Regex.scan(~r/\{AshCredo\.Check\.(\w+)\.(\w+),\s*\[\]\}/, enable_all_block)
         |> Enum.map(fn [_full, category, name] -> {category, name} end)
 
-      expected_entries =
-        for {cat_dir, names} <- expected,
-            cat_mod = to_category_module(cat_dir),
-            name <- names,
-            entry = {cat_mod, to_module_name(name)},
-            entry not in @default_on_checks do
-          entry
+      assert_set_equality(
+        expected,
+        enable_all_entries,
+        fn {cat, name} ->
+          ~s(AshCredo.Check.#{cat}.#{name} exists on disk but is missing from the "enable all checks" block in #{@readme_file})
+        end,
+        fn {cat, name} = entry ->
+          if entry in @default_on_checks do
+            ~s(AshCredo.Check.#{cat}.#{name} is default-on and should not appear in the "enable all checks" block in #{@readme_file})
+          else
+            ~s(AshCredo.Check.#{cat}.#{name} is listed in the "enable all checks" block in #{@readme_file} but has no file in #{@check_dir}/)
+          end
         end
+      )
 
-      # Completeness: every non-default check on disk must be in the block.
-      for entry <- expected_entries do
-        {cat, name} = entry
-
-        assert entry in enable_all_entries,
-               ~s(AshCredo.Check.#{cat}.#{name} exists on disk but is missing from the "enable all checks" block in #{@readme_file})
-      end
-
-      # No extras: every entry in the block must exist on disk and must not
-      # be one of the default-on checks (which the block explicitly excludes).
-      for {cat, name} = entry <- enable_all_entries do
-        refute entry in @default_on_checks,
-               ~s(AshCredo.Check.#{cat}.#{name} is default-on and should not appear in the "enable all checks" block in #{@readme_file})
-
-        assert entry in expected_entries,
-               ~s(AshCredo.Check.#{cat}.#{name} is listed in the "enable all checks" block in #{@readme_file} but has no file in #{@check_dir}/)
-      end
-
-      # Enforce canonical category order + alphabetical within each category.
       assert_category_ordering(
         enable_all_entries,
-        @readme_file,
         ~s("enable all checks" block in #{@readme_file})
       )
     end
 
-    test "configurable params in #{@readme_file} match filesystem and are sorted within categories" do
-      expected = discover_checks()
+    test "compiled-project bullet list in #{@readme_file} matches filesystem" do
+      compiled = compiled_check_modules()
+      readme_content = File.read!(@readme_file)
 
+      bullet_block =
+        case Regex.run(
+               ~r/## Checks that require a compiled project.*?\n((?:- `[\w.]+`\n)+)/s,
+               readme_content,
+               capture: :all_but_first
+             ) do
+          [block] ->
+            block
+
+          _ ->
+            flunk(
+              ~s(Could not find the "Checks that require a compiled project" bullet list in #{@readme_file})
+            )
+        end
+
+      bullet_entries =
+        Regex.scan(~r/- `(\w+)\.(\w+)`/, bullet_block)
+        |> Enum.map(fn [_full, category, name] -> {category, name} end)
+
+      assert_set_equality(
+        compiled,
+        bullet_entries,
+        fn {cat, name} ->
+          ~s(AshCredo.Check.#{cat}.#{name} aliases `AshCredo.Introspection.Compiled` but is missing from the bullet list under "## Checks that require a compiled project" in #{@readme_file})
+        end,
+        fn {cat, name} ->
+          ~s(`#{cat}.#{name}` is listed under "## Checks that require a compiled project" in #{@readme_file} but its source does not alias `AshCredo.Introspection.Compiled`)
+        end
+      )
+    end
+
+    test "compiled-project inline annotations in #{@readme_file} match filesystem" do
+      compiled = compiled_check_modules()
+      readme_content = File.read!(@readme_file)
+
+      # Capture each row of the main checks table along with its description
+      # column. Rows look like:
+      #   | `CheckName` | Category | Priority | Default | Description |
+      annotated_entries =
+        Regex.scan(
+          ~r/\| `(\w+)` \| (\w+) \| \w+ \| \w+ \| ([^|]+) \|/,
+          readme_content
+        )
+        |> Enum.filter(fn [_full, _name, _cat, desc] ->
+          String.contains?(desc, @compiled_annotation)
+        end)
+        |> Enum.map(fn [_full, name, category, _desc] -> {category, name} end)
+
+      assert_set_equality(
+        compiled,
+        annotated_entries,
+        fn {cat, name} ->
+          ~s(AshCredo.Check.#{cat}.#{name} aliases `AshCredo.Introspection.Compiled` but its row in the main checks table in #{@readme_file} is missing the `#{@compiled_annotation}` annotation)
+        end,
+        fn {cat, name} ->
+          ~s(`#{cat}.#{name}` is annotated `#{@compiled_annotation}` in the main checks table in #{@readme_file} but its source does not alias `AshCredo.Introspection.Compiled`)
+        end
+      )
+    end
+
+    test "configurable params in #{@readme_file} match filesystem and are sorted within categories" do
       # Build expected set of {category_module, check_name, param_name} from disk
       # by calling `param_defaults/0` on each check module (Credo generates this
       # function, returning [] when no params are configured).
       expected_params =
-        for {cat_dir, names} <- expected,
-            cat_mod = to_category_module(cat_dir),
-            name <- names,
-            mod_name = to_module_name(name),
-            module = Module.concat([AshCredo.Check, cat_mod, mod_name]),
+        for {cat, name, _path} <- discover_check_modules(),
+            module = Module.concat([AshCredo.Check, cat, name]),
             Code.ensure_loaded?(module),
             {param, _default} <- module.param_defaults() do
-          {cat_mod, mod_name, Atom.to_string(param)}
+          {cat, name, Atom.to_string(param)}
         end
 
       readme_content = File.read!(@readme_file)
@@ -227,17 +243,16 @@ defmodule AshCredoTest do
         Regex.scan(~r/\| `(\w+)\.(\w+)` \| `(\w+)` \|/, readme_content)
         |> Enum.map(fn [_full, category, name, param] -> {category, name, param} end)
 
-      # Completeness: every disk param appears in the README
-      for {cat, name, param} <- expected_params do
-        assert {cat, name, param} in readme_param_rows,
-               "AshCredo.Check.#{cat}.#{name} defines param :#{param} but it is missing from the configurable-params table in #{@readme_file}"
-      end
-
-      # No extras: every README row exists on disk
-      for {cat, name, param} <- readme_param_rows do
-        assert {cat, name, param} in expected_params,
-               "`#{cat}.#{name}` / `#{param}` is listed in #{@readme_file} but the check has no such param in its `param_defaults`"
-      end
+      assert_set_equality(
+        expected_params,
+        readme_param_rows,
+        fn {cat, name, param} ->
+          "AshCredo.Check.#{cat}.#{name} defines param :#{param} but it is missing from the configurable-params table in #{@readme_file}"
+        end,
+        fn {cat, name, param} ->
+          "`#{cat}.#{name}` / `#{param}` is listed in #{@readme_file} but the check has no such param in its `param_defaults`"
+        end
+      )
 
       # Enforce canonical category order, alphabetical by check name within
       # each category, and param rows of the same check in `param_defaults/0`
@@ -245,15 +260,12 @@ defmodule AshCredoTest do
       category_index = Map.new(Enum.with_index(@category_order))
 
       param_order_index =
-        for {cat_dir, names} <- expected,
-            cat_mod = to_category_module(cat_dir),
-            name <- names,
-            mod_name = to_module_name(name),
-            module = Module.concat([AshCredo.Check, cat_mod, mod_name]),
+        for {cat, name, _path} <- discover_check_modules(),
+            module = Module.concat([AshCredo.Check, cat, name]),
             Code.ensure_loaded?(module),
             {{param, _default}, idx} <- Enum.with_index(module.param_defaults()),
             into: %{} do
-          {{cat_mod, mod_name, Atom.to_string(param)}, idx}
+          {{cat, name, Atom.to_string(param)}, idx}
         end
 
       for {cat, _name, _param} <- readme_param_rows do
@@ -283,10 +295,35 @@ defmodule AshCredoTest do
     end
   end
 
+  # Asserts that `expected` and `actual` (lists of tuples) contain the same
+  # set of entries. On mismatch, reports all missing and extra items at once
+  # using the caller-supplied formatters.
+  defp assert_set_equality(expected, actual, format_missing, format_extra) do
+    expected_set = MapSet.new(expected)
+    actual_set = MapSet.new(actual)
+
+    missing =
+      expected_set
+      |> MapSet.difference(actual_set)
+      |> Enum.sort()
+      |> Enum.map(format_missing)
+
+    extra =
+      actual_set
+      |> MapSet.difference(expected_set)
+      |> Enum.sort()
+      |> Enum.map(format_extra)
+
+    case missing ++ extra do
+      [] -> :ok
+      errors -> flunk(Enum.join(errors, "\n"))
+    end
+  end
+
   # Asserts that `entries` (a list of `{category, name}` tuples in document
   # order) follows the canonical category order and is alphabetical within
-  # each category. Used for both the plugin file and the main checks table.
-  defp assert_category_ordering(entries, _file, label) do
+  # each category.
+  defp assert_category_ordering(entries, label) do
     category_index = Map.new(Enum.with_index(@category_order))
 
     for {cat, _name} <- entries do
