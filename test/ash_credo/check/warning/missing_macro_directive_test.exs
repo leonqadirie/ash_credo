@@ -358,9 +358,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       """
 
       issues =
-        run_check(MissingMacroDirective, source,
-          macro_modules: [AshCredoFixtures.FakeMacros]
-        )
+        run_check(MissingMacroDirective, source, macro_modules: [AshCredoFixtures.FakeMacros])
 
       triggers = issues |> Enum.map(& &1.trigger) |> Enum.sort()
 
@@ -405,9 +403,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       """
 
       issues =
-        run_check(MissingMacroDirective, source,
-          macro_modules: [Totally.Fake.Macros, Ash.Query]
-        )
+        run_check(MissingMacroDirective, source, macro_modules: [Totally.Fake.Macros, Ash.Query])
 
       # One diagnostic for the unloadable module...
       load_issue = Enum.find(issues, &(&1.message =~ "Could not load"))

@@ -264,8 +264,7 @@ defmodule AshCredo.Introspection.Compiled do
          true <- function_exported?(module, :__info__, 1) do
       macros =
         module.__info__(:macros)
-        |> Enum.map(fn {name, _arity} -> name end)
-        |> MapSet.new()
+        |> MapSet.new(fn {name, _arity} -> name end)
 
       {:ok, macros}
     else
