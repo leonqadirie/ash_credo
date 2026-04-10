@@ -62,46 +62,29 @@ All notable changes to this project will be documented in this file.
 
 * edge cases with nested modules, inline opts, and alias resolution ([#17](https://github.com/leonqadirie/ash_credo/issues/17)) ([778a1ef](https://github.com/leonqadirie/ash_credo/commit/778a1efae70509f34a70a6a4f4ed52b7eb7fcdbd))
 
-## [0.2.0] - 2026-04-05
+## [0.2.0](https://github.com/leonqadirie/ash_credo/compare/v0.1.0...v0.2.0) (2026-04-05)
 
-### Added
 
-- Add igniter installer
+### Features
 
-### Documentation
+* add igniter installer ([7f4ea45](https://github.com/leonqadirie/ash_credo/commit/7f4ea454f265900febbb01a29db7c2cc5528f631))
 
-- Explain --strict
+## [0.1.0](https://github.com/leonqadirie/ash_credo/releases/tag/v0.1.0) (2026-04-05)
 
-## [0.1.0] - 2026-04-05
 
-### Added
+### ⚠ BREAKING CHANGES
 
-- Add shared AST helpers for Ash DSL inspection
-- Add resource essentials checks: primary key, timestamps, actions
-- Add resource design checks: domain, identity, code interface, belongs_to
-- Add security checks for sensitive attribute exposure
-- Add authorization checks: policies, permissions, wildcard accept
-- Add quality checks: large resource, empty domain, action descriptions
-- Wire up AshCredo as Credo plugin with default check config
-- Increase max_lines default to 400 for large resource check
-- Add pinned time in expression check
-- Add missing change wrapper check
+* use conventional credo module structure ([b716b5c](https://github.com/leonqadirie/ash_credo/commit/b716b5cc94901dea06c89b1c8f851b9ef7b44c8b))
 
-### Changed
+### Features
 
-- Use conventional credo module structure
-- Rename helpers to introspection and relocate
-- Rename introspection functions
-
-### Documentation
-
-- Update README
-- Emphasize anticipated breaking changes in README
-- Better document configurable options
-- Better order checks
-- Add license
-- Add changelog
-
-### Testing
-
-- Set up test infrastructure and remove placeholder test
+* add authorization checks: policies, permissions, wildcard accept ([d6e3424](https://github.com/leonqadirie/ash_credo/commit/d6e3424757f8f38a8edd4a7593781c3e05e7da0e))
+* add missing change wrapper check ([22297b2](https://github.com/leonqadirie/ash_credo/commit/22297b2b61c93f20b79489d480c4e7dab9e91aa5))
+* add pinned time in expression check ([db64709](https://github.com/leonqadirie/ash_credo/commit/db64709e7ee2fff5fc8c6676f3c24734dd18d677))
+* add quality checks: large resource, empty domain, action descriptions ([56af703](https://github.com/leonqadirie/ash_credo/commit/56af7036deb6437c61e9ff29c26ce394c79ffddb))
+* add resource design checks: domain, identity, code interface, belongs_to ([91980d5](https://github.com/leonqadirie/ash_credo/commit/91980d591005e7988f84d8a02a999f2bd2bec64c))
+* add resource essentials checks: primary key, timestamps, actions ([0a938a1](https://github.com/leonqadirie/ash_credo/commit/0a938a1e3eb518bc01e6ebf602ed05572fa11c9d))
+* add security checks for sensitive attribute exposure ([4d99460](https://github.com/leonqadirie/ash_credo/commit/4d994600fafcfe71d507edc5f02c2e3d8ec12c24))
+* add shared AST helpers for Ash DSL inspection ([77716f2](https://github.com/leonqadirie/ash_credo/commit/77716f2bf977904196168970f5f972b26b308abe))
+* increase max_lines default to 400 for large resource check ([ebfaed9](https://github.com/leonqadirie/ash_credo/commit/ebfaed9a5b00b2d3bf968999d08dcb0ce415948f))
+* wire up AshCredo as Credo plugin with default check config ([26d5062](https://github.com/leonqadirie/ash_credo/commit/26d50626250a64431811b8785aeff58d6dfa08cf))
