@@ -11,7 +11,7 @@ AshCredo detects common anti-patterns, security pitfalls, and missing best pract
 > [!WARNING]
 > This project is experimental and might break frequently.
 
-**Note: Only `MissingChangeWrapper` is enabled by default.** All other checks are opt-in - enable them individually in your `.credo.exs` (see [Configuration](#configuration)).
+**Note: Only `MissingChangeWrapper` and `MissingMacroDirective` are enabled by default.** All other checks are opt-in - enable them individually in your `.credo.exs` (see [Configuration](#configuration)).
 
 ## Installation
 
@@ -74,7 +74,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `EmptyDomain` | Warning | Normal | No | Flags domains with no resources registered |
 | `MissingChangeWrapper` | Warning | High | Yes | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions |
 | `MissingDomain` | Warning | Normal | No | Ensures non-embedded resources set the `domain:` option |
-| `MissingMacroDirective` | Warning | High | No | Flags qualified calls to `Ash.Query`/`Ash.Expr` macros (`filter`, `expr`, ...) when the enclosing module does not have a matching module-level `require`/`import`. Catches the runtime `UndefinedFunctionError` that slips past the compiler when the macro argument is a bare runtime value. **Requires compiled project** and **configurable**. |
+| `MissingMacroDirective` | Warning | High | Yes | Flags qualified calls to `Ash.Query`/`Ash.Expr` macros (`filter`, `expr`, ...) when the enclosing module does not have a matching module-level `require`/`import`. Catches the runtime `UndefinedFunctionError` that slips past the compiler when the macro argument is a bare runtime value. **Requires compiled project** and **configurable**. |
 | `MissingPrimaryKey` | Warning | High | No | Ensures resources with data layers have a primary key |
 | `NoActions` | Warning | Normal | No | Flags resources with data layers but no actions defined. **Requires compiled project.** |
 | `OverlyPermissivePolicy` | Warning | High | No | Flags unscoped `authorize_if always()` policies |
@@ -164,7 +164,7 @@ Enable additional checks by adding them to the `extra` section of your `.credo.e
 }
 ```
 
-To enable **all** checks at once (`Warning.MissingChangeWrapper` is already on by default and does not need an entry):
+To enable **all** checks at once (`Warning.MissingChangeWrapper` and `Warning.MissingMacroDirective` are already on by default and do not need an entry):
 
 ```elixir
 checks: %{
@@ -173,7 +173,6 @@ checks: %{
     {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
     {AshCredo.Check.Warning.EmptyDomain, []},
     {AshCredo.Check.Warning.MissingDomain, []},
-    {AshCredo.Check.Warning.MissingMacroDirective, []},
     {AshCredo.Check.Warning.MissingPrimaryKey, []},
     {AshCredo.Check.Warning.NoActions, []},
     {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
