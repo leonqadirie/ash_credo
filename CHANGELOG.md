@@ -1,6 +1,21 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.6.0](https://github.com/leonqadirie/ash_credo/compare/v0.5.2...v0.6.0) (2026-04-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* use Ash's introspection and tighten checks ([#53](https://github.com/leonqadirie/ash_credo/issues/53))
+
+### Features
+
+* add check for missing macro directive ([#58](https://github.com/leonqadirie/ash_credo/issues/58)) ([8ee473f](https://github.com/leonqadirie/ash_credo/commit/8ee473f66d43278547b6cae2cd06ac9b265ff9f0))
+* enable missing_macro_directive check by default ([#59](https://github.com/leonqadirie/ash_credo/issues/59)) ([9b559c1](https://github.com/leonqadirie/ash_credo/commit/9b559c1d0486c43e06e919eea305d2db6e5212b2))
+* extract warning.unknown_action from use_code_interface ([#56](https://github.com/leonqadirie/ash_credo/issues/56)) ([47d5de7](https://github.com/leonqadirie/ash_credo/commit/47d5de7a46c12b671eb45e3bd0aff057ca9ac2a7))
+* make clear_cache/0 public ([#55](https://github.com/leonqadirie/ash_credo/issues/55)) ([c1e565d](https://github.com/leonqadirie/ash_credo/commit/c1e565d0c7aa499b8a0ef095558707f3f45b55cd))
+* use Ash's introspection and tighten checks ([#53](https://github.com/leonqadirie/ash_credo/issues/53)) ([0cd669b](https://github.com/leonqadirie/ash_credo/commit/0cd669bbe99b709da8614edb99ed09808893db24))
+
 ## [0.5.2](https://github.com/leonqadirie/ash_credo/compare/v0.5.1...v0.5.2) (2026-04-08)
 
 
