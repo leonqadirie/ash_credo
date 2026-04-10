@@ -191,20 +191,22 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
   # dropped from the resolved map so their call sites aren't flagged this
   # run. Returns `{resolved_map, load_issues}`.
   defp resolve_macro_sets(targets, issue_meta) do
-    Enum.reduce(targets, {%{}, []}, fn mod, {resolved, issues} ->
-      case CompiledIntrospection.macros(mod) do
-        {:ok, macros} ->
-          {Map.put(resolved, mod, macros), issues}
+    Enum.reduce(targets, {%{}, []}, &resolve_macro_set(&1, &2, issue_meta))
+  end
 
-        {:error, :not_loadable} ->
-          extra =
-            CompiledIntrospection.with_unique_not_loadable(mod, fn ->
-              not_loadable_issue(mod, issue_meta)
-            end)
+  defp resolve_macro_set(mod, {resolved, issues}, issue_meta) do
+    case CompiledIntrospection.macros(mod) do
+      {:ok, macros} ->
+        {Map.put(resolved, mod, macros), issues}
 
-          {resolved, extra ++ issues}
-      end
-    end)
+      {:error, :not_loadable} ->
+        extra =
+          CompiledIntrospection.with_unique_not_loadable(mod, fn ->
+            not_loadable_issue(mod, issue_meta)
+          end)
+
+        {resolved, extra ++ issues}
+    end
   end
 
   # Walks the whole file AST and returns the do-block body of every
@@ -257,23 +259,21 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
   end
 
   defp collect_top_level_directives_from(stmts, targets) do
-    Enum.reduce(stmts, MapSet.new(), fn stmt, acc ->
-      case stmt do
-        {directive, _, [{:__aliases__, _, segs} | _]}
-        when directive in @directive_kinds ->
-          with true <- Enum.all?(segs, &is_atom/1),
-               mod = Module.concat(segs),
-               true <- MapSet.member?(targets, mod) do
-            MapSet.put(acc, mod)
-          else
-            _ -> acc
-          end
-
-        _ ->
-          acc
-      end
-    end)
+    Enum.reduce(stmts, MapSet.new(), &collect_directive(&1, &2, targets))
   end
+
+  defp collect_directive({directive, _, [{:__aliases__, _, segs} | _]}, acc, targets)
+       when directive in @directive_kinds do
+    with true <- Enum.all?(segs, &is_atom/1),
+         mod = Module.concat(segs),
+         true <- MapSet.member?(targets, mod) do
+      MapSet.put(acc, mod)
+    else
+      _ -> acc
+    end
+  end
+
+  defp collect_directive(_stmt, acc, _targets), do: acc
 
   defp collect_call_sites(body, resolved) do
     {_ast, %{sites: sites}} =
@@ -309,26 +309,23 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
        when is_atom(fun) and is_list(args) do
     if state.defmodule_depth == 0 and state.quote_depth == 0 and
          Enum.all?(segs, &is_atom/1) do
-      mod = Module.concat(segs)
-
-      case Map.fetch(resolved, mod) do
-        {:ok, macros} ->
-          if MapSet.member?(macros, fun) do
-            site = %{module: mod, fun: fun, arity: length(args), line: meta[:line]}
-            {node, %{state | sites: [site | state.sites]}}
-          else
-            {node, state}
-          end
-
-        :error ->
-          {node, state}
-      end
+      maybe_record_call(node, state, resolved, Module.concat(segs), fun, args, meta)
     else
       {node, state}
     end
   end
 
   defp enter_for_calls(node, state, _resolved), do: {node, state}
+
+  defp maybe_record_call(node, state, resolved, mod, fun, args, meta) do
+    with {:ok, macros} <- Map.fetch(resolved, mod),
+         true <- MapSet.member?(macros, fun) do
+      site = %{module: mod, fun: fun, arity: length(args), line: meta[:line]}
+      {node, %{state | sites: [site | state.sites]}}
+    else
+      _ -> {node, state}
+    end
+  end
 
   defp leave_for_calls({:defmodule, _, _} = node, state) do
     {node, %{state | defmodule_depth: max(state.defmodule_depth - 1, 0)}}
