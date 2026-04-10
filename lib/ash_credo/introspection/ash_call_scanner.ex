@@ -1,5 +1,23 @@
-defmodule AshCredo.Introspection.AshApi do
-  @moduledoc false
+defmodule AshCredo.Introspection.AshCallScanner do
+  @moduledoc """
+  Lower layer of the Ash call pipeline: scans a source file's AST and yields
+  every `Ash.*` call together with the lexical environment visible at that
+  point - alias frames, binding frames, branch depth, pipe origins, and the
+  enclosing `defmodule` segments.
+
+  Knows nothing about specific Ash API entry points. The semantic
+  interpretation - "this call has a literal resource at arg 0 and an action
+  in the keyword opts, resolve it to a real module" - lives one layer up in
+  `AshCredo.Introspection.AshCallResolver`.
+
+  Three output flavours of increasing richness:
+
+    * `calls/1` - raw call ASTs
+    * `calls_with_module/1` - `{ast, expanded_module_segments}` tuples
+    * `calls_with_context/1` - enriched maps with `:call_ast`,
+      `:expanded_module`, `:args`, `:aliases`, `:bindings`, and
+      `:enclosing_module_segments`
+  """
 
   alias AshCredo.Introspection.{Aliases, LexicalAliases}
 

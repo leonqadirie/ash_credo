@@ -1,7 +1,7 @@
 defmodule AshCredo.Introspection do
   @moduledoc "Utilities for inspecting Ash DSL constructs in source AST."
 
-  alias AshCredo.Introspection.{Aliases, AshApi, LexicalAliases}
+  alias AshCredo.Introspection.{Aliases, AshCallScanner, LexicalAliases}
   alias Credo.Code.Block
   alias Credo.SourceFile
 
@@ -150,16 +150,16 @@ defmodule AshCredo.Introspection do
   def ash_resource?(source_file), do: resource_modules(source_file) != []
 
   @doc "Returns true if the AST node is a call to an `Ash.*` module (e.g. `Ash.read!/2`)."
-  def ash_api_call?(ast, aliases \\ []), do: AshApi.call?(ast, aliases)
+  def ash_api_call?(ast, aliases \\ []), do: AshCallScanner.call?(ast, aliases)
 
   @doc "Returns all `Ash.*` API call AST nodes found in the source file, resolving aliases lexically."
-  def ash_api_calls(source_file), do: AshApi.calls(source_file)
+  def ash_api_calls(source_file), do: AshCallScanner.calls(source_file)
 
   @doc """
   Returns all `Ash.*` API call AST nodes found in the source file together with
   their alias-expanded module segments as `{call_ast, expanded_module_segments}` tuples.
   """
-  def ash_api_calls_with_module(source_file), do: AshApi.calls_with_module(source_file)
+  def ash_api_calls_with_module(source_file), do: AshCallScanner.calls_with_module(source_file)
 
   @doc """
   Returns all `Ash.*` API call AST nodes found in the source file together with
@@ -169,7 +169,7 @@ defmodule AshCredo.Introspection do
   Each result is a map with keys `:call_ast`, `:expanded_module`, `:args`,
   `:aliases`, and `:bindings`.
   """
-  def ash_api_calls_with_context(source_file), do: AshApi.calls_with_context(source_file)
+  def ash_api_calls_with_context(source_file), do: AshCallScanner.calls_with_context(source_file)
 
   @doc "Returns true if the source file or module contains `use Ash.Domain`."
   def ash_domain?({:defmodule, _, _} = module_ast), do: module_uses?(module_ast, [:Ash, :Domain])

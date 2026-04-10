@@ -35,7 +35,7 @@ defmodule AshCredo.Check.Warning.UnknownAction do
       """
     ]
 
-  alias AshCredo.Introspection.AshCallSites
+  alias AshCredo.Introspection.AshCallResolver
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   @impl true
@@ -52,7 +52,7 @@ defmodule AshCredo.Check.Warning.UnknownAction do
       end,
       fn ->
         source_file
-        |> AshCallSites.resolved_sites()
+        |> AshCallResolver.sites()
         |> Enum.flat_map(&check_site(&1, issue_meta))
       end
     )
@@ -74,7 +74,7 @@ defmodule AshCredo.Check.Warning.UnknownAction do
   defp check_site(_site, _issue_meta), do: []
 
   defp unknown_action_issue(resource, known_actions, site, issue_meta) do
-    qualified = AshCallSites.qualified_call(site)
+    qualified = AshCallResolver.qualified_call(site)
     suggestion = CompiledIntrospection.suggest_action_name(known_actions, site.action_name)
 
     hint =

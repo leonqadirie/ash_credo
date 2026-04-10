@@ -103,7 +103,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       ]
     ]
 
-  alias AshCredo.Introspection.AshCallSites
+  alias AshCredo.Introspection.AshCallResolver
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   @impl true
@@ -122,7 +122,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
         end,
         fn ->
           source_file
-          |> AshCallSites.resolved_sites()
+          |> AshCallResolver.sites()
           |> Enum.flat_map(&check_site(&1, issue_meta, config))
         end
       )
@@ -196,7 +196,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
         CompiledIntrospection.domain_interface(resource_domain, resource, action_name),
       same_domain?: same_domain?,
       scope: config.scope,
-      bang?: AshCallSites.bang?(site),
+      bang?: AshCallResolver.bang?(site),
       builder_prefix: site.builder_prefix
     }
   end
@@ -226,7 +226,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   end
 
   defp build_issue(classification, site, issue_meta) do
-    qualified = AshCallSites.qualified_call(site)
+    qualified = AshCallResolver.qualified_call(site)
     suggestion = pick_suggestion(classification)
     message = format_message(suggestion, classification, qualified, site.arity)
 
@@ -322,7 +322,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   defp interface_function_name(name, :input_to, _), do: "input_to_#{name}"
 
   defp not_loadable_issue(resource, site, issue_meta) do
-    qualified = AshCallSites.qualified_call(site)
+    qualified = AshCallResolver.qualified_call(site)
 
     format_issue(issue_meta,
       message:

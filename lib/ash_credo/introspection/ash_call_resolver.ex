@@ -1,11 +1,12 @@
-defmodule AshCredo.Introspection.AshCallSites do
+defmodule AshCredo.Introspection.AshCallResolver do
   @moduledoc """
-  Walks a source file and yields resolved Ash call sites.
+  Upper layer of the Ash call pipeline: consumes the call stream from
+  `AshCredo.Introspection.AshCallScanner` and yields *resolved* Ash call
+  sites - calls where both the resource and the action arguments are
+  literal values that map to a real module atom and a real action atom.
 
-  A "resolved site" is an `Ash.*` API call where both the resource and the
-  action arguments are literal values that the walker could trace back to a
-  module atom and an action atom. The helper handles all four call shapes
-  AshCredo cares about:
+  Knows the specific Ash API entry-point shapes; the lower layer doesn't.
+  Four dispatch patterns are recognised:
 
     * Pattern A - resource at arg 0, `:action` in keyword opts (`Ash.read!`,
       `Ash.get`, `Ash.stream!`, ...).
@@ -16,22 +17,25 @@ defmodule AshCredo.Introspection.AshCallSites do
       `Ash.ActionInput.for_action` (resource at arg 0, action at arg 1).
 
   For pattern D record-first builders (`for_update`/`for_destroy`) the
-  helper additionally traces the first argument back through bindings and
-  pipe chains to find the originating literal resource.
+  resolver additionally traces the first argument back through bindings
+  and pipe chains to find the originating literal resource.
 
-  This module is the shared infrastructure used by:
+  Each yielded site has the resource lookup result attached - either
+  `{:ok, atom, info}`, `{:not_loadable, atom}`, `:not_a_resource`, or
+  `:ash_missing` - so consumers can apply their own emission logic without
+  re-running `Compiled.inspect_module/1`.
 
-    * `AshCredo.Check.Refactor.UseCodeInterface` - for interface-suggestion
-      logic on loaded resources, plus the `:not_loadable` diagnostic for
+  Used by:
+
+    * `AshCredo.Check.Refactor.UseCodeInterface` - interface-suggestion
+      logic on loaded resources plus the `:not_loadable` diagnostic for
       unreachable modules.
-    * `AshCredo.Check.Warning.UnknownAction` - for flagging references to
-      actions that do not exist on the resolved resource.
-
-  Both checks would otherwise need the same call-walking pipeline; the
-  helper centralises it so each check only owns its own emission logic.
+    * `AshCredo.Check.Warning.UnknownAction` - flags references to actions
+      that do not exist on the resolved resource.
   """
 
   alias AshCredo.Introspection
+  alias AshCredo.Introspection.AshCallScanner
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias Credo.Code.Name
 
@@ -92,16 +96,11 @@ defmodule AshCredo.Introspection.AshCallSites do
   @doc """
   Walks `source_file` and returns the list of resolved Ash call sites in
   source order.
-
-  Each entry has the resource lookup result attached - either
-  `{:ok, atom, info}`, `{:not_loadable, atom}`, `:not_a_resource`, or
-  `:ash_missing` - so the caller can apply its own emission logic without
-  re-running `Compiled.inspect_module/1`.
   """
-  @spec resolved_sites(Credo.SourceFile.t()) :: [site()]
-  def resolved_sites(source_file) do
+  @spec sites(Credo.SourceFile.t()) :: [site()]
+  def sites(source_file) do
     source_file
-    |> Introspection.ash_api_calls_with_context()
+    |> AshCallScanner.calls_with_context()
     |> Enum.flat_map(&resolve_site/1)
   end
 
