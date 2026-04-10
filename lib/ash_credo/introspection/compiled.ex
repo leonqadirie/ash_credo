@@ -12,7 +12,7 @@ defmodule AshCredo.Introspection.Compiled do
 
   The cache lives in `:persistent_term` rather than ETS because Credo
   dispatches each check × source_file pair into its own short-lived
-  `Task.Supervised` process. An ETS table would be owned by whichever task
+  Task.Supervised process. An ETS table would be owned by whichever task
   created it first and would vanish the moment that task exited, crashing
   every sibling task that still held the table name. `:persistent_term` is
   process-independent and survives arbitrary task churn. Each cached entry
