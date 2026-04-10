@@ -2,123 +2,82 @@ defmodule AshCredo.Check.Design.MissingPrimaryActionTest do
   use AshCredo.CheckCase
 
   alias AshCredo.Check.Design.MissingPrimaryAction
+  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
-  test "reports issue when multiple actions of same type with no primary" do
+  # Tests reference real fixture modules from `test/support/fixtures/ash_fixtures.ex`
+  # so that compiled-introspection (`Ash.Resource.Info.actions/1`) returns the
+  # fully-resolved action list:
+  #
+  #   * `AshCredoFixtures.Blog.Post` - has `read :read, primary?: true` plus
+  #     multiple non-primary reads and multiple non-primary updates, and a
+  #     primary `:create` via `defaults [:create, :update, :destroy]`.
+  #   * `AshCredoFixtures.Blog.Tag` - has `create :create_basic` and
+  #     `create :create_with_slug`, neither primary. Failure-path fixture.
+  #   * `AshCredoFixtures.Accounts.User` - `defaults [:create, :read, :update, :destroy]`,
+  #     single action of each type. Happy-path fixture.
+
+  setup do
+    CompiledIntrospection.clear_cache()
+    :ok
+  end
+
+  test "no issue for a resource with a single primary action per type" do
     source = """
-    defmodule MyApp.Post do
-      use Ash.Resource, domain: MyApp.Blog
+    defmodule AshCredoFixtures.Accounts.User do
+      use Ash.Resource, domain: AshCredoFixtures.Accounts
+    end
+    """
 
-      actions do
-        create :create do
-          accept [:title]
-        end
+    assert [] = run_check(MissingPrimaryAction, source)
+  end
 
-        create :import do
-          accept [:title, :body]
-        end
-      end
+  test "no issue when multiple reads exist but one is marked primary" do
+    # Blog.Post has :read (primary), :published, :draft - three reads total
+    # but :read is primary so no issue should fire for the read type.
+    source = """
+    defmodule AshCredoFixtures.Blog.Post do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+    end
+    """
+
+    assert [] = run_check(MissingPrimaryAction, source)
+  end
+
+  test "reports an issue when multiple creates exist without primary" do
+    # Blog.Tag has :create_basic and :create_with_slug, neither primary.
+    source = """
+    defmodule AshCredoFixtures.Blog.Tag do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
     end
     """
 
     assert [issue] = run_check(MissingPrimaryAction, source)
-    assert issue.message =~ "create"
+    assert issue.trigger == "create"
+    assert issue.message =~ "Multiple `create` actions"
     assert issue.message =~ "primary?"
   end
 
-  test "no issue when primary action is declared" do
+  test "alias-expands a top-level aliased defmodule name to the real module" do
+    # Regression: `Introspection.all_modules_with_path/1` used to treat the
+    # literal segments of a `defmodule` name as absolute, so a top-level
+    # `defmodule Tag` that depended on a preceding `alias ..., as: Tag`
+    # would be classified as `Tag` (unloadable) instead of the real
+    # `AshCredoFixtures.Blog.Tag` module. The check would then emit a
+    # `:not_loadable` diagnostic instead of the actual lint result.
     source = """
-    defmodule MyApp.Post do
-      use Ash.Resource, domain: MyApp.Blog
+    alias AshCredoFixtures.Blog.Tag
 
-      actions do
-        create :create do
-          primary? true
-          accept [:title]
-        end
-
-        create :import do
-          accept [:title, :body]
-        end
-      end
+    defmodule Tag do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
     end
     """
 
-    assert [] = run_check(MissingPrimaryAction, source)
+    assert [issue] = run_check(MissingPrimaryAction, source)
+    assert issue.trigger == "create"
+    assert issue.message =~ "Multiple `create` actions"
   end
 
-  test "no issue when primary action is declared inline alongside a do block" do
-    source = """
-    defmodule MyApp.Post do
-      use Ash.Resource, domain: MyApp.Blog
-
-      actions do
-        create :create, primary?: true do
-          accept [:title]
-        end
-
-        create :import do
-          accept [:title, :body]
-        end
-      end
-    end
-    """
-
-    assert [] = run_check(MissingPrimaryAction, source)
-  end
-
-  test "no issue when only one action of each type" do
-    source = """
-    defmodule MyApp.Post do
-      use Ash.Resource, domain: MyApp.Blog
-
-      actions do
-        create :create do
-          accept [:title]
-        end
-
-        read :read do
-          primary? true
-        end
-      end
-    end
-    """
-
-    assert [] = run_check(MissingPrimaryAction, source)
-  end
-
-  test "reports issues for multiple types missing primary" do
-    source = """
-    defmodule MyApp.Post do
-      use Ash.Resource, domain: MyApp.Blog
-
-      actions do
-        create :create do
-          accept [:title]
-        end
-
-        create :import do
-          accept [:title, :body]
-        end
-
-        read :list do
-          filter expr(published == true)
-        end
-
-        read :mine do
-          filter expr(author_id == ^actor(:id))
-        end
-      end
-    end
-    """
-
-    issues = run_check(MissingPrimaryAction, source)
-    assert length(issues) == 2
-    types = Enum.map(issues, & &1.trigger)
-    assert "create" in types
-    assert "read" in types
-  end
-
-  test "ignores non-Ash modules" do
+  test "ignores modules that are not Ash resources" do
     source = """
     defmodule MyApp.Utils do
       def hello, do: :world
@@ -128,147 +87,41 @@ defmodule AshCredo.Check.Design.MissingPrimaryActionTest do
     assert [] = run_check(MissingPrimaryAction, source)
   end
 
-  test "no issue when no actions section" do
+  test "emits a not-loadable config issue for an unknown resource" do
     source = """
-    defmodule MyApp.Post do
-      use Ash.Resource, domain: MyApp.Blog
-    end
-    """
-
-    assert [] = run_check(MissingPrimaryAction, source)
-  end
-
-  test "no issue when `defaults [:read]` covers multiple explicit reads" do
-    source = """
-    defmodule MyApp.Post do
-      use Ash.Resource, domain: MyApp.Blog
-
-      actions do
-        defaults [:read]
-
-        read :by_status do
-          argument :status, :atom
-          filter expr(status == ^arg(:status))
-        end
-
-        read :active do
-          filter expr(active == true)
-        end
-      end
-    end
-    """
-
-    assert [] = run_check(MissingPrimaryAction, source)
-  end
-
-  test "no issue when `defaults [:read]` is the only action" do
-    source = """
-    defmodule MyApp.Post do
-      use Ash.Resource, domain: MyApp.Blog
-
-      actions do
-        defaults [:read]
-      end
-    end
-    """
-
-    assert [] = run_check(MissingPrimaryAction, source)
-  end
-
-  test "no issue when defaults cover all action types" do
-    source = """
-    defmodule MyApp.Post do
-      use Ash.Resource, domain: MyApp.Blog
-
-      actions do
-        defaults [:create, :read, :update, :destroy]
-
-        create :import do
-          accept [:title, :body]
-        end
-
-        read :active do
-          filter expr(active == true)
-        end
-
-        update :publish do
-          change set_attribute(:published, true)
-        end
-
-        destroy :soft_delete do
-          change set_attribute(:deleted_at, &DateTime.utc_now/0)
-        end
-      end
-    end
-    """
-
-    assert [] = run_check(MissingPrimaryAction, source)
-  end
-
-  test "still reports for types not covered by defaults" do
-    source = """
-    defmodule MyApp.Post do
-      use Ash.Resource, domain: MyApp.Blog
-
-      actions do
-        defaults [:read]
-
-        create :one do
-          accept [:title]
-        end
-
-        create :two do
-          accept [:title, :body]
-        end
-      end
+    defmodule Totally.Fake.Resource do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
     end
     """
 
     assert [issue] = run_check(MissingPrimaryAction, source)
-    assert issue.trigger == "create"
+    assert issue.message =~ "Could not load"
+    assert issue.message =~ "Totally.Fake.Resource"
   end
 
-  test "no issue when defaults uses keyword-list form with accept lists" do
-    source = """
-    defmodule MyApp.Post do
-      use Ash.Resource, domain: MyApp.Blog
-
-      actions do
-        defaults [create: [:title]]
-
-        create :register do
-          accept [:title, :author_id]
-        end
-
-        create :import do
-          accept [:title, :body, :author_id]
-        end
-      end
+  test "deduplicates :not_loadable diagnostics across multiple references to the same module" do
+    # Two source files (or two run_check invocations) referencing the same
+    # unloadable module should produce only ONE diagnostic. Verifies the
+    # `Compiled.with_unique_not_loadable/2` dedup wired through
+    # `:not_loadable` branches in every compile-dependent check.
+    first_source = """
+    defmodule Totally.Fake.Dedup do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
     end
     """
 
-    assert [] = run_check(MissingPrimaryAction, source)
-  end
-
-  test "no issue when defaults coexists with an explicit primary action of the same type" do
-    source = """
-    defmodule MyApp.Post do
-      use Ash.Resource, domain: MyApp.Blog
-
-      actions do
-        defaults [:read]
-
-        read :custom do
-          primary? true
-        end
-
-        read :active do
-          filter expr(active == true)
-        end
-      end
+    second_source = """
+    defmodule Totally.Fake.Dedup do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
     end
     """
 
-    assert [] = run_check(MissingPrimaryAction, source)
+    assert [issue] = run_check(MissingPrimaryAction, first_source)
+    assert issue.message =~ "Could not load"
+    assert issue.message =~ "Totally.Fake.Dedup"
+
+    # Second invocation against the same broken module - already warned, so
+    # the dedup helper returns [] without re-emitting.
+    assert [] = run_check(MissingPrimaryAction, second_source)
   end
 end

@@ -126,6 +126,38 @@ defmodule AshCredo.IntrospectionTest do
       refute Introspection.has_data_layer?(inner)
       assert outer.use_line < inner.use_line
     end
+
+    test "expands aliases that are visible in the current lexical scope" do
+      source = """
+      if true do
+        alias MyApp.Blog, as: Blog
+
+        defmodule Blog.Post do
+          use Ash.Resource, domain: MyApp.Blog
+        end
+      end
+      """
+
+      [context] = Introspection.resource_contexts(source_file(source))
+
+      assert context.absolute_segments == [:MyApp, :Blog, :Post]
+    end
+
+    test "does not leak aliases out of non-module lexical scopes" do
+      source = """
+      if true do
+        alias MyApp.Blog, as: Blog
+      end
+
+      defmodule Blog.Post do
+        use Ash.Resource, domain: MyApp.Blog
+      end
+      """
+
+      [context] = Introspection.resource_contexts(source_file(source))
+
+      assert context.absolute_segments == [:Blog, :Post]
+    end
   end
 
   describe "ash_domain?/1" do

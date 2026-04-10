@@ -5,8 +5,8 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
     tags: [:ash, :security],
     explanations: [
       check: """
-      An unscoped policy using `authorize_if always()` allows anyone —
-      including unauthenticated requests — to perform all actions.
+      An unscoped policy using `authorize_if always()` allows anyone -
+      including unauthenticated requests - to perform all actions.
 
       Scope permissive policies to specific actions or action types:
 
@@ -57,11 +57,11 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
 
   defp scoped_policy?({kind, _, [guard | _]}) when kind in [:policy, :bypass] do
     case guard do
-      # policy always() — applies to everything, NOT scoped
+      # policy always() - applies to everything, NOT scoped
       {:always, _, _} -> false
-      # policy expr(true) — effectively unscoped
+      # policy expr(true) - effectively unscoped
       {:expr, _, [true]} -> false
-      # policy action_type(:read), policy action([...]), etc. — scoped
+      # policy action_type(:read), policy action([...]), etc. - scoped
       _ -> true
     end
   end

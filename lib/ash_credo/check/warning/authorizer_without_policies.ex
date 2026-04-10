@@ -18,57 +18,97 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
           end
 
       Or remove the authorizer if authorization is not needed yet.
+
+      This check uses Ash's runtime introspection (`Ash.Resource.Info.authorizers/1`
+      and `Ash.Policy.Info.policies/1`) to see the fully-resolved authorizer
+      and policy lists. That means it correctly handles authorizers added by
+      extensions and policies declared in `Spark.Dsl.Fragment` modules - cases
+      the AST scanner would silently miss.
+
+      ## Requirements
+
+      Your project must be compiled before running `mix credo`. If Ash is
+      not available in the VM running Credo, the check is a no-op and emits
+      a single diagnostic.
       """
     ]
 
   alias AshCredo.Introspection
-  alias AshCredo.Orchestration
-
-  @policy_authorizer [:Ash, :Policy, :Authorizer]
+  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   @impl true
-  def run(%SourceFile{} = source_file, params),
-    do:
-      Orchestration.flat_map_resource_context(
-        source_file,
-        params,
-        &authorizer_without_policies_issues/2
-      )
+  def run(%SourceFile{} = source_file, params) do
+    issue_meta = IssueMeta.for(source_file, params)
 
-  defp authorizer_without_policies_issues(context, issue_meta) do
-    authorizer_line = find_authorizer_line(context)
-    policies_ast = Introspection.resource_section(context, :policies)
-    has_policies = Introspection.policy_entities(policies_ast) != []
-
-    if authorizer_line != nil and not has_policies do
-      [
+    CompiledIntrospection.with_compiled_check(
+      fn ->
         format_issue(issue_meta,
           message:
-            "Resource has Ash.Policy.Authorizer but no policies defined. All actions will be denied.",
-          trigger: "Ash.Policy.Authorizer",
-          line_no: authorizer_line
+            "Ash is not loaded in the VM running Credo - `AuthorizerWithoutPolicies` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+          line_no: 1
         )
-      ]
+      end,
+      fn ->
+        source_file
+        |> Introspection.resource_contexts()
+        |> Enum.flat_map(&check_resource(&1, issue_meta))
+      end
+    )
+  end
+
+  defp check_resource(%{absolute_segments: nil}, _issue_meta), do: []
+
+  defp check_resource(%{absolute_segments: segments} = context, issue_meta) do
+    resource = Module.concat(segments)
+
+    case CompiledIntrospection.inspect_module(resource) do
+      {:ok, info} ->
+        flag_if_authorizer_without_policies(resource, info, context, issue_meta)
+
+      {:error, :not_loadable} ->
+        CompiledIntrospection.with_unique_not_loadable(resource, fn ->
+          not_loadable_issue(resource, context, issue_meta)
+        end)
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  defp flag_if_authorizer_without_policies(
+         _resource,
+         %{authorizers: authorizers, policies: policies},
+         context,
+         issue_meta
+       ) do
+    # `Ash.Policy.Authorizer` here is intentionally a bare atom literal, not
+    # a remote call - Elixir compiles it to `:"Elixir.Ash.Policy.Authorizer"`
+    # without ever needing the module loaded, so this file compiles cleanly
+    # in projects that don't depend on Ash. If you ever turn this into a
+    # remote call (e.g. `Ash.Policy.Authorizer.something()`), make sure
+    # `AshCredo.Introspection.Compiled`'s `@compile {:no_warn_undefined,
+    # ...}` list still covers it (it currently does, defensively).
+    if Ash.Policy.Authorizer in authorizers and policies == [] do
+      [missing_policies_issue(context, issue_meta)]
     else
       []
     end
   end
 
-  defp find_authorizer_line(%{use_opts: opts} = context) when is_list(opts) do
-    opts
-    |> Keyword.get(:authorizers)
-    |> authorizer_line(context)
+  defp missing_policies_issue(context, issue_meta) do
+    format_issue(issue_meta,
+      message:
+        "Resource has Ash.Policy.Authorizer but no policies defined. All actions will be denied.",
+      trigger: "Ash.Policy.Authorizer",
+      line_no: Map.get(context, :use_line) || 1
+    )
   end
 
-  defp find_authorizer_line(_), do: nil
-
-  defp authorizer_line(authorizers, context) when is_list(authorizers) do
-    Enum.find_value(authorizers, &authorizer_line(&1, context))
+  defp not_loadable_issue(resource, context, issue_meta) do
+    format_issue(issue_meta,
+      message:
+        "Could not load `#{inspect(resource)}` for `AuthorizerWithoutPolicies`. Run `mix compile` before `mix credo`, or disable this check in `.credo.exs`.",
+      line_no: Map.get(context, :use_line) || 1
+    )
   end
-
-  defp authorizer_line({:__aliases__, meta, _segments} = ref_ast, context) do
-    if Introspection.module_ref?(ref_ast, context, @policy_authorizer), do: meta[:line]
-  end
-
-  defp authorizer_line(_, _), do: nil
 end

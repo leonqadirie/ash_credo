@@ -14,6 +14,20 @@ defmodule AshCredo.Check.Design.MissingIdentity do
           identities do
             identity :unique_email, [:email]
           end
+
+      This check uses Ash's runtime introspection (`Ash.Resource.Info`) to
+      see the fully-resolved attribute and identity lists - including
+      contributions from extensions like `AshAuthentication`, which adds an
+      `:email` attribute via a transformer that the AST scanner cannot see.
+      Migrating to compiled introspection turns this check from "scans the
+      source for known attribute names" into "catches concrete missing
+      identities on extension-contributed attributes too".
+
+      ## Requirements
+
+      Your project must be compiled before running `mix credo`. If Ash is
+      not available in the VM running Credo, the check is a no-op and emits
+      a single diagnostic.
       """,
       params: [
         identity_candidates: "Attribute names that should have a uniqueness identity."
@@ -21,48 +35,85 @@ defmodule AshCredo.Check.Design.MissingIdentity do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    candidates = Params.get(params, :identity_candidates, __MODULE__)
     issue_meta = IssueMeta.for(source_file, params)
+    candidates = MapSet.new(Params.get(params, :identity_candidates, __MODULE__))
 
-    source_file
-    |> Introspection.resource_contexts()
-    |> Enum.flat_map(fn context ->
-      attrs_ast = Introspection.resource_section(context, :attributes)
-      identities_ast = Introspection.resource_section(context, :identities)
-      check_identities(attrs_ast, identities_ast, candidates, issue_meta)
-    end)
+    CompiledIntrospection.with_compiled_check(
+      fn ->
+        format_issue(issue_meta,
+          message:
+            "Ash is not loaded in the VM running Credo - `MissingIdentity` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+          line_no: 1
+        )
+      end,
+      fn ->
+        source_file
+        |> Introspection.resource_contexts()
+        |> Enum.flat_map(&check_resource(&1, candidates, issue_meta))
+      end
+    )
   end
 
-  defp check_identities(nil, _identities, _candidates, _issue_meta), do: []
+  defp check_resource(%{absolute_segments: nil}, _candidates, _issue_meta), do: []
 
-  defp check_identities(attrs_ast, identities_ast, candidates, issue_meta) do
-    identity_fields = collect_identity_fields(identities_ast)
+  defp check_resource(%{absolute_segments: segments} = context, candidates, issue_meta) do
+    resource = Module.concat(segments)
 
-    attrs_ast
-    |> Introspection.entities(:attribute)
-    |> Enum.filter(fn attr -> Introspection.entity_name(attr) in candidates end)
-    |> Enum.reject(fn attr -> Introspection.entity_name(attr) in identity_fields end)
-    |> Enum.map(fn {_, meta, [name | _]} ->
-      format_issue(issue_meta,
-        message: "Attribute `#{name}` likely needs a uniqueness identity.",
-        trigger: "#{name}",
-        line_no: meta[:line]
-      )
-    end)
+    case CompiledIntrospection.inspect_module(resource) do
+      {:ok, info} ->
+        flag_missing_identities(resource, info, context, candidates, issue_meta)
+
+      {:error, :not_loadable} ->
+        CompiledIntrospection.with_unique_not_loadable(resource, fn ->
+          not_loadable_issue(resource, context, issue_meta)
+        end)
+
+      {:error, _} ->
+        []
+    end
   end
 
-  defp collect_identity_fields(nil), do: MapSet.new()
+  defp flag_missing_identities(
+         resource,
+         %{attributes: attributes, identities: identities},
+         context,
+         candidates,
+         issue_meta
+       ) do
+    covered_fields = collect_identity_fields(identities)
+    issue_line = Introspection.resource_issue_line(context)
 
-  defp collect_identity_fields(identities_ast) do
-    identities_ast
-    |> Introspection.entities(:identity)
-    |> Enum.flat_map(fn
-      {:identity, _, [_name, fields | _]} when is_list(fields) -> fields
-      _ -> []
-    end)
+    attributes
+    |> Enum.filter(&(&1.name in candidates))
+    |> Enum.reject(&(&1.name in covered_fields))
+    |> Enum.map(&missing_identity_issue(&1, resource, issue_line, issue_meta))
+  end
+
+  defp collect_identity_fields(identities) do
+    identities
+    |> Enum.flat_map(fn identity -> Map.get(identity, :keys) || [] end)
     |> MapSet.new()
+  end
+
+  defp missing_identity_issue(attribute, resource, line, issue_meta) do
+    format_issue(issue_meta,
+      message:
+        "Attribute `:#{attribute.name}` on `#{inspect(resource)}` likely needs a uniqueness identity. " <>
+          "Add `identity :unique_#{attribute.name}, [:#{attribute.name}]` to the resource's `identities` block.",
+      trigger: "#{attribute.name}",
+      line_no: line
+    )
+  end
+
+  defp not_loadable_issue(resource, context, issue_meta) do
+    format_issue(issue_meta,
+      message:
+        "Could not load `#{inspect(resource)}` for `MissingIdentity`. Run `mix compile` before `mix credo`, or disable this check in `.credo.exs`.",
+      line_no: Map.get(context, :use_line) || 1
+    )
   end
 end

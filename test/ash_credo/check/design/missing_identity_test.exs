@@ -2,82 +2,81 @@ defmodule AshCredo.Check.Design.MissingIdentityTest do
   use AshCredo.CheckCase
 
   alias AshCredo.Check.Design.MissingIdentity
+  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
-  test "reports issue for email without identity" do
-    source = """
-    defmodule MyApp.User do
-      use Ash.Resource, domain: MyApp.Accounts
+  # Tests reference real fixture modules from `test/support/fixtures/ash_fixtures.ex`:
+  #
+  #   * `AshCredoFixtures.Accounts.Member`  - has `:email` and `:username`
+  #     attributes, no identities. Failure-path fixture for the migration.
+  #   * `AshCredoFixtures.Accounts.Profile` - has `:email` attribute AND
+  #     `:unique_email` identity covering it. Happy-path fixture.
 
-      attributes do
-        uuid_primary_key :id
-        attribute :email, :ci_string, allow_nil?: false
-      end
-    end
-    """
-
-    assert [issue] = run_check(MissingIdentity, source)
-    assert issue.message =~ "email"
-    assert issue.message =~ "identity"
+  setup do
+    CompiledIntrospection.clear_cache()
+    :ok
   end
 
-  test "no issue when identity exists for email" do
+  test "reports an issue per uncovered candidate attribute" do
     source = """
-    defmodule MyApp.User do
-      use Ash.Resource, domain: MyApp.Accounts
-
-      attributes do
-        uuid_primary_key :id
-        attribute :email, :ci_string, allow_nil?: false
-      end
-
-      identities do
-        identity :unique_email, [:email]
-      end
-    end
-    """
-
-    assert [] = run_check(MissingIdentity, source)
-  end
-
-  test "no issue for non-candidate attributes" do
-    source = """
-    defmodule MyApp.Post do
-      use Ash.Resource, domain: MyApp.Blog
-
-      attributes do
-        uuid_primary_key :id
-        attribute :title, :string
-      end
-    end
-    """
-
-    assert [] = run_check(MissingIdentity, source)
-  end
-
-  test "reports multiple missing identities" do
-    source = """
-    defmodule MyApp.User do
-      use Ash.Resource, domain: MyApp.Accounts
-
-      attributes do
-        uuid_primary_key :id
-        attribute :email, :ci_string
-        attribute :username, :string
-      end
+    defmodule AshCredoFixtures.Accounts.Member do
+      use Ash.Resource, domain: AshCredoFixtures.Accounts
     end
     """
 
     issues = run_check(MissingIdentity, source)
-    assert length(issues) == 2
+
+    triggers = issues |> MapSet.new(& &1.trigger)
+    assert MapSet.equal?(triggers, MapSet.new(~w(email username)))
+
+    for issue <- issues do
+      assert issue.message =~ "AshCredoFixtures.Accounts.Member"
+      assert issue.message =~ "uniqueness identity"
+      assert issue.message =~ "identity :unique_"
+    end
+  end
+
+  test "no issue when the candidate attribute has a covering identity" do
+    source = """
+    defmodule AshCredoFixtures.Accounts.Profile do
+      use Ash.Resource, domain: AshCredoFixtures.Accounts
+    end
+    """
+
+    assert [] = run_check(MissingIdentity, source)
+  end
+
+  test "respects the configurable identity_candidates list" do
+    source = """
+    defmodule AshCredoFixtures.Accounts.Member do
+      use Ash.Resource, domain: AshCredoFixtures.Accounts
+    end
+    """
+
+    # Member has :email and :username; restrict candidates to slug/handle/phone
+    # → neither attribute matches, no issues fire.
+    assert [] =
+             run_check(MissingIdentity, source, identity_candidates: ~w(slug handle phone)a)
   end
 
   test "ignores non-Ash modules" do
     source = """
     defmodule MyApp.Utils do
-      def email, do: "test@example.com"
+      def hello, do: :world
     end
     """
 
     assert [] = run_check(MissingIdentity, source)
+  end
+
+  test "emits a not-loadable config issue for an unknown resource" do
+    source = """
+    defmodule Totally.Fake.Resource do
+      use Ash.Resource, domain: AshCredoFixtures.Accounts
+    end
+    """
+
+    assert [issue] = run_check(MissingIdentity, source)
+    assert issue.message =~ "Could not load"
+    assert issue.message =~ "Totally.Fake.Resource"
   end
 end

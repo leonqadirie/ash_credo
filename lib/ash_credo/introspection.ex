@@ -1,20 +1,143 @@
 defmodule AshCredo.Introspection do
   @moduledoc "Utilities for inspecting Ash DSL constructs in source AST."
 
-  alias AshCredo.Introspection.{Aliases, AshApi}
+  alias AshCredo.Introspection.{Aliases, AshApi, LexicalAliases}
   alias Credo.Code.Block
   alias Credo.SourceFile
 
   @action_entities ~w(create read update destroy action)a
+  @scope_keys ~w(do else after rescue catch)a
+  @lexical_scope_nodes ~w(defmodule def defp defmacro defmacrop fn if unless case cond with try receive for)a
 
   @doc "Returns all modules in the source file that directly `use Ash.Resource`."
   def resource_modules(source_file), do: modules_using(source_file, [:Ash, :Resource])
 
-  @doc "Returns resource contexts for all resource modules in the source file, in file order."
+  @doc """
+  Returns resource contexts for all resource modules in the source file, in
+  file order. Each context now includes `:absolute_segments` - the full
+  enclosing path of the resource's `defmodule` name (e.g. `[:MyApp, :Blog, :Post]`
+  for a nested `defmodule Post` inside `defmodule MyApp.Blog`). This lets
+  compiled-introspection checks resolve the resource to its runtime module atom.
+  """
   def resource_contexts(source_file) do
     source_file
-    |> resource_modules()
-    |> Enum.map(&resource_context/1)
+    |> all_modules_with_path()
+    |> Enum.filter(fn {ast, _segs} -> module_uses?(ast, [:Ash, :Resource]) end)
+    |> Enum.map(fn {ast, segs} -> resource_context_with_segments(ast, segs) end)
+  end
+
+  @doc """
+  Walks every `defmodule` in a source file and returns
+  `{module_ast, absolute_segments}` tuples in file order.
+
+  `absolute_segments` is the concatenation of all enclosing `defmodule` names
+  (top-to-bottom), so a `defmodule Bar` nested inside `defmodule Foo` is
+  reported as `[:Foo, :Bar]`. Modules whose name is not a literal alias are
+  reported with `absolute_segments: nil` (they still appear in the output).
+  """
+  def all_modules_with_path(source_file) do
+    {_, %{out: out}} =
+      source_file
+      |> Credo.SourceFile.ast()
+      |> Macro.traverse(
+        %{stack: [], alias_frames: [[]], out: []},
+        &enter_module_for_path/2,
+        &leave_module_for_path/2
+      )
+
+    Enum.reverse(out)
+  end
+
+  defp enter_module_for_path({scope_key, _body} = ast, state) when scope_key in @scope_keys do
+    {ast, push_alias_frame(state)}
+  end
+
+  defp enter_module_for_path({:->, _, [_args, _body]} = ast, state) do
+    {ast, push_alias_frame(state)}
+  end
+
+  defp enter_module_for_path({:defmodule, _, [{:__aliases__, _, segs}, [do: _body]]} = ast, state)
+       when is_list(segs) do
+    parent_absolute =
+      case state.stack do
+        [top | _] -> top
+        [] -> []
+      end
+
+    absolute = LexicalAliases.absolute_module_segments(segs, parent_absolute, state.alias_frames)
+
+    new_state = %{
+      state
+      | stack: [absolute | state.stack],
+        alias_frames: LexicalAliases.push_frame(state.alias_frames),
+        out: [{ast, absolute} | state.out]
+    }
+
+    {ast, new_state}
+  end
+
+  defp enter_module_for_path({node_name, _, _} = ast, state)
+       when node_name in @lexical_scope_nodes and node_name != :defmodule do
+    {ast, push_alias_frame(state)}
+  end
+
+  defp enter_module_for_path({:defmodule, _, _} = ast, state) do
+    new_state = %{
+      state
+      | stack: [nil | state.stack],
+        alias_frames: LexicalAliases.push_frame(state.alias_frames)
+    }
+
+    {ast, new_state}
+  end
+
+  defp enter_module_for_path({:alias, _, _} = ast, state) do
+    entries = Aliases.alias_entries(ast)
+    {ast, %{state | alias_frames: LexicalAliases.put_aliases(state.alias_frames, entries)}}
+  end
+
+  defp enter_module_for_path(ast, state), do: {ast, state}
+
+  defp leave_module_for_path({scope_key, _body} = ast, state) when scope_key in @scope_keys do
+    {ast, pop_alias_frame(state)}
+  end
+
+  defp leave_module_for_path({:->, _, [_args, _body]} = ast, state) do
+    {ast, pop_alias_frame(state)}
+  end
+
+  defp leave_module_for_path(
+         {:defmodule, _, _} = ast,
+         %{stack: [_ | s_rest], alias_frames: alias_frames} = state
+       ) do
+    {ast, %{state | stack: s_rest, alias_frames: LexicalAliases.pop_frame(alias_frames)}}
+  end
+
+  defp leave_module_for_path({node_name, _, _} = ast, state)
+       when node_name in @lexical_scope_nodes and node_name != :defmodule do
+    {ast, pop_alias_frame(state)}
+  end
+
+  defp leave_module_for_path(ast, state), do: {ast, state}
+
+  defp push_alias_frame(state) do
+    update_in(state.alias_frames, &LexicalAliases.push_frame/1)
+  end
+
+  defp pop_alias_frame(%{alias_frames: frames} = state) do
+    %{state | alias_frames: LexicalAliases.pop_frame(frames)}
+  end
+
+  defp resource_context_with_segments(module_ast, absolute_segments) do
+    use_metadata = find_use(module_ast, [:Ash, :Resource])
+
+    %{
+      module_ast: module_ast,
+      aliases: module_aliases(module_ast),
+      use_line: use_metadata_line(use_metadata),
+      use_opts: normalized_resource_use_opts(use_metadata),
+      absolute_segments: absolute_segments
+    }
   end
 
   @doc "Returns all modules in the source file that directly `use Ash.Domain`."

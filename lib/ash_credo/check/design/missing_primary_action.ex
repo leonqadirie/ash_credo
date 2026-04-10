@@ -13,69 +13,97 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
             primary? true
             # ...
           end
+
+      This check uses Ash's runtime introspection (`Ash.Resource.Info.actions/1`)
+      to see the fully-resolved action list - including actions contributed by
+      Spark transformers and extensions - so it catches cases where a
+      transformer adds an action that breaks the primary-action invariant.
+
+      ## Requirements
+
+      Your project must be compiled before running `mix credo` so that the
+      referenced resource modules are loadable. Typically chain them in a Mix
+      alias: `lint: ["compile", "credo --strict"]`. If Ash is not loaded in the
+      VM running Credo, the check is a no-op and emits a single diagnostic.
       """
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
-  @action_types ~w(create read update destroy)a
+  @action_types ~w(create read update destroy action)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
 
-    source_file
-    |> Introspection.resource_modules()
-    |> Enum.flat_map(fn module_ast ->
-      module_ast
-      |> Introspection.find_dsl_section(:actions)
-      |> check_primary_actions(issue_meta)
-    end)
+    CompiledIntrospection.with_compiled_check(
+      fn ->
+        format_issue(issue_meta,
+          message:
+            "Ash is not loaded in the VM running Credo - `MissingPrimaryAction` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+          line_no: 1
+        )
+      end,
+      fn ->
+        source_file
+        |> Introspection.resource_contexts()
+        |> Enum.flat_map(&check_resource(&1, issue_meta))
+      end
+    )
   end
 
-  defp check_primary_actions(nil, _issue_meta), do: []
+  defp check_resource(%{absolute_segments: nil}, _issue_meta), do: []
 
-  defp check_primary_actions(actions_ast, issue_meta) do
-    default_types = default_action_types(actions_ast)
+  defp check_resource(
+         %{module_ast: module_ast, absolute_segments: segments} = context,
+         issue_meta
+       ) do
+    resource = Module.concat(segments)
+
+    case CompiledIntrospection.actions(resource) do
+      {:ok, actions} ->
+        flag_missing_primaries(actions, module_ast, context, issue_meta)
+
+      {:error, :not_loadable} ->
+        CompiledIntrospection.with_unique_not_loadable(resource, fn ->
+          not_loadable_issue(resource, context, issue_meta)
+        end)
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  defp flag_missing_primaries(actions, module_ast, context, issue_meta) do
+    actions_line = actions_section_line(module_ast, context)
 
     @action_types
-    |> Enum.reject(&MapSet.member?(default_types, &1))
-    |> Enum.flat_map(fn type ->
-      actions_ast
-      |> Introspection.action_entities([type])
-      |> types_missing_primary(type)
+    |> Enum.map(fn type -> {type, Enum.filter(actions, &(&1.type == type))} end)
+    |> Enum.reject(fn {_type, actions} ->
+      length(actions) <= 1 or Enum.any?(actions, & &1.primary?)
     end)
-    |> Enum.map(fn {type, actions} ->
-      first = hd(actions)
-      {_, meta, _} = first
-
+    |> Enum.map(fn {type, _actions} ->
       format_issue(issue_meta,
-        message: "Multiple `#{type}` actions exist but none is marked `primary?: true`.",
+        message:
+          "Multiple `#{type}` actions exist on this resource but none is marked `primary?: true`.",
         trigger: "#{type}",
-        line_no: meta[:line]
+        line_no: actions_line
       )
     end)
   end
 
-  defp types_missing_primary(actions, _type) when length(actions) <= 1, do: []
+  defp actions_section_line(module_ast, context) do
+    actions_ast = Introspection.find_dsl_section(module_ast, :actions)
 
-  defp types_missing_primary(actions, type) do
-    if Enum.any?(actions, &has_primary_opt?/1), do: [], else: [{type, actions}]
+    Introspection.section_issue_line(actions_ast, Map.get(context, :use_line), 1)
   end
 
-  defp has_primary_opt?(entity_ast) do
-    Introspection.entity_has_opt?(entity_ast, :primary?, true)
-  end
-
-  defp default_action_types(actions_ast) do
-    actions_ast
-    |> Introspection.entities(:defaults)
-    |> Enum.flat_map(&Introspection.default_action_entries/1)
-    |> Enum.flat_map(fn
-      type when is_atom(type) -> [type]
-      {type, _} when is_atom(type) -> [type]
-      _ -> []
-    end)
-    |> MapSet.new()
+  defp not_loadable_issue(resource, context, issue_meta) do
+    format_issue(issue_meta,
+      message:
+        "Could not load `#{inspect(resource)}` for `MissingPrimaryAction`. Run `mix compile` before `mix credo`, or disable this check in `.credo.exs`.",
+      line_no: Map.get(context, :use_line) || 1
+    )
   end
 end

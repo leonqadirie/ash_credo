@@ -11,10 +11,10 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
 
       Use Ash's built-in expression functions instead:
 
-          # Bad — frozen at compile time
+          # Bad - frozen at compile time
           filter expr(start_date <= ^Date.utc_today())
 
-          # Good — evaluated at runtime
+          # Good - evaluated at runtime
           filter expr(start_date <= today())
 
           # Bad
