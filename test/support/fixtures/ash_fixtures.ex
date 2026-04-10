@@ -267,3 +267,27 @@ defmodule AshCredoFixtures.Blog.Tag do
     attribute :name, :string, public?: true
   end
 end
+
+defmodule AshCredoFixtures.FakeMacros do
+  @moduledoc """
+  Plain (non-Ash) fixture module with a mix of real macros and regular
+  functions. Used by `Warning.MissingMacroDirective` tests to verify that
+  user-supplied entries in `macro_modules` are introspected via
+  `module.__info__(:macros)` and only their macros are flagged - not their
+  regular functions.
+  """
+
+  defmacro do_thing(x) do
+    quote do
+      unquote(x)
+    end
+  end
+
+  defmacro other(a, b) do
+    quote do
+      {unquote(a), unquote(b)}
+    end
+  end
+
+  def regular(x), do: x
+end

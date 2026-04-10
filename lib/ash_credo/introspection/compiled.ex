@@ -44,6 +44,7 @@ defmodule AshCredo.Introspection.Compiled do
 
   @cache_key_tag {__MODULE__, :cache}
   @domain_refs_key_tag {__MODULE__, :domain_refs}
+  @macros_key_tag {__MODULE__, :macros}
   @ash_available_key {__MODULE__, :ash_available?}
   @ash_missing_warned_key {__MODULE__, :ash_missing_warned}
   @not_loadable_warned_key {__MODULE__, :not_loadable_warned}
@@ -228,6 +229,49 @@ defmodule AshCredo.Introspection.Compiled do
       error ->
         error
     end
+  end
+
+  @doc """
+  Returns the set of macro names defined by `module` (read from
+  `module.__info__(:macros)`), or `{:error, :not_loadable}` if the module
+  cannot be loaded. Cached per-module in `:persistent_term`.
+
+  Unlike `inspect_module/1`, this does not require the target to be an Ash
+  resource. It works for any compiled Elixir module and exists so checks can
+  ask "which functions on this module are macros?" without hardcoding a list
+  that drifts from reality when upstream adds or renames macros.
+
+  Used by `Warning.MissingMacroDirective` to resolve its configured
+  `macro_modules` list to exact macro sets per module.
+  """
+  @spec macros(module()) :: {:ok, MapSet.t(atom())} | {:error, :not_loadable}
+  def macros(module) when is_atom(module) do
+    key = {@macros_key_tag, module}
+
+    case :persistent_term.get(key, :miss) do
+      :miss ->
+        result = do_macros(module)
+        :persistent_term.put(key, result)
+        result
+
+      cached ->
+        cached
+    end
+  end
+
+  defp do_macros(module) do
+    with {:module, ^module} <- Code.ensure_compiled(module),
+         true <- function_exported?(module, :__info__, 1) do
+      macros =
+        module.__info__(:macros)
+        |> MapSet.new(fn {name, _arity} -> name end)
+
+      {:ok, macros}
+    else
+      _ -> {:error, :not_loadable}
+    end
+  rescue
+    _ -> {:error, :not_loadable}
   end
 
   @doc "Returns `true` if `module` is an Ash resource loadable in this VM."
@@ -523,7 +567,9 @@ defmodule AshCredo.Introspection.Compiled do
   @spec clear_cache() :: :ok
   def clear_cache do
     for {key, _value} <- :persistent_term.get(),
-        match?({@cache_key_tag, _}, key) or match?({@domain_refs_key_tag, _}, key) do
+        match?({@cache_key_tag, _}, key) or
+          match?({@domain_refs_key_tag, _}, key) or
+          match?({@macros_key_tag, _}, key) do
       :persistent_term.erase(key)
     end
 
