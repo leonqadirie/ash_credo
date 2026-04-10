@@ -39,6 +39,9 @@ defmodule AshCredo do
             {AshCredo.Check.Warning.SensitiveFieldInAccept, false},
             {AshCredo.Check.Warning.UnknownAction, false},
             {AshCredo.Check.Warning.WildcardAcceptOnAction, false},
+            # Refactor
+            {AshCredo.Check.Refactor.LargeResource, false},
+            {AshCredo.Check.Refactor.UseCodeInterface, false},
             # Design
             {AshCredo.Check.Design.MissingCodeInterface, false},
             {AshCredo.Check.Design.MissingIdentity, false},
@@ -46,10 +49,7 @@ defmodule AshCredo do
             {AshCredo.Check.Design.MissingTimestamps, false},
             # Readability
             {AshCredo.Check.Readability.ActionMissingDescription, false},
-            {AshCredo.Check.Readability.BelongsToMissingAllowNil, false},
-            # Refactor
-            {AshCredo.Check.Refactor.LargeResource, false},
-            {AshCredo.Check.Refactor.UseCodeInterface, false}
+            {AshCredo.Check.Readability.BelongsToMissingAllowNil, false}
           ]
         }
       }

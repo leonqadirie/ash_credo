@@ -83,14 +83,14 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `SensitiveFieldInAccept` | Warning | High | No | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
 | `UnknownAction` | Warning | High | No | Flags `Ash.*` calls referencing actions that do not exist on the resolved resource, with a fuzzy `Did you mean` hint. **Requires compiled project.** |
 | `WildcardAcceptOnAction` | Warning | High | No | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
+| `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |
+| `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals - names the exact code interface function to call instead. **Requires compiled project** and **configurable** (see below). Pair with `Warning.UnknownAction` for typo detection. |
 | `MissingCodeInterface` | Design | Low | No | Flags each action that has no code interface (resource- or domain-level). **Requires compiled project.** |
 | `MissingIdentity` | Design | Normal | No | Suggests identities for attributes like `email`, `username`, `slug`. **Requires compiled project.** |
 | `MissingPrimaryAction` | Design | Normal | No | Flags missing `primary?: true` when multiple actions of the same type exist. **Requires compiled project.** |
 | `MissingTimestamps` | Design | Normal | No | Suggests adding `timestamps()` to persisted resources. **Requires compiled project.** |
 | `ActionMissingDescription` | Readability | Low | No | Flags actions without a `description` |
 | `BelongsToMissingAllowNil` | Readability | Normal | No | Flags `belongs_to` without explicit `allow_nil?` |
-| `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |
-| `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals - names the exact code interface function to call instead. **Requires compiled project** and **configurable** (see below). Pair with `Warning.UnknownAction` for typo detection. |
 
 ## Checks that require a compiled project
 
@@ -181,14 +181,14 @@ checks: %{
     {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
     {AshCredo.Check.Warning.UnknownAction, []},
     {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
+    {AshCredo.Check.Refactor.LargeResource, []},
+    {AshCredo.Check.Refactor.UseCodeInterface, []},
     {AshCredo.Check.Design.MissingCodeInterface, []},
     {AshCredo.Check.Design.MissingIdentity, []},
     {AshCredo.Check.Design.MissingPrimaryAction, []},
     {AshCredo.Check.Design.MissingTimestamps, []},
     {AshCredo.Check.Readability.ActionMissingDescription, []},
-    {AshCredo.Check.Readability.BelongsToMissingAllowNil, []},
-    {AshCredo.Check.Refactor.LargeResource, []},
-    {AshCredo.Check.Refactor.UseCodeInterface, []}
+    {AshCredo.Check.Readability.BelongsToMissingAllowNil, []}
   ]
 }
 ```
@@ -200,14 +200,14 @@ The following checks accept custom parameters:
 | Check | Parameter | Default | Description |
 |---|---|---|---|
 | `Warning.AuthorizeFalse` | `include_non_ash_calls` | `true` | When `false`, only checks Ash API calls and action DSL definitions |
-| `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
 | `Warning.MissingMacroDirective` | `macro_modules` | `[Ash.Query, Ash.Expr]` | Modules whose qualified macro calls the check validates. Macros are read from `module.__info__(:macros)`, so only real macros are flagged |
+| `Warning.SensitiveAttributeExposed` | `sensitive_names` | `~w(password hashed_password password_hash token secret api_key private_key ssn)a` | Attribute names to flag when not marked `sensitive?: true` |
+| `Warning.SensitiveFieldInAccept` | `dangerous_fields` | `~w(is_admin admin permissions api_key secret_key)a` | Field names to flag when found in `accept` lists |
 | `Refactor.LargeResource` | `max_lines` | `400` | Maximum line count before triggering |
 | `Refactor.UseCodeInterface` | `enforce_code_interface_in_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
 | `Refactor.UseCodeInterface` | `enforce_code_interface_outside_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
 | `Refactor.UseCodeInterface` | `prefer_interface_scope` | `:auto` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
-| `Warning.SensitiveAttributeExposed` | `sensitive_names` | `~w(password hashed_password password_hash token secret api_key private_key ssn)a` | Attribute names to flag when not marked `sensitive?: true` |
-| `Warning.SensitiveFieldInAccept` | `dangerous_fields` | `~w(is_admin admin permissions api_key secret_key)a` | Field names to flag when found in `accept` lists |
+| `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
 
 ### Adapting `UseCodeInterface` to your team's conventions
 
