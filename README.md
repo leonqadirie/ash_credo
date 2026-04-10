@@ -63,6 +63,8 @@ mix deps.get
 mix credo
 ```
 
+Several checks read Ash's runtime introspection (compiled BEAM metadata, not source AST) and require the project to be compiled first. If you have any of those enabled, run `mix compile` before `mix credo` - typically via a Mix alias like `lint: ["compile", "credo --strict"]`. See [Checks that require a compiled project](#checks-that-require-a-compiled-project) for the full list and the rationale.
+
 ## Checks
 
 | Check | Category | Priority | Default | Description |
@@ -91,7 +93,7 @@ mix credo
 
 ## Checks that require a compiled project
 
-Eight checks read Ash's runtime introspection (`Ash.Resource.Info`, `Ash.Domain.Info`, and `Ash.Policy.Info`) rather than source AST.
+Several checks read Ash's runtime introspection (`Ash.Resource.Info`, `Ash.Domain.Info`, and `Ash.Policy.Info`) rather than source AST.
 They see the fully-resolved resource state - including anything Spark transformers or extensions contribute - and catch bugs that pure AST scanning would miss (e.g. identities on AshAuthentication-injected `:email` attributes, fragment-spliced actions, extension-added authorizers).
 
 - `Refactor.UseCodeInterface`
@@ -115,7 +117,7 @@ defp aliases do
 end
 ```
 
-If a referenced resource cannot be loaded, the check emits a per-call-site "could not load" issue pointing at the resource. If Ash itself is not available in the VM running Credo (why are you using `ash_credo` without depending on Ash?), all eight checks emit a single shared diagnostic and become no-ops. You can disable any of them in `.credo.exs` if your workflow can't run `mix compile` beforehand.
+If a referenced resource cannot be loaded, the check emits a per-call-site "could not load" issue pointing at the resource. If Ash itself is not available in the VM running Credo (why are you using `ash_credo` without depending on Ash?), these checks emit a single shared diagnostic and become no-ops. You can disable any of them in `.credo.exs` if your workflow can't run `mix compile` beforehand.
 
 ### Caching and long-lived VMs
 
