@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.7.0](https://github.com/leonqadirie/ash_credo/compare/v0.6.0...v0.7.0) (2026-04-10)
+
+
+### Features
+
+* add refactor.directive_in_function_body check ([#66](https://github.com/leonqadirie/ash_credo/issues/66)) ([538edc1](https://github.com/leonqadirie/ash_credo/commit/538edc16255f60f909ebc6e9c80d17973c10adbd))
+
 ## [0.6.0](https://github.com/leonqadirie/ash_credo/compare/v0.5.2...v0.6.0) (2026-04-10)
 
 
