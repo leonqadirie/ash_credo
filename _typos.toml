@@ -1,2 +1,7 @@
 [files]
 extend-exclude = ["CHANGELOG.md"]
+
+[default.extend-words]
+# Intentional typo used to demonstrate the fuzzy unknown-action suggestion
+# in `UseCodeInterface` (jaro-distance match against the real `:publish`).
+publishd = "publishd"
