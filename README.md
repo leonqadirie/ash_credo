@@ -202,7 +202,7 @@ The following checks accept custom parameters:
 |---|---|---|---|
 | `Warning.AuthorizeFalse` | `include_non_ash_calls` | `true` | When `false`, only checks Ash API calls and action DSL definitions |
 | `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
-| `Warning.MissingMacroDirective` | `macro_modules` | `[Ash.Query, Ash.Expr]` | Modules whose qualified macro calls require a matching module-level `require`/`import`. The exact set of macros on each module is read from compiled-BEAM introspection (`module.__info__(:macros)`), so only real macros are flagged - regular functions on the same module are ignored, including on user-supplied entries |
+| `Warning.MissingMacroDirective` | `macro_modules` | `[Ash.Query, Ash.Expr]` | Modules whose qualified macro calls the check validates. Macros are read from `module.__info__(:macros)`, so only real macros are flagged |
 | `Refactor.LargeResource` | `max_lines` | `400` | Maximum line count before triggering |
 | `Refactor.UseCodeInterface` | `enforce_code_interface_in_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
 | `Refactor.UseCodeInterface` | `enforce_code_interface_outside_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |

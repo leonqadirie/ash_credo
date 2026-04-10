@@ -62,12 +62,21 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
       implies `require <Module>` in Elixir, so qualified macro calls work
       after either directive.
 
-      Only **module-level** placement counts. A `require` inside a function
-      body or any deeper block is lexically scoped and does not reach sibling
-      functions or code outside its block. Rather than tracking lexical
-      scope precisely, the check requires the directive to be a direct
-      child of the `defmodule` do-block - the only placement that is a
-      blanket guarantee for every call site in the module.
+      Only **qualified** remote calls (`Ash.Query.filter(...)`) are
+      inspected. Unqualified calls like `filter(...)` after `import Ash.Query`
+      are out of scope: if the import is missing, Elixir raises a clean
+      `undefined function filter/2` at compile time, which is obvious enough
+      to need no lint.
+
+      Only **module-level** placement counts for this check. Elixir itself
+      would also accept a lexically-scoped directive (e.g. a `require`
+      inside the same function as the call, or inside an enclosing `do`
+      block), since `require`/`import` are scoped to the block they appear
+      in. The check is stricter: it requires the directive to be a direct
+      child of the `defmodule` do-block. That is the only placement the
+      check can validate as a blanket guarantee for every call site in the
+      module without tracking lexical scope precisely, and it matches the
+      dominant idiom in real Ash codebases.
 
       Each configured module is tracked independently: `require Ash.Query`
       does **not** cover `Ash.Expr.expr(...)`, and vice versa. A module that
@@ -120,11 +129,17 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
       """,
       params: [
         macro_modules:
-          "List of modules whose qualified macro calls require a matching " <>
-            "module-level `require` or `import`. Defaults to `[Ash.Query, " <>
-            "Ash.Expr]`. The exact set of macros on each module is read " <>
-            "from compiled-BEAM introspection, so only real macros are " <>
-            "flagged - regular functions on the same module are ignored."
+          "List of modules whose qualified macro calls the check validates. " <>
+            "For each call to `<Module>.<macro>/n` the check requires a " <>
+            "`require` or `import` of `<Module>` at the top level of the " <>
+            "enclosing `defmodule`. Elixir itself would also accept a " <>
+            "lexically-scoped directive (e.g. inside the same function), but " <>
+            "the check is stricter so it can validate without full scope " <>
+            "tracking. Defaults to `[Ash.Query, Ash.Expr]`. The exact set " <>
+            "of macros on each module is read from compiled-BEAM " <>
+            "introspection (`module.__info__(:macros)`), so only real " <>
+            "macros are flagged - regular functions on the same module " <>
+            "are ignored."
       ]
     ]
 
