@@ -134,4 +134,22 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapperTest do
 
     assert issue.line_no == 2
   end
+
+  test "handles grouped alias syntax" do
+    source = """
+    defmodule AshCredo.Check.Warning.GroupedAlias do
+      alias AshCredo.Introspection.{Compiled, Aliases}
+
+      def run(source_file, _params) do
+        Compiled.actions(resource)
+      end
+    end
+    """
+
+    assert [issue] =
+             run_check_with_filename(source, "lib/ash_credo/check/warning/grouped_alias.ex")
+
+    assert issue.line_no == 2
+    assert issue.trigger == "AshCredo.Introspection.Compiled"
+  end
 end
