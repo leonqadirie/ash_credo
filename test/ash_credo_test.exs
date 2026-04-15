@@ -293,6 +293,64 @@ defmodule AshCredoTest do
       #{inspect(readme_param_rows, pretty: true)}
       """
     end
+
+    test "declared category matches directory for all checks" do
+      for {cat, name, _path} <- discover_check_modules() do
+        module = Module.concat([AshCredo.Check, cat, name])
+        assert Code.ensure_loaded?(module), "Could not load #{inspect(module)}"
+
+        declared_cat = module.category() |> Atom.to_string() |> to_module_name()
+
+        assert declared_cat == cat,
+               "AshCredo.Check.#{cat}.#{name} is in the `#{String.downcase(cat)}` directory but declares `category: :#{module.category()}`"
+      end
+    end
+
+    test "every check has a corresponding test file" do
+      expected =
+        for {cat, name, _path} <- discover_check_modules(), do: {cat, name}
+
+      actual =
+        Path.wildcard("test/ash_credo/check/**/*_test.exs")
+        |> Enum.map(fn path ->
+          relative = Path.relative_to(path, "test/ash_credo/check")
+          [category | rest] = Path.split(relative)
+          name = rest |> Path.join() |> Path.rootname() |> String.trim_trailing("_test")
+          {to_module_name(category), to_module_name(name)}
+        end)
+        |> Enum.sort()
+
+      assert_set_equality(
+        expected,
+        actual,
+        fn {cat, name} ->
+          "AshCredo.Check.#{cat}.#{name} has no corresponding test file"
+        end,
+        fn {cat, name} ->
+          "Test file exists for #{cat}.#{name} but no check module in #{@check_dir}/"
+        end
+      )
+    end
+
+    test "all checks include the :ash tag" do
+      for {cat, name, _path} <- discover_check_modules() do
+        module = Module.concat([AshCredo.Check, cat, name])
+        assert Code.ensure_loaded?(module), "Could not load #{inspect(module)}"
+
+        assert :ash in module.tags(),
+               "AshCredo.Check.#{cat}.#{name} is missing the `:ash` tag (has tags: #{inspect(module.tags())})"
+      end
+    end
+
+    test ":security tag implies category: :warning" do
+      for {cat, name, _path} <- discover_check_modules(),
+          module = Module.concat([AshCredo.Check, cat, name]),
+          Code.ensure_loaded?(module),
+          :security in module.tags() do
+        assert module.category() == :warning,
+               "AshCredo.Check.#{cat}.#{name} has the `:security` tag but declares `category: :#{module.category()}` (security checks must be warnings)"
+      end
+    end
   end
 
   # Asserts that `expected` and `actual` (lists of tuples) contain the same
