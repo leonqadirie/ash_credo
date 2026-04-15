@@ -26,8 +26,19 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
       """
     ]
 
+  # Ash is not a runtime dependency of ash_credo - users bring their own.
+  # Suppress compile-time warnings; guarded at runtime by `with_compiled_check`.
   alias AshCredo.Introspection
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
+
+  @compile {:no_warn_undefined, [Ash.Type, Ash.Type.NewType]}
+
+  @datetime_storage_types [
+    :utc_datetime,
+    :utc_datetime_usec,
+    :naive_datetime,
+    :naive_datetime_usec
+  ]
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
@@ -117,14 +128,24 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
   # PK attributes produced by e.g. `uuid_primary_key :id` - which are
   # also non-writable with a default function - don't satisfy the
   # create-timestamp predicate and mask a missing `create_timestamp`.
+  #
+  # Custom types like `AshPostgres.TimestamptzUsec` override `storage_type/1`
+  # to return a DB-specific atom (e.g. `:"timestamptz(6)"`), so we cannot
+  # rely on `Ash.Type.storage_type/2` alone. Instead we resolve through
+  # `Ash.Type.NewType.subtype_of/1` to find the base Ash type and check
+  # *its* storage type against the known datetime storage atoms.
   defp datetime_attribute_type?(type) when is_atom(type) and not is_nil(type) do
     type
-    |> Atom.to_string()
-    |> String.downcase()
-    |> String.contains?("datetime")
+    |> resolve_base_type()
+    |> Ash.Type.storage_type([])
+    |> Kernel.in(@datetime_storage_types)
   end
 
   defp datetime_attribute_type?(_), do: false
+
+  defp resolve_base_type(type) do
+    if Ash.Type.NewType.new_type?(type), do: Ash.Type.NewType.subtype_of(type), else: type
+  end
 
   defp missing_timestamps_issue(module_ast, context, issue_meta) do
     attrs_ast = Introspection.find_dsl_section(module_ast, :attributes)
