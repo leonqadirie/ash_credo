@@ -45,8 +45,9 @@
           {ExSlop.Check.Readability.StepComment, []},
           {ExSlop.Check.Readability.NarratorComment, []},
 
-          # Internal - enforce the compiled-introspection boundary
-          {AshCredo.SelfCheck.EnforceCompiledIntrospectionBoundary, []}
+          # Internal - enforce architectural invariants
+          {AshCredo.SelfCheck.EnforceCompiledIntrospectionBoundary, []},
+          {AshCredo.SelfCheck.EnforceCompiledCheckWrapper, []}
         ]
       }
     }
