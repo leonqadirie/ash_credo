@@ -43,7 +43,10 @@
           {ExSlop.Check.Readability.BoilerplateDocParams, []},
           {ExSlop.Check.Readability.ObviousComment, []},
           {ExSlop.Check.Readability.StepComment, []},
-          {ExSlop.Check.Readability.NarratorComment, []}
+          {ExSlop.Check.Readability.NarratorComment, []},
+
+          # Internal - enforce the compiled-introspection boundary
+          {AshCredo.SelfCheck.EnforceCompiledIntrospectionBoundary, []}
         ]
       }
     }
