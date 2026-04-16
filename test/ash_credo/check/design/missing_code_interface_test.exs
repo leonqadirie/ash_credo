@@ -89,6 +89,16 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
     refute "publish" in triggers
   end
 
+  test "no issue for embedded resources" do
+    source = """
+    defmodule MyApp.Blog.PostMetadata do
+      use Ash.Resource, data_layer: :embedded
+    end
+    """
+
+    assert [] = run_check(MissingCodeInterface, source)
+  end
+
   test "ignores non-Ash modules" do
     source = """
     defmodule MyApp.Utils do
