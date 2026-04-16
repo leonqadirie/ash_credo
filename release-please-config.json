@@ -4,20 +4,8 @@
       "release-type": "elixir",
       "bump-minor-pre-major": true,
       "draft": false,
-      "changelog-type": "github",
-      "changelog-sections": [
-        {"type": "feat", "section": "Features"},
-        {"type": "fix", "section": "Bug Fixes"},
-        {"type": "perf", "section": "Performance Improvements"},
-        {"type": "revert", "section": "Reverts"},
-        {"type": "chore", "section": "", "hidden": true},
-        {"type": "docs", "section": "", "hidden": true},
-        {"type": "style", "section": "", "hidden": true},
-        {"type": "refactor", "section": "", "hidden": true},
-        {"type": "test", "section": "", "hidden": true},
-        {"type": "build", "section": "", "hidden": true},
-        {"type": "ci", "section": "", "hidden": true}
-      ]
+      "changelog-type": "default",
+      "include-commit-authors": true
     }
   }
 }
