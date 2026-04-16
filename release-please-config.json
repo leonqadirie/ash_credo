@@ -3,7 +3,8 @@
     ".": {
       "release-type": "elixir",
       "bump-minor-pre-major": true,
-      "draft": false
+      "draft": false,
+      "changelog-type": "github"
     }
   }
 }
