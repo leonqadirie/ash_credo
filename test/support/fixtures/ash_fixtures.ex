@@ -1,3 +1,18 @@
+defmodule AshCredoFixtures.CustomTimestampType do
+  @moduledoc """
+  A custom Ash NewType that is a subtype of `:utc_datetime_usec` but overrides
+  `storage_type` to return a DB-specific atom. Mimics
+  `AshPostgres.TimestamptzUsec` for testing `MissingTimestamps` with custom
+  timestamp types whose module name does not contain "datetime" and whose
+  `storage_type` is not in the standard set.
+  """
+
+  use Ash.Type.NewType, subtype_of: :utc_datetime_usec
+
+  @impl true
+  def storage_type(_), do: :"timestamptz(6)"
+end
+
 defmodule AshCredoFixtures.Blog.Post do
   @moduledoc """
   Fixture resource used by `UseCodeInterface` tests. Intentionally covers
@@ -56,6 +71,7 @@ defmodule AshCredoFixtures.Blog do
 
     resource AshCredoFixtures.Blog.Article
     resource AshCredoFixtures.Blog.PartialTimestamps
+    resource AshCredoFixtures.Blog.CustomTimestamps
     resource AshCredoFixtures.Blog.Tag
     resource AshCredoFixtures.Blog.Empty
     resource AshCredoFixtures.Blog.WithAuthorizer
@@ -203,6 +219,30 @@ defmodule AshCredoFixtures.Blog.PartialTimestamps do
     uuid_primary_key :id
     attribute :title, :string, public?: true
     update_timestamp :updated_at
+  end
+end
+
+defmodule AshCredoFixtures.Blog.CustomTimestamps do
+  @moduledoc """
+  `MissingTimestamps` happy-path fixture: uses a custom timestamp type
+  (`AshCredoFixtures.CustomTimestampType`) whose module name does not contain
+  "datetime". Exercises the `Ash.Type.storage_type/2` resolution path.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  actions do
+    defaults [:read]
+    default_accept []
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :title, :string, public?: true
+    create_timestamp :inserted_at, type: AshCredoFixtures.CustomTimestampType
+    update_timestamp :updated_at, type: AshCredoFixtures.CustomTimestampType
   end
 end
 

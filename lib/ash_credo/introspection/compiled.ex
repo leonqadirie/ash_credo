@@ -39,8 +39,17 @@ defmodule AshCredo.Introspection.Compiled do
   # Ash is not a runtime dependency of ash_credo - users bring their own.
   # Suppress compile-time warnings for the remote calls below; they are guarded
   # at runtime by `ash_available?/0`.
+  alias Ash.Type.NewType
+
   @compile {:no_warn_undefined,
-            [Ash.Resource.Info, Ash.Domain.Info, Ash.Policy.Info, Ash.Policy.Authorizer]}
+            [
+              Ash.Resource.Info,
+              Ash.Domain.Info,
+              Ash.Policy.Info,
+              Ash.Policy.Authorizer,
+              Ash.Type,
+              Ash.Type.NewType
+            ]}
 
   @cache_key_tag {__MODULE__, :cache}
   @domain_refs_key_tag {__MODULE__, :domain_refs}
@@ -578,6 +587,29 @@ defmodule AshCredo.Introspection.Compiled do
     :persistent_term.erase(@not_loadable_warned_key)
     :ok
   end
+
+  @datetime_storage_types [
+    :utc_datetime,
+    :utc_datetime_usec,
+    :naive_datetime,
+    :naive_datetime_usec
+  ]
+
+  @doc """
+  Returns `true` if `type` is a datetime attribute type, resolving through
+  `Ash.Type.NewType.subtype_of/1` for custom NewTypes (e.g.
+  `AshPostgres.TimestamptzUsec`) whose `storage_type/1` returns a DB-specific
+  atom rather than a standard Ecto datetime type.
+  """
+  @spec datetime_type?(term()) :: boolean()
+  def datetime_type?(type) when is_atom(type) and not is_nil(type) do
+    type
+    |> NewType.subtype_of()
+    |> Ash.Type.storage_type([])
+    |> Kernel.in(@datetime_storage_types)
+  end
+
+  def datetime_type?(_), do: false
 
   # ── Private ──
 

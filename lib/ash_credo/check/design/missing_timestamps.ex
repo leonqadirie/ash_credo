@@ -117,14 +117,7 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
   # PK attributes produced by e.g. `uuid_primary_key :id` - which are
   # also non-writable with a default function - don't satisfy the
   # create-timestamp predicate and mask a missing `create_timestamp`.
-  defp datetime_attribute_type?(type) when is_atom(type) and not is_nil(type) do
-    type
-    |> Atom.to_string()
-    |> String.downcase()
-    |> String.contains?("datetime")
-  end
-
-  defp datetime_attribute_type?(_), do: false
+  defp datetime_attribute_type?(type), do: CompiledIntrospection.datetime_type?(type)
 
   defp missing_timestamps_issue(module_ast, context, issue_meta) do
     attrs_ast = Introspection.find_dsl_section(module_ast, :attributes)

@@ -61,6 +61,18 @@ defmodule AshCredo.Check.Design.MissingTimestampsTest do
     assert [] = run_check(MissingTimestamps, source)
   end
 
+  test "no issue when timestamps use a custom type (e.g. AshPostgres.TimestamptzUsec)" do
+    source = """
+    defmodule AshCredoFixtures.Blog.CustomTimestamps do
+      use Ash.Resource,
+        domain: AshCredoFixtures.Blog,
+        data_layer: AshPostgres.DataLayer
+    end
+    """
+
+    assert [] = run_check(MissingTimestamps, source)
+  end
+
   test "ignores embedded resources (no data layer at the AST level)" do
     source = """
     defmodule AshCredoFixtures.Blog.SomeEmbedded do
