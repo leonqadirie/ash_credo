@@ -39,6 +39,8 @@ defmodule AshCredo.Introspection.Compiled do
   # Ash is not a runtime dependency of ash_credo - users bring their own.
   # Suppress compile-time warnings for the remote calls below; they are guarded
   # at runtime by `ash_available?/0`.
+  alias Ash.Type.NewType
+
   @compile {:no_warn_undefined,
             [
               Ash.Resource.Info,
@@ -602,16 +604,12 @@ defmodule AshCredo.Introspection.Compiled do
   @spec datetime_type?(term()) :: boolean()
   def datetime_type?(type) when is_atom(type) and not is_nil(type) do
     type
-    |> resolve_base_type()
+    |> NewType.subtype_of()
     |> Ash.Type.storage_type([])
     |> Kernel.in(@datetime_storage_types)
   end
 
   def datetime_type?(_), do: false
-
-  defp resolve_base_type(type) do
-    if Ash.Type.NewType.new_type?(type), do: Ash.Type.NewType.subtype_of(type), else: type
-  end
 
   # ── Private ──
 
