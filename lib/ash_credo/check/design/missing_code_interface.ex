@@ -3,6 +3,9 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
     base_priority: :low,
     category: :design,
     tags: [:ash],
+    param_defaults: [
+      exclude_actions: []
+    ],
     explanations: [
       check: """
       Resources with actions but no `code_interface` block miss out on Ash's
@@ -28,12 +31,28 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
             end
           end
 
+      ## Configuration
+
+      Use `exclude_actions` to skip specific actions (e.g. auto-generated
+      by extensions like AshAuthentication):
+
+          {AshCredo.Check.Design.MissingCodeInterface,
+           exclude_actions: [
+             {MyApp.Accounts.User, :sign_in_with_password},
+             {MyApp.Accounts.Token, :expunge_expired}
+           ]}
+
+      Each entry is a `{Module, :action_name}` tuple.
+
       ## Requirements
 
       Your project must be compiled before running `mix credo`. If Ash is
       not available in the VM running Credo, the check is a no-op and emits
       a single diagnostic.
-      """
+      """,
+      params: [
+        exclude_actions: "List of `{Module, :action_name}` tuples to skip."
+      ]
     ]
 
   alias AshCredo.Introspection
@@ -42,6 +61,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
   @impl true
   def run(%SourceFile{} = source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
+    exclude_actions = Params.get(params, :exclude_actions, __MODULE__)
 
     CompiledIntrospection.with_compiled_check(
       fn ->
@@ -54,22 +74,23 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
       fn ->
         source_file
         |> Introspection.resource_contexts()
-        |> Enum.flat_map(&check_resource(&1, issue_meta))
+        |> Enum.flat_map(&check_resource(&1, issue_meta, exclude_actions))
       end
     )
   end
 
-  defp check_resource(%{absolute_segments: nil}, _issue_meta), do: []
+  defp check_resource(%{absolute_segments: nil}, _issue_meta, _exclude_actions), do: []
 
   defp check_resource(
          %{absolute_segments: segments, module_ast: module_ast} = context,
-         issue_meta
+         issue_meta,
+         exclude_actions
        ) do
     resource = Module.concat(segments)
 
     with false <- Introspection.embedded_resource?(context),
          {:ok, info} <- CompiledIntrospection.inspect_module(resource) do
-      flag_missing_interfaces(resource, info, module_ast, context, issue_meta)
+      flag_missing_interfaces(resource, info, module_ast, context, issue_meta, exclude_actions)
     else
       true ->
         []
@@ -89,13 +110,19 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
          %{actions: actions, interfaces: interfaces, domain: resource_domain},
          module_ast,
          context,
-         issue_meta
+         issue_meta,
+         exclude_actions
        ) do
     actions_line = actions_section_line(module_ast, context)
 
     actions
+    |> Enum.reject(&action_excluded?(&1, resource, exclude_actions))
     |> Enum.reject(&action_has_interface?(&1, interfaces, resource_domain, resource))
     |> Enum.map(&missing_interface_issue(&1, resource, actions_line, issue_meta))
+  end
+
+  defp action_excluded?(action, resource, exclude_actions) do
+    {resource, action.name} in exclude_actions
   end
 
   defp action_has_interface?(action, interfaces, resource_domain, resource) do
