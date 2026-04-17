@@ -65,22 +65,23 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
          %{absolute_segments: segments, module_ast: module_ast} = context,
          issue_meta
        ) do
-    resource = Module.concat(segments)
-
-    with false <- Introspection.embedded_resource?(context),
-         {:ok, info} <- CompiledIntrospection.inspect_module(resource) do
-      flag_missing_interfaces(resource, info, module_ast, context, issue_meta)
+    if Introspection.embedded_resource?(context) do
+      []
     else
-      true ->
-        []
+      resource = Module.concat(segments)
 
-      {:error, :not_loadable} ->
-        CompiledIntrospection.with_unique_not_loadable(resource, fn ->
-          not_loadable_issue(resource, context, issue_meta)
-        end)
+      case CompiledIntrospection.inspect_module(resource) do
+        {:ok, info} ->
+          flag_missing_interfaces(resource, info, module_ast, context, issue_meta)
 
-      {:error, _} ->
-        []
+        {:error, :not_loadable} ->
+          CompiledIntrospection.with_unique_not_loadable(resource, fn ->
+            not_loadable_issue(resource, context, issue_meta)
+          end)
+
+        {:error, _} ->
+          []
+      end
     end
   end
 
