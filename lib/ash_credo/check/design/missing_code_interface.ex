@@ -33,6 +33,11 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
       Your project must be compiled before running `mix credo`. If Ash is
       not available in the VM running Credo, the check is a no-op and emits
       a single diagnostic.
+
+      ## Notes
+
+      Embedded resources are skipped by this check, since they typically
+      do not need a code interface.
       """
     ]
 
@@ -69,19 +74,22 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
       []
     else
       resource = Module.concat(segments)
+      inspect_resource(resource, module_ast, context, issue_meta)
+    end
+  end
 
-      case CompiledIntrospection.inspect_module(resource) do
-        {:ok, info} ->
-          flag_missing_interfaces(resource, info, module_ast, context, issue_meta)
+  defp inspect_resource(resource, module_ast, context, issue_meta) do
+    case CompiledIntrospection.inspect_module(resource) do
+      {:ok, info} ->
+        flag_missing_interfaces(resource, info, module_ast, context, issue_meta)
 
-        {:error, :not_loadable} ->
-          CompiledIntrospection.with_unique_not_loadable(resource, fn ->
-            not_loadable_issue(resource, context, issue_meta)
-          end)
+      {:error, :not_loadable} ->
+        CompiledIntrospection.with_unique_not_loadable(resource, fn ->
+          not_loadable_issue(resource, context, issue_meta)
+        end)
 
-        {:error, _} ->
-          []
-      end
+      {:error, _} ->
+        []
     end
   end
 
