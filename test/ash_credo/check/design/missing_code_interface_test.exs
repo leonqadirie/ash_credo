@@ -122,6 +122,69 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
     assert [] = run_check(MissingCodeInterface, source)
   end
 
+  test "excluded_actions suppresses matching actions on a resource" do
+    source = """
+    defmodule AshCredoFixtures.Blog.Post do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+    end
+    """
+
+    issues =
+      run_check(MissingCodeInterface, source,
+        excluded_actions: ["AshCredoFixtures.Blog.Post.create"]
+      )
+
+    triggers = Enum.map(issues, & &1.trigger) |> MapSet.new()
+    assert MapSet.equal?(triggers, MapSet.new(~w(update destroy draft)))
+  end
+
+  test "excluded_actions works across multiple resources" do
+    post_source = """
+    defmodule AshCredoFixtures.Blog.Post do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+    end
+    """
+
+    user_source = """
+    defmodule AshCredoFixtures.Accounts.User do
+      use Ash.Resource, domain: AshCredoFixtures.Accounts
+    end
+    """
+
+    post_issues =
+      run_check(MissingCodeInterface, post_source,
+        excluded_actions: [
+          "AshCredoFixtures.Blog.Post.create",
+          "AshCredoFixtures.Blog.Post.draft"
+        ]
+      )
+
+    user_issues =
+      run_check(MissingCodeInterface, user_source,
+        excluded_actions: ["AshCredoFixtures.Accounts.User.read"]
+      )
+
+    post_triggers = Enum.map(post_issues, & &1.trigger) |> MapSet.new()
+    user_triggers = Enum.map(user_issues, & &1.trigger) |> MapSet.new()
+
+    assert MapSet.equal?(post_triggers, MapSet.new(~w(update destroy)))
+    assert MapSet.equal?(user_triggers, MapSet.new(~w(create update destroy)))
+  end
+
+  test "excluded_actions with no matches is a no-op" do
+    source = """
+    defmodule AshCredoFixtures.Blog.Post do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+    end
+    """
+
+    issues =
+      run_check(MissingCodeInterface, source, excluded_actions: ["No.Such.Resource.nope"])
+
+    triggers = Enum.map(issues, & &1.trigger) |> MapSet.new()
+    assert MapSet.equal?(triggers, MapSet.new(~w(create update destroy draft)))
+  end
+
   test "emits a not-loadable config issue for an unknown resource" do
     source = """
     defmodule Totally.Fake.Resource do
