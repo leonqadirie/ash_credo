@@ -9,7 +9,7 @@
         ],
         excluded: [~r"/_build/", ~r"/deps/"]
       },
-      plugins: [],
+      plugins: [{ExDNA.Credo, []}],
       requires: [],
       strict: true,
       parse_timeout: 5000,
