@@ -171,6 +171,28 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
     assert MapSet.equal?(user_triggers, MapSet.new(~w(create update destroy)))
   end
 
+  test "excluded_actions disambiguates same action name across resources" do
+    post_source = """
+    defmodule AshCredoFixtures.Blog.Post do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+    end
+    """
+
+    user_source = """
+    defmodule AshCredoFixtures.Accounts.User do
+      use Ash.Resource, domain: AshCredoFixtures.Accounts
+    end
+    """
+
+    excluded = ["AshCredoFixtures.Blog.Post.create"]
+
+    post_issues = run_check(MissingCodeInterface, post_source, excluded_actions: excluded)
+    user_issues = run_check(MissingCodeInterface, user_source, excluded_actions: excluded)
+
+    refute "create" in Enum.map(post_issues, & &1.trigger)
+    assert "create" in Enum.map(user_issues, & &1.trigger)
+  end
+
   test "excluded_actions with no matches is a no-op" do
     source = """
     defmodule AshCredoFixtures.Blog.Post do
