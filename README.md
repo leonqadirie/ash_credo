@@ -210,6 +210,7 @@ The following checks accept custom parameters:
 | `Refactor.UseCodeInterface` | `enforce_code_interface_in_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
 | `Refactor.UseCodeInterface` | `enforce_code_interface_outside_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
 | `Refactor.UseCodeInterface` | `prefer_interface_scope` | `:auto` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
+| `Design.MissingCodeInterface` | `excluded_actions` | `[]` | List of `"Module.action_name"` strings whose missing interface should be suppressed (e.g. `AshAuthentication`-generated actions) |
 | `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
 
 ### Adapting `UseCodeInterface` to your team's conventions
