@@ -1,11 +1,11 @@
 {
+  "include-commit-authors": true,
   "packages": {
     ".": {
       "release-type": "elixir",
       "bump-minor-pre-major": true,
       "draft": false,
-      "changelog-type": "default",
-      "include-commit-authors": true
+      "changelog-type": "default"
     }
   }
 }
