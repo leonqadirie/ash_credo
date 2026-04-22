@@ -1,6 +1,19 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.8.0](https://github.com/leonqadirie/ash_credo/compare/v0.7.0...v0.8.0) (2026-04-22)
+
+
+### Features
+
+* add excluded_actions param to MissingCodeInterface ([#82](https://github.com/leonqadirie/ash_credo/issues/82)) ([9fb5c7c](https://github.com/leonqadirie/ash_credo/commit/9fb5c7c3eaddc4e242fb4ab06e9ed7544f898ae6))
+
+
+### Bug Fixes
+
+* handle custom timestamp types in MissingTimestamps check ([#71](https://github.com/leonqadirie/ash_credo/issues/71)) ([919cf51](https://github.com/leonqadirie/ash_credo/commit/919cf51aa1ac99f4a773aef7b1778a845899ecb9))
+* skip embedded resources in MissingCodeInterface ([#81](https://github.com/leonqadirie/ash_credo/issues/81)) ([6094400](https://github.com/leonqadirie/ash_credo/commit/6094400231c65e83f6ece2942000bf8a054b9de5))
+
 ## [0.7.0](https://github.com/leonqadirie/ash_credo/compare/v0.6.0...v0.7.0) (2026-04-10)
 
 
