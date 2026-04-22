@@ -1,10 +1,16 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
 permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   pr-title:
@@ -48,6 +54,5 @@ jobs:
           restore-keys: |
             mix-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
       - run: mix deps.get
-      - run: mix format --check-formatted
       - run: mix test
       - run: mix lint
