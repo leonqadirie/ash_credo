@@ -7,8 +7,8 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     explanations: [
       check: """
       Flags qualified calls to macros on configured modules (default
-      `Ash.Query` and `Ash.Expr`) when the enclosing module does not have a
-      matching `require` or `import` at module level.
+      `Ash.Query` and `Ash.Expr`) when no matching `require` or `import` of
+      the macro module is lexically in scope at the call site.
 
       Several `Ash.Query` and `Ash.Expr` functions are actually macros -
       `Ash.Query.filter/2`, `equivalent_to/2`, `superset_of/2`, `subset_of/2`
@@ -68,15 +68,10 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
       `undefined function filter/2` at compile time, which is obvious enough
       to need no lint.
 
-      Only **module-level** placement counts for this check. Elixir itself
-      would also accept a lexically-scoped directive (e.g. a `require`
-      inside the same function as the call, or inside an enclosing `do`
-      block), since `require`/`import` are scoped to the block they appear
-      in. The check is stricter: it requires the directive to be a direct
-      child of the `defmodule` do-block. That is the only placement the
-      check can validate as a blanket guarantee for every call site in the
-      module without tracking lexical scope precisely, and it matches the
-      dominant idiom in real Ash codebases.
+      `require`/`import` are accepted in any lexical scope visible to the
+      call - module top, the enclosing `def`/`defp` body, an enclosing
+      `if`/`case`/`with` branch, etc. - matching Elixir's own scoping rules.
+      A directive in one function does not reach calls in a sibling function.
 
       Each configured module is tracked independently: `require Ash.Query`
       does **not** cover `Ash.Expr.expr(...)`, and vice versa. A module that
@@ -87,8 +82,16 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
       injecting the call into the caller's site, not emitting it from their
       own module, so flagging it would be a false positive.
 
-      Nested `defmodule` blocks do not inherit each other's directives.
-      Each module is checked against its own module-level requires.
+      Nested `defmodule` blocks inherit `require`/`import` and `alias` from
+      the enclosing module the same way Elixir does, so an outer
+      `require Ash.Query` (or `alias Ash.Query, as: Q`) is honored by
+      `Ash.Query.filter(...)` (or `Q.filter(...)`) inside a nested `defmodule`.
+
+      This check is a **correctness backstop**: for projects without
+      `--warnings-as-errors`, it converts the easy-to-miss runtime case
+      (#3 above) into a lint issue. Style rules about *where* directives
+      live are out of scope; pair with `AshCredo.Check.Refactor.DirectiveInFunctionBody`
+      if your team wants to centralise directives at module top.
 
       ## Precision
 
@@ -103,12 +106,6 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
         * User-supplied modules in `macro_modules` are handled with the same
           precision as `Ash.Query`/`Ash.Expr` - only their actual macros
           are flagged, not every qualified call.
-
-      ## Known limitations
-
-      * **Aliased modules.** `alias Ash.Query, as: Q` followed by
-        `Q.filter(...)` is not detected. The check matches the exact
-        module alias path in the AST.
 
       ## Requirements
 
@@ -131,21 +128,27 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
         macro_modules:
           "List of modules whose qualified macro calls the check validates. " <>
             "For each call to `<Module>.<macro>/n` the check requires a " <>
-            "`require` or `import` of `<Module>` at the top level of the " <>
-            "enclosing `defmodule`. Elixir itself would also accept a " <>
-            "lexically-scoped directive (e.g. inside the same function), but " <>
-            "the check is stricter so it can validate without full scope " <>
-            "tracking. Defaults to `[Ash.Query, Ash.Expr]`. The exact set " <>
-            "of macros on each module is read from compiled-BEAM " <>
-            "introspection (`module.__info__(:macros)`), so only real " <>
-            "macros are flagged - regular functions on the same module " <>
-            "are ignored."
+            "`require` or `import` of `<Module>` to be lexically in scope - " <>
+            "module top, the enclosing `def` body, an enclosing branch, or " <>
+            "inherited from an enclosing `defmodule`. Defaults to " <>
+            "`[Ash.Query, Ash.Expr]`. The exact set of macros on each " <>
+            "module is read from compiled-BEAM introspection " <>
+            "(`module.__info__(:macros)`), so only real macros are flagged - " <>
+            "regular functions on the same module are ignored."
       ]
     ]
 
+  alias AshCredo.Introspection.{Aliases, LexicalAliases}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   @directive_kinds ~w(require import)a
+  @scope_keys ~w(do else after rescue catch)a
+  # Constructs whose clauses/generators evaluate in their own block-level
+  # scope (verified empirically: a `require` written inside a `with` clause
+  # or a `for` generator does NOT propagate to expressions after the
+  # construct). `if` conditions and `case` subjects, by contrast, evaluate
+  # in the outer scope and leak - so they are deliberately not listed here.
+  @construct_scope_nodes ~w(with for)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
@@ -174,12 +177,22 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
 
   defp do_run(source_file, targets, issue_meta) do
     {resolved, load_issues} = resolve_macro_sets(targets, issue_meta)
+    target_keys = resolved |> Map.keys() |> MapSet.new()
 
     call_issues =
       source_file
       |> Credo.SourceFile.ast()
-      |> collect_module_bodies()
-      |> Enum.flat_map(&check_module_body(&1, resolved, issue_meta))
+      |> collect_module_bodies(target_keys)
+      |> Enum.flat_map(fn {body, inherited_aliases, inherited_required} ->
+        check_module_body(
+          body,
+          inherited_aliases,
+          inherited_required,
+          resolved,
+          target_keys,
+          issue_meta
+        )
+      end)
       |> Enum.sort_by(& &1.line_no)
 
     load_issues ++ call_issues
@@ -209,70 +222,104 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     end
   end
 
-  # Walks the whole file AST and returns the do-block body of every
-  # `defmodule` encountered (including nested ones). Each returned body is
-  # later analyzed independently.
-  defp collect_module_bodies(ast) do
-    {_, bodies} =
-      Macro.prewalk(ast, [], fn
-        {:defmodule, _, [_alias, [do: body]]} = node, acc ->
-          {node, [body | acc]}
-
-        node, acc ->
-          {node, acc}
-      end)
+  # Walks the whole file AST and returns `{body, inherited_aliases,
+  # inherited_required}` tuples for every `defmodule` (including nested ones).
+  # `inherited_aliases` and `inherited_required` are the aliases and required
+  # target modules visible at the point of the `defmodule` declaration - in
+  # Elixir, nested modules inherit both `alias` and `require`/`import` from
+  # the enclosing lexical scope.
+  defp collect_module_bodies(ast, target_keys) do
+    {_, %{bodies: bodies}} =
+      Macro.traverse(
+        ast,
+        %{
+          alias_frames: [[]],
+          require_frames: [MapSet.new()],
+          quote_depth: 0,
+          target_keys: target_keys,
+          bodies: []
+        },
+        &enter_for_bodies/2,
+        &leave_for_bodies/2
+      )
 
     Enum.reverse(bodies)
   end
 
-  # For one module body, collect:
-  #   * the set of target modules required/imported at the module's top level
-  #   * every qualified call to a target-module macro inside this module
-  #     (but NOT inside any nested defmodule or inside a quote block)
-  # and emit an issue for every call whose target module is not in the
-  # top-level directive set.
-  defp check_module_body(body, resolved, issue_meta) do
-    target_keys = resolved |> Map.keys() |> MapSet.new()
-    top_level_requires = collect_top_level_directives(body, target_keys)
-    call_sites = collect_call_sites(body, resolved)
-
-    Enum.flat_map(call_sites, fn site ->
-      if MapSet.member?(top_level_requires, site.module) do
-        []
-      else
-        [build_issue(site, issue_meta)]
-      end
-    end)
+  defp enter_for_bodies({scope_key, _body} = node, state) when scope_key in @scope_keys do
+    {node, state |> push_alias_frame() |> push_require_frame()}
   end
 
-  # Module-level statements are the direct children of the defmodule do-block.
-  # The body is either a `__block__` wrapping several statements or a single
-  # statement. We only inspect that outermost layer - directives further down
-  # (inside a function, inside an `if`, inside `actions do ...`) are not
-  # module-level and do not count.
-  defp collect_top_level_directives({:__block__, _, stmts}, targets) do
-    collect_top_level_directives_from(stmts, targets)
+  defp enter_for_bodies({:->, _, [_args, _body]} = node, state) do
+    {node, state |> push_alias_frame() |> push_require_frame()}
   end
 
-  defp collect_top_level_directives(stmt, targets) do
-    collect_top_level_directives_from([stmt], targets)
+  defp enter_for_bodies({construct, _, _} = node, state)
+       when construct in @construct_scope_nodes do
+    {node, state |> push_alias_frame() |> push_require_frame()}
   end
 
-  defp collect_top_level_directives_from(stmts, targets) do
-    Enum.reduce(stmts, MapSet.new(), &collect_directive(&1, &2, targets))
+  defp enter_for_bodies({:alias, _, _} = node, %{quote_depth: 0} = state) do
+    {node, put_aliases(state, Aliases.alias_entries(node))}
   end
 
-  defp collect_directive({directive, _, [{:__aliases__, _, segs} | _]}, acc, targets)
+  defp enter_for_bodies(
+         {directive, _, [{:__aliases__, _, segs} | _]} = node,
+         %{quote_depth: 0} = state
+       )
        when directive in @directive_kinds do
-    with {:ok, mod} <- atomic_module(segs),
-         true <- MapSet.member?(targets, mod) do
-      MapSet.put(acc, mod)
-    else
-      _ -> acc
-    end
+    {node, maybe_put_required(state, segs)}
   end
 
-  defp collect_directive(_stmt, acc, _targets), do: acc
+  # Skip into `quote do ... end` so a `defmodule` inside generated code is
+  # NOT recorded as a real module - it gets compiled at the macro caller's
+  # site, not here. Aliases and requires inside quote are likewise not
+  # recorded.
+  defp enter_for_bodies({:quote, _, _} = node, state) do
+    {node, %{state | quote_depth: state.quote_depth + 1}}
+  end
+
+  defp enter_for_bodies({:defmodule, _, [_alias, [do: body]]} = node, %{quote_depth: 0} = state) do
+    captured = {body, current_aliases(state), current_required(state)}
+    {node, %{state | bodies: [captured | state.bodies]}}
+  end
+
+  defp enter_for_bodies(node, state), do: {node, state}
+
+  defp leave_for_bodies({scope_key, _body} = node, state) when scope_key in @scope_keys do
+    {node, state |> pop_alias_frame() |> pop_require_frame()}
+  end
+
+  defp leave_for_bodies({:->, _, [_args, _body]} = node, state) do
+    {node, state |> pop_alias_frame() |> pop_require_frame()}
+  end
+
+  defp leave_for_bodies({construct, _, _} = node, state)
+       when construct in @construct_scope_nodes do
+    {node, state |> pop_alias_frame() |> pop_require_frame()}
+  end
+
+  defp leave_for_bodies({:quote, _, _} = node, state) do
+    {node, %{state | quote_depth: max(state.quote_depth - 1, 0)}}
+  end
+
+  defp leave_for_bodies(node, state), do: {node, state}
+
+  # Single-pass per-body check: walks the body tracking lexical alias and
+  # require/import frames, and records sites only when the call's module is
+  # NOT in the require scope visible at that call site.
+  defp check_module_body(
+         body,
+         inherited_aliases,
+         inherited_required,
+         resolved,
+         target_keys,
+         issue_meta
+       ) do
+    body
+    |> collect_call_sites(inherited_aliases, inherited_required, resolved, target_keys)
+    |> Enum.map(&build_issue(&1, issue_meta))
+  end
 
   # Walks `segs` once: returns `{:ok, Module.concat(segs)}` only if every
   # segment is an atom (rejecting interpolated/quoted aliases like
@@ -289,11 +336,24 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     end
   end
 
-  defp collect_call_sites(body, resolved) do
+  # The body we traverse is already the contents of the enclosing `defmodule`'s
+  # do-block - we never visit that outermost `{:do, body}` tuple ourselves, so
+  # we seed the module-body frame. `inherited_aliases` and `inherited_required`
+  # pre-populate the base frames with aliases and requires visible from any
+  # enclosing `defmodule`, so a nested module's calls expand and resolve the
+  # same way Elixir does.
+  defp collect_call_sites(body, inherited_aliases, inherited_required, resolved, target_keys) do
     {_ast, %{sites: sites}} =
       Macro.traverse(
         body,
-        %{defmodule_depth: 0, quote_depth: 0, sites: []},
+        %{
+          defmodule_depth: 0,
+          quote_depth: 0,
+          alias_frames: [inherited_aliases],
+          require_frames: [inherited_required],
+          target_keys: target_keys,
+          sites: []
+        },
         &enter_for_calls(&1, &2, resolved),
         &leave_for_calls/2
       )
@@ -301,8 +361,35 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     Enum.reverse(sites)
   end
 
+  # Push a new alias and require frame on every `do/else/after/rescue/catch`
+  # block and on every `->` arrow clause. This mirrors the lexical scoping
+  # rules Elixir uses for `alias`/`require`/`import` and matches
+  # `AshCallScanner`'s behaviour.
+  defp enter_for_calls({scope_key, _body} = node, state, _resolved)
+       when scope_key in @scope_keys do
+    {node, state |> push_alias_frame() |> push_require_frame()}
+  end
+
+  defp enter_for_calls({:->, _, [_args, _body]} = node, state, _resolved) do
+    {node, state |> push_alias_frame() |> push_require_frame()}
+  end
+
+  defp enter_for_calls({construct, _, _} = node, state, _resolved)
+       when construct in @construct_scope_nodes do
+    {node, state |> push_alias_frame() |> push_require_frame()}
+  end
+
+  defp enter_for_calls({:alias, _, _} = node, state, _resolved) do
+    {node, put_aliases(state, Aliases.alias_entries(node))}
+  end
+
+  defp enter_for_calls({directive, _, [{:__aliases__, _, segs} | _]} = node, state, _resolved)
+       when directive in @directive_kinds do
+    {node, maybe_put_required(state, segs)}
+  end
+
   # Skip into a nested defmodule - its contents belong to the inner module,
-  # and will be processed on its own pass via `collect_module_bodies/1`.
+  # and will be processed on its own pass via `collect_module_bodies/2`.
   defp enter_for_calls({:defmodule, _, _} = node, state, _resolved) do
     {node, %{state | defmodule_depth: state.defmodule_depth + 1}}
   end
@@ -315,6 +402,8 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
 
   # Qualified remote call: `Alias.fun(args)` parses as
   #   {{:., _, [{:__aliases__, _, segs}, fun}]}, meta, args}
+  # Expand `segs` against the visible alias frames so `alias Ash.Query, as: Q;
+  # Q.filter(...)` is matched the same as a literal `Ash.Query.filter(...)`.
   defp enter_for_calls(
          {{:., _, [{:__aliases__, _, segs}, fun]}, meta, args} = node,
          state,
@@ -322,7 +411,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
        )
        when is_atom(fun) and is_list(args) do
     with true <- state.defmodule_depth == 0 and state.quote_depth == 0,
-         {:ok, mod} <- atomic_module(segs) do
+         {:ok, mod} <- atomic_module(Aliases.expand_alias(segs, current_aliases(state))) do
       maybe_record_call(node, state, resolved, mod, fun, args, meta)
     else
       _ -> {node, state}
@@ -333,12 +422,26 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
 
   defp maybe_record_call(node, state, resolved, mod, fun, args, meta) do
     with {:ok, macros} <- Map.fetch(resolved, mod),
-         true <- MapSet.member?(macros, fun) do
+         true <- MapSet.member?(macros, fun),
+         false <- MapSet.member?(current_required(state), mod) do
       site = %{module: mod, fun: fun, arity: length(args), line: meta[:line]}
       {node, %{state | sites: [site | state.sites]}}
     else
       _ -> {node, state}
     end
+  end
+
+  defp leave_for_calls({scope_key, _body} = node, state) when scope_key in @scope_keys do
+    {node, state |> pop_alias_frame() |> pop_require_frame()}
+  end
+
+  defp leave_for_calls({:->, _, [_args, _body]} = node, state) do
+    {node, state |> pop_alias_frame() |> pop_require_frame()}
+  end
+
+  defp leave_for_calls({construct, _, _} = node, state)
+       when construct in @construct_scope_nodes do
+    {node, state |> pop_alias_frame() |> pop_require_frame()}
   end
 
   defp leave_for_calls({:defmodule, _, _} = node, state) do
@@ -351,6 +454,37 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
 
   defp leave_for_calls(node, state), do: {node, state}
 
+  defp push_alias_frame(state), do: update_in(state.alias_frames, &LexicalAliases.push_frame/1)
+
+  defp pop_alias_frame(state), do: update_in(state.alias_frames, &LexicalAliases.pop_frame/1)
+
+  defp put_aliases(state, new_aliases),
+    do: update_in(state.alias_frames, &LexicalAliases.put_aliases(&1, new_aliases))
+
+  defp current_aliases(%{alias_frames: frames}), do: LexicalAliases.current_aliases(frames)
+
+  defp push_require_frame(state), do: update_in(state.require_frames, &[MapSet.new() | &1])
+
+  defp pop_require_frame(%{require_frames: [_ | rest]} = state),
+    do: %{state | require_frames: rest}
+
+  defp pop_require_frame(state), do: state
+
+  # Resolve `segs` against the visible alias frames, then add to the current
+  # require frame iff it expands to a tracked target module.
+  defp maybe_put_required(state, segs) do
+    with {:ok, mod} <- atomic_module(Aliases.expand_alias(segs, current_aliases(state))),
+         true <- MapSet.member?(state.target_keys, mod),
+         [current | rest] <- state.require_frames do
+      %{state | require_frames: [MapSet.put(current, mod) | rest]}
+    else
+      _ -> state
+    end
+  end
+
+  defp current_required(%{require_frames: frames}),
+    do: Enum.reduce(frames, MapSet.new(), &MapSet.union/2)
+
   defp build_issue(site, issue_meta) do
     mod_str = inspect(site.module)
     trigger = "#{mod_str}.#{site.fun}"
@@ -358,7 +492,8 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     format_issue(issue_meta,
       message:
         "`#{trigger}/#{site.arity}` is a macro; add `require #{mod_str}` " <>
-          "(or `import #{mod_str}`) at the top of this module. Without it, " <>
+          "(or `import #{mod_str}`) somewhere lexically in scope - module top, " <>
+          "the enclosing function body, or an enclosing block. Without it, " <>
           "Elixir reports a cryptic `undefined variable` / `misplaced ^` " <>
           "compile error, or - if the argument is a runtime value - compiles " <>
           "and fails at runtime with `UndefinedFunctionError`.",

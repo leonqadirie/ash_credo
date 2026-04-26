@@ -71,7 +71,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       assert [] = run_check(MissingMacroDirective, source)
     end
 
-    test "require inside the same function body is NOT accepted (module-level-only rule)" do
+    test "require inside the same function body satisfies the check (lexical scope)" do
       source = """
       defmodule MyApp.PostQueries do
         def published do
@@ -81,9 +81,99 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       end
       """
 
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "require inside an enclosing branch satisfies calls in that branch" do
+      source = """
+      defmodule MyApp.PostQueries do
+        def published(true_branch?) do
+          if true_branch? do
+            require Ash.Query
+            Ash.Query.filter(MyApp.Post, state == :published)
+          else
+            :noop
+          end
+        end
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "require inside a `with` body satisfies calls there" do
+      source = """
+      defmodule MyApp.PostQueries do
+        def published do
+          with {:ok, _} <- {:ok, MyApp.Post} do
+            require Ash.Query
+            Ash.Query.filter(MyApp.Post, state == :published)
+          end
+        end
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "require inside a `with` clause does NOT leak past the construct" do
+      # Verified empirically: in Elixir, a `require` written inside a `with`
+      # clause expression is scoped to the `with` and does not propagate to
+      # code after the construct. The check matches that.
+      source = """
+      defmodule MyApp.PostQueries do
+        def published do
+          with _ <- (require Ash.Query; :ok) do
+            :inside
+          end
+
+          # Outside the `with`, the require is no longer in scope.
+          Ash.Query.filter(MyApp.Post, state == :published)
+        end
+      end
+      """
+
       assert [issue] = run_check(MissingMacroDirective, source)
       assert issue.trigger == "Ash.Query.filter"
-      assert issue.line_no == 4
+      assert issue.line_no == 8
+    end
+
+    test "require inside a `for` generator does NOT leak past the comprehension" do
+      source = """
+      defmodule MyApp.PostQueries do
+        def published do
+          for _ <- (require Ash.Query; [1]) do
+            :inside
+          end
+
+          Ash.Query.filter(MyApp.Post, state == :published)
+        end
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source)
+      assert issue.trigger == "Ash.Query.filter"
+      assert issue.line_no == 7
+    end
+
+    test "require inside one branch does not leak into a sibling branch" do
+      source = """
+      defmodule MyApp.PostQueries do
+        def published(use_first?) do
+          if use_first? do
+            require Ash.Query
+            Ash.Query.filter(MyApp.Post, state == :published)
+          else
+            Ash.Query.filter(MyApp.Post, state == :draft)
+          end
+        end
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source)
+      assert issue.trigger == "Ash.Query.filter"
+      # The `else` branch's call is the offending one.
+      assert issue.line_no == 7
     end
 
     test "require inside a different function body does not reach this one" do
@@ -239,7 +329,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
   end
 
   describe "scoping" do
-    test "nested defmodule does not inherit outer require" do
+    test "nested defmodule inherits outer require (matches Elixir)" do
       source = """
       defmodule MyApp.Outer do
         require Ash.Query
@@ -250,9 +340,21 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       end
       """
 
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "nested defmodule without an inherited require IS flagged" do
+      source = """
+      defmodule MyApp.Outer do
+        defmodule Inner do
+          def foo(q), do: Ash.Query.filter(q, true)
+        end
+      end
+      """
+
       assert [issue] = run_check(MissingMacroDirective, source)
       assert issue.trigger == "Ash.Query.filter"
-      assert issue.line_no == 5
+      assert issue.line_no == 3
     end
 
     test "nested defmodule with its own require is fine" do
@@ -390,6 +492,165 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       """
 
       assert [] = run_check(MissingMacroDirective, source, macro_modules: [Ash.Query])
+    end
+  end
+
+  describe "aliased modules" do
+    test "alias Ash.Query, as: Q + Q.filter is flagged when require is missing" do
+      source = """
+      defmodule MyApp.Caller do
+        alias Ash.Query, as: Q
+
+        def foo(q), do: Q.filter(q, true)
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source)
+      assert issue.trigger == "Ash.Query.filter"
+      assert issue.line_no == 4
+    end
+
+    test "alias Ash.Query (default name) + Query.filter is flagged when require is missing" do
+      source = """
+      defmodule MyApp.Caller do
+        alias Ash.Query
+
+        def foo(q), do: Query.filter(q, true)
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source)
+      assert issue.trigger == "Ash.Query.filter"
+    end
+
+    test "alias + matching require under the alias name satisfies the check" do
+      source = """
+      defmodule MyApp.Caller do
+        alias Ash.Query, as: Q
+        require Q
+
+        def foo(q), do: Q.filter(q, true)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "alias + matching require under the real name satisfies the check" do
+      source = """
+      defmodule MyApp.Caller do
+        alias Ash.Query, as: Q
+        require Ash.Query
+
+        def foo(q), do: Q.filter(q, true)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "alias inside a function body is scoped to that function" do
+      # `alias` inside `def foo` is visible to `Q.filter` inside the same body,
+      # so the check should still flag it as needing `require Ash.Query`.
+      source = """
+      defmodule MyApp.Caller do
+        def foo(q) do
+          alias Ash.Query, as: Q
+          Q.filter(q, true)
+        end
+
+        def bar(_q) do
+          # `Q` is NOT in scope here, so `Q.filter` does not resolve to
+          # `Ash.Query.filter` and is left alone.
+          Q.filter(:noop)
+        end
+      end
+      """
+
+      issues = run_check(MissingMacroDirective, source)
+      assert [issue] = issues
+      assert issue.trigger == "Ash.Query.filter"
+      assert issue.line_no == 4
+    end
+
+    test "defmodule inside `quote` is not analyzed as a real module" do
+      # A `defmodule` inside a `quote` block belongs to the macro caller's
+      # site - flagging anything inside it from the macro author's file would
+      # be a false positive, exactly like the existing rule for direct calls
+      # inside quote.
+      source = """
+      defmodule MyApp.GenMacro do
+        defmacro build do
+          quote do
+            defmodule GeneratedMod do
+              def foo(q), do: Ash.Query.filter(q, true)
+            end
+          end
+        end
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "outer module's alias is inherited into a nested defmodule" do
+      # In Elixir, aliases declared in an enclosing module are visible inside
+      # nested `defmodule` blocks. The check honors that, so the inner call
+      # `Q.filter` resolves to `Ash.Query.filter` and is flagged for the
+      # missing inner-module require.
+      source = """
+      defmodule MyApp.Outer do
+        alias Ash.Query, as: Q
+
+        defmodule Inner do
+          def foo(q), do: Q.filter(q, true)
+        end
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source)
+      assert issue.trigger == "Ash.Query.filter"
+      assert issue.line_no == 5
+    end
+
+    test "outer alias inheritance does not cross-bleed between sibling nested modules" do
+      # The alias is declared inside `defmodule First`, so it should NOT be
+      # visible inside `defmodule Second` even though both are nested under
+      # the same outer module.
+      source = """
+      defmodule MyApp.Outer do
+        defmodule First do
+          alias Ash.Query, as: Q
+
+          def foo(q), do: Q.filter(q, true)
+        end
+
+        defmodule Second do
+          # `Q` is not in scope here.
+          def bar(_q), do: Q.filter(:noop)
+        end
+      end
+      """
+
+      issues = run_check(MissingMacroDirective, source)
+      assert [issue] = issues
+      assert issue.trigger == "Ash.Query.filter"
+      assert issue.line_no == 5
+    end
+
+    test "grouped alias `alias Ash.{Query, Expr}` is honored" do
+      source = """
+      defmodule MyApp.Caller do
+        alias Ash.{Query, Expr}
+
+        def foo(q), do: Query.filter(q, true)
+        def bar(x), do: Expr.expr(x)
+      end
+      """
+
+      issues = run_check(MissingMacroDirective, source)
+      triggers = issues |> Enum.map(& &1.trigger) |> Enum.sort()
+      assert triggers == ["Ash.Expr.expr", "Ash.Query.filter"]
     end
   end
 

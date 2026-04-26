@@ -25,6 +25,8 @@ defmodule AshCredoFixtures.Blog.Post do
     * `:read`    - default action, BOTH a resource-level (`all_posts`) AND a
       domain-level (`list_posts`) interface - used to exercise
       `prefer_interface_scope` overrides.
+    * `:read`    - get-by-id resource interface (`get_post_by_id`) used to
+      ensure `Ash.get!` suggestions do not point at list-returning helpers.
   """
 
   use Ash.Resource,
@@ -35,6 +37,7 @@ defmodule AshCredoFixtures.Blog.Post do
     define :archive
     define :published_posts, action: :published
     define :all_posts, action: :read
+    define :get_post_by_id, action: :read, get_by: [:id]
   end
 
   actions do
