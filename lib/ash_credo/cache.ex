@@ -1,15 +1,15 @@
-defmodule AshCredo.Introspection.Cache do
+defmodule AshCredo.Cache do
   @moduledoc """
-  Process-independent cache for compiled-introspection results.
+  Process-independent key-value cache backed by a single named ETS table
+  owned by a supervised GenServer.
 
-  Backed by a single named ETS table owned by a supervised GenServer.
   Reads and writes go straight to ETS from the calling process; the
   GenServer exists only to keep the table alive across Credo's transient
   task churn.
 
-  Cleared at the start of every Credo run by `AshCredo.init/1`, so each
-  `mix credo` invocation sees a fresh table regardless of how long the
-  host VM has been alive.
+  Cleared at the start AND end of every Credo run by `AshCredo.init/1`
+  (and `AshCredo.ClearCacheTask`), so each `mix credo` invocation sees a
+  fresh table regardless of how long the host VM has been alive.
 
   Started by `AshCredo.Application` (see `mix.exs` `:mod`).
   `AshCredo.init/1` additionally calls `ensure_started!/0` before any
@@ -46,7 +46,7 @@ defmodule AshCredo.Introspection.Cache do
   def ensure_started! do
     case Application.ensure_all_started(:ash_credo) do
       {:ok, _apps} -> :ok
-      {:error, reason} -> raise "AshCredo.Introspection.Cache failed to start: #{inspect(reason)}"
+      {:error, reason} -> raise "AshCredo.Cache failed to start: #{inspect(reason)}"
     end
   end
 
@@ -121,10 +121,4 @@ defmodule AshCredo.Introspection.Cache do
 
     {:ok, table}
   end
-
-  # Readiness probe used by `ensure_started!/0`. GenServer message handling
-  # is serialized after `init/1`, so a `:ready` call cannot return until
-  # the table exists.
-  @impl true
-  def handle_call(:ready, _from, table), do: {:reply, :ok, table}
 end

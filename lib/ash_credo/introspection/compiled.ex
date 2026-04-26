@@ -40,7 +40,7 @@ defmodule AshCredo.Introspection.Compiled do
   # Suppress compile-time warnings for the remote calls below; they are guarded
   # at runtime by `ash_available?/0`.
   alias Ash.Type.NewType
-  alias AshCredo.Introspection.Cache
+  alias AshCredo.Cache
 
   @compile {:no_warn_undefined,
             [

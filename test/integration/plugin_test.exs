@@ -15,7 +15,7 @@ defmodule AshCredo.PluginIntegrationTest do
 
   use ExUnit.Case, async: false
 
-  alias AshCredo.Introspection.Cache
+  alias AshCredo.Cache
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias Credo.CLI.Output.Shell
 

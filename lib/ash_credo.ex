@@ -17,7 +17,7 @@ defmodule AshCredo do
 
   import Credo.Plugin
 
-  alias AshCredo.Introspection.Cache
+  alias AshCredo.Cache
 
   @config_file """
   %{

@@ -1,7 +1,7 @@
-defmodule AshCredo.Introspection.CacheTest do
+defmodule AshCredo.CacheTest do
   use ExUnit.Case, async: false
 
-  alias AshCredo.Introspection.Cache
+  alias AshCredo.Cache
 
   setup do
     Cache.ensure_started!()

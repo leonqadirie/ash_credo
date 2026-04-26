@@ -5,7 +5,7 @@ defmodule AshCredo.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [AshCredo.Introspection.Cache]
+    children = [AshCredo.Cache]
     opts = [strategy: :one_for_one, name: AshCredo.Supervisor]
     Supervisor.start_link(children, opts)
   end

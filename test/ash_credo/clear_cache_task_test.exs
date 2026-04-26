@@ -1,8 +1,8 @@
 defmodule AshCredo.ClearCacheTaskTest do
   use ExUnit.Case, async: false
 
+  alias AshCredo.Cache
   alias AshCredo.ClearCacheTask
-  alias AshCredo.Introspection.Cache
 
   setup do
     Cache.ensure_started!()

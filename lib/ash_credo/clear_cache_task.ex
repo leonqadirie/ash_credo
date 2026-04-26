@@ -9,7 +9,7 @@ defmodule AshCredo.ClearCacheTask do
 
   use Credo.Execution.Task
 
-  alias AshCredo.Introspection.Cache
+  alias AshCredo.Cache
 
   @impl true
   def call(exec) do
