@@ -370,6 +370,30 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       assert [] = run_check(MissingMacroDirective, source)
     end
 
+    test "nested defmodule with a non-literal name is processed exactly once" do
+      # Regression: with the LexicalScopeWalker migration, an early version
+      # used `current_module_segments != nil` to detect nesting, which
+      # returned nil for both "no enclosing module" and "in a module with a
+      # non-literal name." That conflation meant the inner defmodule's calls
+      # would be DOUBLE-processed - once as part of the outer module's pass
+      # (because we wrongly thought we were still at outer-module scope) and
+      # once in the inner's own pass. The walker exposes `in_module?/1` to
+      # distinguish "no enclosing module" from "in an unknown-name module."
+      source = """
+      defmodule MyApp.Outer do
+        defmodule Module.concat([:Generated, :Inner]) do
+          def foo(q), do: Ash.Query.filter(q, true)
+        end
+      end
+      """
+
+      # Exactly ONE issue (not two). With the bug, the call would have
+      # produced two identical issues - one per pass.
+      assert [issue] = run_check(MissingMacroDirective, source)
+      assert issue.trigger == "Ash.Query.filter"
+      assert issue.line_no == 3
+    end
+
     test "outer module call is not misattributed to inner module" do
       source = """
       defmodule MyApp.Outer do

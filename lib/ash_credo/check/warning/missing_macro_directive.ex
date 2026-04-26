@@ -138,11 +138,10 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
       ]
     ]
 
-  alias AshCredo.Introspection.{Aliases, LexicalAliases}
+  alias AshCredo.Introspection.{Aliases, LexicalScopeWalker}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   @directive_kinds ~w(require import)a
-  @scope_keys ~w(do else after rescue catch)a
   # Constructs whose clauses/generators evaluate in their own block-level
   # scope (verified empirically: a `require` written inside a `with` clause
   # or a `for` generator does NOT propagate to expressions after the
@@ -227,83 +226,48 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
   # `inherited_aliases` and `inherited_required` are the aliases and required
   # target modules visible at the point of the `defmodule` declaration - in
   # Elixir, nested modules inherit both `alias` and `require`/`import` from
-  # the enclosing lexical scope.
+  # the enclosing lexical scope. Defmodules inside `quote do ... end` are
+  # NOT captured (they belong to the macro caller's site).
   defp collect_module_bodies(ast, target_keys) do
-    {_, %{bodies: bodies}} =
-      Macro.traverse(
+    initial_state = %{
+      require_frames: [MapSet.new()],
+      target_keys: target_keys,
+      bodies: []
+    }
+
+    {%{bodies: bodies}, _scope} =
+      LexicalScopeWalker.traverse(
         ast,
-        %{
-          alias_frames: [[]],
-          require_frames: [MapSet.new()],
-          quote_depth: 0,
-          target_keys: target_keys,
-          bodies: []
-        },
-        &enter_for_bodies/2,
-        &leave_for_bodies/2
+        initial_state,
+        &enter_for_bodies/3,
+        fn _node, _scope, acc -> acc end,
+        lexical_scope_nodes: @construct_scope_nodes,
+        on_frame_push: &push_require_frame/1,
+        on_frame_pop: &pop_require_frame/1
       )
 
     Enum.reverse(bodies)
   end
 
-  defp enter_for_bodies({scope_key, _body} = node, state) when scope_key in @scope_keys do
-    {node, state |> push_alias_frame() |> push_require_frame()}
-  end
-
-  defp enter_for_bodies({:->, _, [_args, _body]} = node, state) do
-    {node, state |> push_alias_frame() |> push_require_frame()}
-  end
-
-  defp enter_for_bodies({construct, _, _} = node, state)
-       when construct in @construct_scope_nodes do
-    {node, state |> push_alias_frame() |> push_require_frame()}
-  end
-
-  defp enter_for_bodies({:alias, _, _} = node, %{quote_depth: 0} = state) do
-    {node, put_aliases(state, Aliases.alias_entries(node))}
-  end
-
-  defp enter_for_bodies(
-         {directive, _, [{:__aliases__, _, segs} | _]} = node,
-         %{quote_depth: 0} = state
-       )
+  defp enter_for_bodies({directive, _, [{:__aliases__, _, segs} | _]}, scope, state)
        when directive in @directive_kinds do
-    {node, maybe_put_required(state, segs)}
+    if LexicalScopeWalker.in_quote?(scope) do
+      state
+    else
+      maybe_put_required(state, segs, scope)
+    end
   end
 
-  # Skip into `quote do ... end` so a `defmodule` inside generated code is
-  # NOT recorded as a real module - it gets compiled at the macro caller's
-  # site, not here. Aliases and requires inside quote are likewise not
-  # recorded.
-  defp enter_for_bodies({:quote, _, _} = node, state) do
-    {node, %{state | quote_depth: state.quote_depth + 1}}
+  defp enter_for_bodies({:defmodule, _, [_alias, [do: body]]}, scope, state) do
+    if LexicalScopeWalker.in_quote?(scope) do
+      state
+    else
+      captured = {body, LexicalScopeWalker.aliases(scope), current_required(state)}
+      %{state | bodies: [captured | state.bodies]}
+    end
   end
 
-  defp enter_for_bodies({:defmodule, _, [_alias, [do: body]]} = node, %{quote_depth: 0} = state) do
-    captured = {body, current_aliases(state), current_required(state)}
-    {node, %{state | bodies: [captured | state.bodies]}}
-  end
-
-  defp enter_for_bodies(node, state), do: {node, state}
-
-  defp leave_for_bodies({scope_key, _body} = node, state) when scope_key in @scope_keys do
-    {node, state |> pop_alias_frame() |> pop_require_frame()}
-  end
-
-  defp leave_for_bodies({:->, _, [_args, _body]} = node, state) do
-    {node, state |> pop_alias_frame() |> pop_require_frame()}
-  end
-
-  defp leave_for_bodies({construct, _, _} = node, state)
-       when construct in @construct_scope_nodes do
-    {node, state |> pop_alias_frame() |> pop_require_frame()}
-  end
-
-  defp leave_for_bodies({:quote, _, _} = node, state) do
-    {node, %{state | quote_depth: max(state.quote_depth - 1, 0)}}
-  end
-
-  defp leave_for_bodies(node, state), do: {node, state}
+  defp enter_for_bodies(_node, _scope, state), do: state
 
   # Single-pass per-body check: walks the body tracking lexical alias and
   # require/import frames, and records sites only when the call's module is
@@ -338,130 +302,84 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
 
   # The body we traverse is already the contents of the enclosing `defmodule`'s
   # do-block - we never visit that outermost `{:do, body}` tuple ourselves, so
-  # we seed the module-body frame. `inherited_aliases` and `inherited_required`
-  # pre-populate the base frames with aliases and requires visible from any
-  # enclosing `defmodule`, so a nested module's calls expand and resolve the
-  # same way Elixir does.
+  # we rely on the walker's `:initial_aliases` opt to seed inherited aliases
+  # into the base frame, and we seed `require_frames` with the inherited
+  # required set in `initial_state` below. A nested module's calls then
+  # expand and resolve the same way Elixir does.
   defp collect_call_sites(body, inherited_aliases, inherited_required, resolved, target_keys) do
-    {_ast, %{sites: sites}} =
-      Macro.traverse(
+    initial_state = %{
+      require_frames: [inherited_required],
+      target_keys: target_keys,
+      sites: []
+    }
+
+    {%{sites: sites}, _scope} =
+      LexicalScopeWalker.traverse(
         body,
-        %{
-          defmodule_depth: 0,
-          quote_depth: 0,
-          alias_frames: [inherited_aliases],
-          require_frames: [inherited_required],
-          target_keys: target_keys,
-          sites: []
-        },
-        &enter_for_calls(&1, &2, resolved),
-        &leave_for_calls/2
+        initial_state,
+        &enter_for_calls(&1, &2, &3, resolved),
+        fn _node, _scope, acc -> acc end,
+        track_module_stack: true,
+        lexical_scope_nodes: @construct_scope_nodes,
+        initial_aliases: inherited_aliases,
+        on_frame_push: &push_require_frame/1,
+        on_frame_pop: &pop_require_frame/1
       )
 
     Enum.reverse(sites)
   end
 
-  # Push a new alias and require frame on every `do/else/after/rescue/catch`
-  # block and on every `->` arrow clause. This mirrors the lexical scoping
-  # rules Elixir uses for `alias`/`require`/`import` and matches
-  # `AshCallScanner`'s behaviour.
-  defp enter_for_calls({scope_key, _body} = node, state, _resolved)
-       when scope_key in @scope_keys do
-    {node, state |> push_alias_frame() |> push_require_frame()}
-  end
-
-  defp enter_for_calls({:->, _, [_args, _body]} = node, state, _resolved) do
-    {node, state |> push_alias_frame() |> push_require_frame()}
-  end
-
-  defp enter_for_calls({construct, _, _} = node, state, _resolved)
-       when construct in @construct_scope_nodes do
-    {node, state |> push_alias_frame() |> push_require_frame()}
-  end
-
-  defp enter_for_calls({:alias, _, _} = node, state, _resolved) do
-    {node, put_aliases(state, Aliases.alias_entries(node))}
-  end
-
-  defp enter_for_calls({directive, _, [{:__aliases__, _, segs} | _]} = node, state, _resolved)
+  defp enter_for_calls({directive, _, [{:__aliases__, _, segs} | _]}, scope, state, _resolved)
        when directive in @directive_kinds do
-    {node, maybe_put_required(state, segs)}
-  end
-
-  # Skip into a nested defmodule - its contents belong to the inner module,
-  # and will be processed on its own pass via `collect_module_bodies/2`.
-  defp enter_for_calls({:defmodule, _, _} = node, state, _resolved) do
-    {node, %{state | defmodule_depth: state.defmodule_depth + 1}}
-  end
-
-  # Skip into `quote do ... end` - any calls inside are generated code and
-  # belong to the macro caller's site, not here.
-  defp enter_for_calls({:quote, _, _} = node, state, _resolved) do
-    {node, %{state | quote_depth: state.quote_depth + 1}}
+    if LexicalScopeWalker.in_quote?(scope) do
+      state
+    else
+      maybe_put_required(state, segs, scope)
+    end
   end
 
   # Qualified remote call: `Alias.fun(args)` parses as
   #   {{:., _, [{:__aliases__, _, segs}, fun}]}, meta, args}
   # Expand `segs` against the visible alias frames so `alias Ash.Query, as: Q;
   # Q.filter(...)` is matched the same as a literal `Ash.Query.filter(...)`.
+  # Skip when inside a nested `defmodule` (that body is processed separately)
+  # or inside a `quote do ... end`.
   defp enter_for_calls(
-         {{:., _, [{:__aliases__, _, segs}, fun]}, meta, args} = node,
+         {{:., _, [{:__aliases__, _, segs}, fun]}, meta, args},
+         scope,
          state,
          resolved
        )
        when is_atom(fun) and is_list(args) do
-    with true <- state.defmodule_depth == 0 and state.quote_depth == 0,
-         {:ok, mod} <- atomic_module(Aliases.expand_alias(segs, current_aliases(state))) do
-      maybe_record_call(node, state, resolved, mod, fun, args, meta)
+    with false <- in_nested_module_or_quote?(scope),
+         {:ok, mod} <-
+           atomic_module(Aliases.expand_alias(segs, LexicalScopeWalker.aliases(scope))) do
+      maybe_record_call(state, resolved, mod, fun, args, meta)
     else
-      _ -> {node, state}
+      _ -> state
     end
   end
 
-  defp enter_for_calls(node, state, _resolved), do: {node, state}
+  defp enter_for_calls(_node, _scope, state, _resolved), do: state
 
-  defp maybe_record_call(node, state, resolved, mod, fun, args, meta) do
+  defp in_nested_module_or_quote?(scope) do
+    # `in_module?/1` (not `current_module_segments != nil`) so we also skip
+    # into nested defmodules with non-literal names like
+    # `defmodule Module.concat(...) do ... end` - those would otherwise be
+    # processed as part of the outer module's call sites.
+    LexicalScopeWalker.in_module?(scope) or LexicalScopeWalker.in_quote?(scope)
+  end
+
+  defp maybe_record_call(state, resolved, mod, fun, args, meta) do
     with {:ok, macros} <- Map.fetch(resolved, mod),
          true <- MapSet.member?(macros, fun),
          false <- MapSet.member?(current_required(state), mod) do
       site = %{module: mod, fun: fun, arity: length(args), line: meta[:line]}
-      {node, %{state | sites: [site | state.sites]}}
+      %{state | sites: [site | state.sites]}
     else
-      _ -> {node, state}
+      _ -> state
     end
   end
-
-  defp leave_for_calls({scope_key, _body} = node, state) when scope_key in @scope_keys do
-    {node, state |> pop_alias_frame() |> pop_require_frame()}
-  end
-
-  defp leave_for_calls({:->, _, [_args, _body]} = node, state) do
-    {node, state |> pop_alias_frame() |> pop_require_frame()}
-  end
-
-  defp leave_for_calls({construct, _, _} = node, state)
-       when construct in @construct_scope_nodes do
-    {node, state |> pop_alias_frame() |> pop_require_frame()}
-  end
-
-  defp leave_for_calls({:defmodule, _, _} = node, state) do
-    {node, %{state | defmodule_depth: max(state.defmodule_depth - 1, 0)}}
-  end
-
-  defp leave_for_calls({:quote, _, _} = node, state) do
-    {node, %{state | quote_depth: max(state.quote_depth - 1, 0)}}
-  end
-
-  defp leave_for_calls(node, state), do: {node, state}
-
-  defp push_alias_frame(state), do: update_in(state.alias_frames, &LexicalAliases.push_frame/1)
-
-  defp pop_alias_frame(state), do: update_in(state.alias_frames, &LexicalAliases.pop_frame/1)
-
-  defp put_aliases(state, new_aliases),
-    do: update_in(state.alias_frames, &LexicalAliases.put_aliases(&1, new_aliases))
-
-  defp current_aliases(%{alias_frames: frames}), do: LexicalAliases.current_aliases(frames)
 
   defp push_require_frame(state), do: update_in(state.require_frames, &[MapSet.new() | &1])
 
@@ -472,8 +390,9 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
 
   # Resolve `segs` against the visible alias frames, then add to the current
   # require frame iff it expands to a tracked target module.
-  defp maybe_put_required(state, segs) do
-    with {:ok, mod} <- atomic_module(Aliases.expand_alias(segs, current_aliases(state))),
+  defp maybe_put_required(state, segs, scope) do
+    with {:ok, mod} <-
+           atomic_module(Aliases.expand_alias(segs, LexicalScopeWalker.aliases(scope))),
          true <- MapSet.member?(state.target_keys, mod),
          [current | rest] <- state.require_frames do
       %{state | require_frames: [MapSet.put(current, mod) | rest]}
