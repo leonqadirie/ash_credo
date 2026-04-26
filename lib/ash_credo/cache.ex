@@ -31,21 +31,21 @@ defmodule AshCredo.Cache do
   end
 
   @doc """
-  Ensures the cache GenServer is running under `AshCredo.Application` and
-  its ETS table is ready for use. Safe to call from any process at any
-  time; idempotent.
+  Ensures the cache GenServer is running and its ETS table is ready for use.
+  Safe to call from any process at any time; idempotent.
 
-  Goes through `Application.ensure_all_started/1` so the cache is always
-  supervised. A direct `start_link/1` here would orphan the GenServer from
-  the supervisor in scenarios where `:ash_credo` has not been booted yet
-  (e.g. `mix credo` only loads code paths) - and a later
-  `Application.ensure_all_started(:ash_credo)` would then fail to start
-  with `{:already_started, pid}`.
+  Starts the GenServer directly rather than via `Application.ensure_all_started/1`.
+  The latter would cascade through `:ash_credo`'s runtime application deps -
+  notably `:credo` - and during `mix credo` the live `Credo.Supervisor` collides
+  with that re-start, causing the whole cascade to roll back and the cache to
+  fail to start. `AshCredo.Application` co-operates by skipping its cache child
+  when this function has already started it.
   """
   @spec ensure_started!() :: :ok
   def ensure_started! do
-    case Application.ensure_all_started(:ash_credo) do
-      {:ok, _apps} -> :ok
+    case start_link() do
+      {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
       {:error, reason} -> raise "AshCredo.Cache failed to start: #{inspect(reason)}"
     end
   end

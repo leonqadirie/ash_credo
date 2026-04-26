@@ -32,13 +32,14 @@ defmodule AshCredo.MixProject do
     ]
   end
 
+  defp elixirc_paths(:dev), do: ["lib/", "dev/"]
   defp elixirc_paths(:test), do: ["lib/", "test/support/"]
   defp elixirc_paths(_), do: ["lib/"]
 
   defp deps do
     [
-      {:credo, "~> 1.7"},
-      {:igniter, "~> 0.7", optional: true},
+      {:credo, "~> 1.7", runtime: false},
+      {:igniter, "~> 0.7", optional: true, runtime: false},
       {:ash, "~> 3.0", only: [:dev, :test], runtime: false},
       {:simple_sat, "~> 0.1", only: [:dev, :test], runtime: false},
       {:credence, github: "Cinderella-Man/credence", only: [:dev, :test], runtime: false},
