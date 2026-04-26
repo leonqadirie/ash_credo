@@ -3,22 +3,13 @@ defmodule Mix.Tasks.Lint.Credence do
 
   @moduledoc """
   Runs [Credence](https://github.com/Cinderella-Man/credence) on every
-  `.ex`/`.exs` file under `lib/` and `test/support/` and fails if any
-  issues are returned.
-
-  `_test.exs` files are intentionally skipped: assertion-heavy patterns
-  such as multiple `Enum.any?/Enum.find` calls against the same `issues`
-  list trip Credence's repeated-traversal rules but are the most readable
-  way to express independent assertions about a check's output.
-
-  `test/support/fixtures` deliberately contains anti-patterns for AshCredo's
-  own checks to detect, so it is not analysed either.
+  `.ex`/`.exs` file under `lib/` and `test/` and fails if any issues are
+  returned.
   """
 
   use Mix.Task
 
   @source_dirs ["lib", "test"]
-  @excluded_dirs ["test/support/fixtures"]
   @extensions [".ex", ".exs"]
 
   @impl true
@@ -26,7 +17,6 @@ defmodule Mix.Tasks.Lint.Credence do
     issues =
       @source_dirs
       |> Enum.flat_map(&source_files/1)
-      |> Enum.reject(&excluded?/1)
       |> Enum.flat_map(&analyze_file/1)
 
     if issues == [] do
@@ -46,12 +36,6 @@ defmodule Mix.Tasks.Lint.Credence do
     else
       []
     end
-  end
-
-  defp excluded?(path) do
-    Enum.any?(@excluded_dirs, fn excluded ->
-      path == excluded or String.starts_with?(path, excluded <> "/")
-    end)
   end
 
   defp analyze_file(path) do
