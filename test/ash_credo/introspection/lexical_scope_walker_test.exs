@@ -166,7 +166,11 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
   end
 
   describe "lexical_scope_nodes opt" do
-    test "with-construct is NOT a scope by default - alias inside leaks" do
+    test "with-construct scopes aliases by default (matches Elixir)" do
+      # Verified empirically: a `require`/`alias` declared inside a `with`
+      # clause does NOT propagate to expressions after the construct in
+      # Elixir. The walker's default `lexical_scope_nodes: [:with, :for]`
+      # mirrors that, so alias `Q` is gone after the with ends.
       ast =
         parse!("""
         defmodule Foo do
@@ -181,11 +185,31 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
 
       [aliases_after_with] = walk(ast, [], record_aliases_at(:mark), noop())
 
-      # Default: with is not a scope node, so the alias leaks - Q is visible.
-      assert {[:Q], [:Ash, :Query]} in aliases_after_with
+      refute Enum.any?(aliases_after_with, fn {a, _t} -> a == [:Q] end)
     end
 
-    test "with-construct in lexical_scope_nodes scopes aliases to the construct" do
+    test "for-construct scopes aliases by default (matches Elixir)" do
+      ast =
+        parse!("""
+        defmodule Foo do
+          def go do
+            for _ <- (alias Ash.Query, as: Q; [1]) do
+              :inside
+            end
+            Probe.mark(Q)
+          end
+        end
+        """)
+
+      [aliases_after_for] = walk(ast, [], record_aliases_at(:mark), noop())
+
+      refute Enum.any?(aliases_after_for, fn {a, _t} -> a == [:Q] end)
+    end
+
+    test "passing lexical_scope_nodes: [] opts out of with/for scoping" do
+      # Explicit empty list overrides the default - aliases inside with/for
+      # then leak. Sensible only for callers with a specific need; verifies
+      # the opt is actually wired through.
       ast =
         parse!("""
         defmodule Foo do
@@ -199,10 +223,9 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
         """)
 
       [aliases_after_with] =
-        walk(ast, [], record_aliases_at(:mark), noop(), lexical_scope_nodes: [:with])
+        walk(ast, [], record_aliases_at(:mark), noop(), lexical_scope_nodes: [])
 
-      # With opt: the alias is popped at the end of `with`, so Q is gone.
-      refute Enum.any?(aliases_after_with, fn {a, _t} -> a == [:Q] end)
+      assert {[:Q], [:Ash, :Query]} in aliases_after_with
     end
   end
 

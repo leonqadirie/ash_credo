@@ -142,12 +142,6 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   @directive_kinds ~w(require import)a
-  # Constructs whose clauses/generators evaluate in their own block-level
-  # scope (verified empirically: a `require` written inside a `with` clause
-  # or a `for` generator does NOT propagate to expressions after the
-  # construct). `if` conditions and `case` subjects, by contrast, evaluate
-  # in the outer scope and leak - so they are deliberately not listed here.
-  @construct_scope_nodes ~w(with for)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
@@ -241,7 +235,6 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
         initial_state,
         &enter_for_bodies/3,
         fn _node, _scope, acc -> acc end,
-        lexical_scope_nodes: @construct_scope_nodes,
         on_frame_push: &push_require_frame/1,
         on_frame_pop: &pop_require_frame/1
       )
@@ -320,7 +313,6 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
         &enter_for_calls(&1, &2, &3, resolved),
         fn _node, _scope, acc -> acc end,
         track_module_stack: true,
-        lexical_scope_nodes: @construct_scope_nodes,
         initial_aliases: inherited_aliases,
         on_frame_push: &push_require_frame/1,
         on_frame_pop: &pop_require_frame/1

@@ -49,11 +49,14 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   ## Opts
 
   - `:lexical_scope_nodes` - extra atoms for which to push an alias scope
-    frame on entry and pop on exit. Defaults to `[]`. The walker always
-    pushes for `@scope_keys` (`do/else/after/rescue/catch`) and `:->`
-    arrows; opts add to that set. `MissingMacroDirective` uses
-    `[:with, :for]` to model Elixir's empirically-verified construct
-    scoping for those constructs.
+    frame on entry and pop on exit. Defaults to `[:with, :for]` because
+    these constructs ARE empirically-verified separate scopes in Elixir
+    (a `require`/`alias` declared inside a `with` clause or `for`
+    generator does NOT propagate past the construct). The walker always
+    additionally pushes for `@scope_keys` (`do/else/after/rescue/catch`)
+    and `:->` arrows. Pass `lexical_scope_nodes: []` to opt out (only
+    sensible if you have a specific reason; doing so will let
+    `with`/`for` clause-level aliases leak into the enclosing scope).
   - `:track_quote` (default `true`) - track `{:quote, _, _}` depth. When
     truthy, `in_quote?/1` and `quote_depth/1` reflect it, and aliases
     declared inside `quote` are dropped (see `:track_aliases_in_quote`
@@ -195,7 +198,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   defp normalize_opts(opts) do
     %{
       lexical_scope_nodes:
-        opts |> Keyword.get(:lexical_scope_nodes, []) |> List.wrap() |> MapSet.new(),
+        opts |> Keyword.get(:lexical_scope_nodes, [:with, :for]) |> List.wrap() |> MapSet.new(),
       track_quote: Keyword.get(opts, :track_quote, true),
       track_aliases_in_quote: Keyword.get(opts, :track_aliases_in_quote, false),
       track_module_stack: Keyword.get(opts, :track_module_stack, false),
