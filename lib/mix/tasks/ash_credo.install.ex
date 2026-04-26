@@ -10,7 +10,7 @@ if Code.ensure_loaded?(Igniter) do
 
     ## Example
 
-        mix igniter.install ash_credo --only dev,test
+        mix igniter.install ash_credo
     """
 
     use Igniter.Mix.Task
@@ -25,7 +25,7 @@ if Code.ensure_loaded?(Igniter) do
         group: :ash_credo,
         only: [:dev, :test],
         dep_opts: [runtime: false],
-        example: "mix igniter.install ash_credo --only dev,test"
+        example: "mix igniter.install ash_credo"
       }
     end
 
