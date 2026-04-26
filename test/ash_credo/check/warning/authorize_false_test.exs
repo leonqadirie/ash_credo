@@ -277,4 +277,60 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     assert [issue] = run_check(AuthorizeFalse, source)
     assert issue.trigger == "authorize?: false"
   end
+
+  describe "excluded_paths" do
+    test "skips files under test/ by default" do
+      source = """
+      defmodule MyApp.UserTest do
+        def setup_user do
+          Ash.read!(MyApp.User, authorize?: false)
+        end
+      end
+      """
+
+      assert [] = run_check(AuthorizeFalse, source, __filename__: "test/my_app/user_test.exs")
+    end
+
+    test "skips nested directories under test/" do
+      source = """
+      Ash.read!(MyApp.User, authorize?: false)
+      """
+
+      assert [] = run_check(AuthorizeFalse, source, __filename__: "test/support/factories.ex")
+    end
+
+    test "still flags lib/ files" do
+      source = """
+      defmodule MyApp.Accounts do
+        def list_users, do: Ash.read!(MyApp.User, authorize?: false)
+      end
+      """
+
+      assert [_] = run_check(AuthorizeFalse, source, __filename__: "lib/my_app/accounts.ex")
+    end
+
+    test "respects an empty excluded_paths override" do
+      source = """
+      Ash.read!(MyApp.User, authorize?: false)
+      """
+
+      assert [_] =
+               run_check(AuthorizeFalse, source,
+                 __filename__: "test/my_app/user_test.exs",
+                 excluded_paths: []
+               )
+    end
+
+    test "respects a custom excluded_paths list" do
+      source = """
+      Ash.read!(MyApp.User, authorize?: false)
+      """
+
+      assert [] =
+               run_check(AuthorizeFalse, source,
+                 __filename__: "priv/seeds.exs",
+                 excluded_paths: ["priv"]
+               )
+    end
+  end
 end

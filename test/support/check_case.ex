@@ -15,8 +15,10 @@ defmodule AshCredo.CheckCase do
   end
 
   def run_check(check_module, source_code, params \\ []) do
+    {filename, params} = Keyword.pop(params, :__filename__, "test_file.ex")
+
     source_code
-    |> source_file()
+    |> source_file(filename)
     |> check_module.run(params)
   end
 end
