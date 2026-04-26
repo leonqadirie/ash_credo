@@ -23,7 +23,7 @@ defmodule AshCredo.MixProject do
   end
 
   def application do
-    [extra_applications: [:logger]]
+    [extra_applications: [:logger], mod: {AshCredo.Application, []}]
   end
 
   defp aliases do

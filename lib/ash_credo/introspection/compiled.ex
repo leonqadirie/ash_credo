@@ -40,6 +40,7 @@ defmodule AshCredo.Introspection.Compiled do
   # Suppress compile-time warnings for the remote calls below; they are guarded
   # at runtime by `ash_available?/0`.
   alias Ash.Type.NewType
+  alias AshCredo.Introspection.Cache
 
   @compile {:no_warn_undefined,
             [
@@ -51,12 +52,13 @@ defmodule AshCredo.Introspection.Compiled do
               Ash.Type.NewType
             ]}
 
+  # Tags namespace per-key entries inside the shared cache table.
   @cache_key_tag {__MODULE__, :cache}
   @domain_refs_key_tag {__MODULE__, :domain_refs}
   @macros_key_tag {__MODULE__, :macros}
   @ash_available_key {__MODULE__, :ash_available?}
   @ash_missing_warned_key {__MODULE__, :ash_missing_warned}
-  @not_loadable_warned_key {__MODULE__, :not_loadable_warned}
+  @not_loadable_warned_key_tag {__MODULE__, :not_loadable_warned}
 
   # Behaviours that mark a module as an Ash resource auxiliary - i.e. a
   # module that gets attached to a resource via `change`, `preparation`,
@@ -92,17 +94,16 @@ defmodule AshCredo.Introspection.Compiled do
   @doc """
   Returns `true` if `Ash.Resource.Info` is loadable in the current VM.
 
-  Cached in `:persistent_term` after the first call so subsequent calls are
-  essentially free.
+  Cached after the first call so subsequent calls are essentially free.
   """
   @spec ash_available?() :: boolean()
   def ash_available? do
-    case :persistent_term.get(@ash_available_key, :unknown) do
+    case Cache.get(@ash_available_key, :unknown) do
       :unknown ->
         available? =
           Code.ensure_loaded?(Ash.Resource.Info) and Code.ensure_loaded?(Ash.Domain.Info)
 
-        :persistent_term.put(@ash_available_key, available?)
+        Cache.put(@ash_available_key, available?)
         available?
 
       cached ->
@@ -257,10 +258,10 @@ defmodule AshCredo.Introspection.Compiled do
   def macros(module) when is_atom(module) do
     key = {@macros_key_tag, module}
 
-    case :persistent_term.get(key, :miss) do
+    case Cache.get(key, :miss) do
       :miss ->
         result = do_macros(module)
-        :persistent_term.put(key, result)
+        Cache.put(key, result)
         result
 
       cached ->
@@ -397,10 +398,10 @@ defmodule AshCredo.Introspection.Compiled do
   defp cached_domain_references(domain) do
     key = {@domain_refs_key_tag, domain}
 
-    case :persistent_term.get(key, :miss) do
+    case Cache.get(key, :miss) do
       :miss ->
         refs = Ash.Domain.Info.resource_references(domain)
-        :persistent_term.put(key, refs)
+        Cache.put(key, refs)
         refs
 
       cached ->
@@ -431,49 +432,11 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Returns `true` if an `:ash_missing` diagnostic has already been emitted for
-  this run. Shared across every compile-dependent check via `:persistent_term`
-  so the diagnostic fires at most once per `mix credo` invocation.
-  """
-  @spec ash_missing_warned?() :: boolean()
-  def ash_missing_warned? do
-    :persistent_term.get(@ash_missing_warned_key, false)
-  end
-
-  @doc "Marks the `:ash_missing` diagnostic as already emitted for this run."
-  @spec mark_ash_missing_warned() :: :ok
-  def mark_ash_missing_warned do
-    :persistent_term.put(@ash_missing_warned_key, true)
-    :ok
-  end
-
-  @doc """
-  Returns `true` if a `:not_loadable` diagnostic for `module` has already been
-  emitted for this run. Tracked as a set in `:persistent_term` so the same
-  unloadable resource produces at most ONE diagnostic across all
-  compile-dependent checks per `mix credo` invocation.
-  """
-  @spec not_loadable_warned?(module()) :: boolean()
-  def not_loadable_warned?(module) when is_atom(module) do
-    @not_loadable_warned_key
-    |> :persistent_term.get(MapSet.new())
-    |> MapSet.member?(module)
-  end
-
-  @doc "Marks `module` as already having emitted a `:not_loadable` diagnostic."
-  @spec mark_not_loadable_warned(module()) :: :ok
-  def mark_not_loadable_warned(module) when is_atom(module) do
-    current = :persistent_term.get(@not_loadable_warned_key, MapSet.new())
-    :persistent_term.put(@not_loadable_warned_key, MapSet.put(current, module))
-    :ok
-  end
-
-  @doc """
   Builds a `:not_loadable` diagnostic for `module` only the first time it is
-  seen this run. Subsequent calls for the same module return `[]`. Used by
-  every compile-dependent check's `{:error, :not_loadable}` branch so a user
-  who runs `mix credo` without `mix compile` first sees ONE diagnostic per
-  unique broken module instead of N×checks worth of identical noise.
+  seen this run. Subsequent calls for the same module return `[]`, so an
+  unloadable resource produces at most ONE diagnostic across all
+  compile-dependent checks per `mix credo` invocation. Atomic across
+  concurrent Credo tasks.
 
   `build_issue_fn` is a 0-arity function that returns a single
   `Credo.Issue.t()` - typically a `format_issue/2` call inside the calling
@@ -483,11 +446,10 @@ defmodule AshCredo.Introspection.Compiled do
   @spec with_unique_not_loadable(module(), (-> struct())) :: [struct()]
   def with_unique_not_loadable(module, build_issue_fn)
       when is_atom(module) and is_function(build_issue_fn, 0) do
-    if not_loadable_warned?(module) do
-      []
-    else
-      mark_not_loadable_warned(module)
+    if Cache.insert_new({@not_loadable_warned_key_tag, module}) do
       [build_issue_fn.()]
+    else
+      []
     end
   end
 
@@ -513,15 +475,9 @@ defmodule AshCredo.Introspection.Compiled do
   def with_compiled_check(missing_issue_fn, check_fn)
       when is_function(missing_issue_fn, 0) and is_function(check_fn, 0) do
     cond do
-      ash_available?() ->
-        check_fn.()
-
-      ash_missing_warned?() ->
-        []
-
-      true ->
-        mark_ash_missing_warned()
-        [missing_issue_fn.()]
+      ash_available?() -> check_fn.()
+      Cache.insert_new(@ash_missing_warned_key) -> [missing_issue_fn.()]
+      true -> []
     end
   end
 
@@ -558,34 +514,17 @@ defmodule AshCredo.Introspection.Compiled do
   defp name_ancestors(segs), do: [segs | name_ancestors(Enum.drop(segs, -1))]
 
   @doc """
-  Clears every `:persistent_term` entry this module owns: the per-module
-  introspection cache, the per-domain resource-reference cache, the
-  `ash_available?` probe result, and the one-shot `:ash_missing` /
-  `:not_loadable` diagnostic flags.
+  Clears every cache entry: per-module introspection results, per-domain
+  resource-reference lists, the `ash_available?` probe, and the one-shot
+  `:ash_missing` / `:not_loadable` diagnostic flags.
 
-  Intended for setups where Credo runs repeatedly inside a long-lived BEAM.
-  In those environments the cache survives across runs and can serve stale
-  DSL snapshots after you edit and recompile a resource.
-  Call this between runs - or wire it into your before-save /
-  after-compile hook - to force the next `mix credo` run to
-  re-read introspection from freshly compiled modules.
-
-  Not needed for plain `mix credo` invocations from the shell: each one
-  boots a fresh VM and starts with an empty cache.
+  Called automatically by `AshCredo.init/1` at the start of every Credo
+  run, so callers rarely need to invoke it directly. Useful in tests that
+  need a clean slate between assertions.
   """
   @spec clear_cache() :: :ok
   def clear_cache do
-    for {key, _value} <- :persistent_term.get(),
-        match?({@cache_key_tag, _}, key) or
-          match?({@domain_refs_key_tag, _}, key) or
-          match?({@macros_key_tag, _}, key) do
-      :persistent_term.erase(key)
-    end
-
-    :persistent_term.erase(@ash_available_key)
-    :persistent_term.erase(@ash_missing_warned_key)
-    :persistent_term.erase(@not_loadable_warned_key)
-    :ok
+    Cache.clear()
   end
 
   @datetime_storage_types [
@@ -648,14 +587,14 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   defp cache_fetch(module) do
-    case :persistent_term.get({@cache_key_tag, module}, :miss) do
+    case Cache.get({@cache_key_tag, module}, :miss) do
       :miss -> :miss
       cached -> {:ok, cached}
     end
   end
 
   defp cache_put(module, result) do
-    :persistent_term.put({@cache_key_tag, module}, result)
+    Cache.put({@cache_key_tag, module}, result)
     result
   end
 end
