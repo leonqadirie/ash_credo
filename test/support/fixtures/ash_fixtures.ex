@@ -329,5 +329,5 @@ defmodule AshCredoFixtures.FakeMacros do
     end
   end
 
-  def regular(x), do: x
+  def regular(value), do: value
 end
