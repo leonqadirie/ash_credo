@@ -7,7 +7,7 @@ defmodule Mix.Tasks.Lint.NoEmdash do
 
   # U+2014 EM DASH
   @em_dash <<0xE2, 0x80, 0x94>>
-  @source_dirs ["lib", "test", "config"]
+  @source_dirs ["dev", "lib", "test", "config"]
   @source_files ["README.md"]
   @extensions [".ex", ".exs", ".md"]
 
