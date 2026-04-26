@@ -282,9 +282,7 @@ defmodule AshCredo.Check.Refactor.DirectiveInFunctionBodyTest do
                  directive_modules: [Ash.Query, Ash.Expr, MyApp.CustomMacros]
                )
 
-      assert length(issues) == 2
-      triggers = Enum.map(issues, & &1.trigger) |> Enum.sort()
-      assert triggers == ["Ash.Query", "MyApp.CustomMacros"]
+      assert sorted_triggers(issues) == ["Ash.Query", "MyApp.CustomMacros"]
     end
 
     test "accepts non-Ash modules in the configured list (off-label but allowed)" do

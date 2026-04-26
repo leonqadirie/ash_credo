@@ -32,8 +32,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
     issues = run_check(MissingCodeInterface, source)
 
     # Post's uncovered actions: :create, :update, :destroy, :draft (4 total)
-    triggers = Enum.map(issues, & &1.trigger) |> MapSet.new()
-    assert MapSet.equal?(triggers, MapSet.new(~w(create update destroy draft)))
+    assert MapSet.equal?(trigger_set(issues), MapSet.new(~w(create update destroy draft)))
 
     # Every issue names the specific action
     for issue <- issues do
@@ -53,8 +52,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
     issues = run_check(MissingCodeInterface, source)
 
     # User has 4 default actions and zero interfaces.
-    triggers = Enum.map(issues, & &1.trigger) |> MapSet.new()
-    assert MapSet.equal?(triggers, MapSet.new(~w(create read update destroy)))
+    assert MapSet.equal?(trigger_set(issues), MapSet.new(~w(create read update destroy)))
   end
 
   test "no issue for actions covered by a resource-level interface" do
@@ -65,13 +63,13 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
     """
 
     issues = run_check(MissingCodeInterface, source)
-    triggers = Enum.map(issues, & &1.trigger)
+    triggers = trigger_set(issues)
 
     # :archive, :published, and :read all have interfaces (resource-level)
     # - neither should appear in the issue list.
-    refute "archive" in triggers
-    refute "published" in triggers
-    refute "read" in triggers
+    refute MapSet.member?(triggers, "archive")
+    refute MapSet.member?(triggers, "published")
+    refute MapSet.member?(triggers, "read")
   end
 
   test "no issue for actions covered only by a domain-level interface" do
@@ -82,11 +80,10 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
     """
 
     issues = run_check(MissingCodeInterface, source)
-    triggers = Enum.map(issues, & &1.trigger)
 
     # :publish has only a domain-level interface (`publish_post`). The check
     # should accept that and NOT flag `:publish`.
-    refute "publish" in triggers
+    refute MapSet.member?(trigger_set(issues), "publish")
   end
 
   test "no issue for embedded resources" do
@@ -134,8 +131,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
         excluded_actions: ["AshCredoFixtures.Blog.Post.create"]
       )
 
-    triggers = Enum.map(issues, & &1.trigger) |> MapSet.new()
-    assert MapSet.equal?(triggers, MapSet.new(~w(update destroy draft)))
+    assert MapSet.equal?(trigger_set(issues), MapSet.new(~w(update destroy draft)))
   end
 
   test "excluded_actions works across multiple resources" do
@@ -164,11 +160,8 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
         excluded_actions: ["AshCredoFixtures.Accounts.User.read"]
       )
 
-    post_triggers = Enum.map(post_issues, & &1.trigger) |> MapSet.new()
-    user_triggers = Enum.map(user_issues, & &1.trigger) |> MapSet.new()
-
-    assert MapSet.equal?(post_triggers, MapSet.new(~w(update destroy)))
-    assert MapSet.equal?(user_triggers, MapSet.new(~w(create update destroy)))
+    assert MapSet.equal?(trigger_set(post_issues), MapSet.new(~w(update destroy)))
+    assert MapSet.equal?(trigger_set(user_issues), MapSet.new(~w(create update destroy)))
   end
 
   test "excluded_actions disambiguates same action name across resources" do
@@ -189,8 +182,8 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
     post_issues = run_check(MissingCodeInterface, post_source, excluded_actions: excluded)
     user_issues = run_check(MissingCodeInterface, user_source, excluded_actions: excluded)
 
-    refute "create" in Enum.map(post_issues, & &1.trigger)
-    assert "create" in Enum.map(user_issues, & &1.trigger)
+    refute MapSet.member?(trigger_set(post_issues), "create")
+    assert MapSet.member?(trigger_set(user_issues), "create")
   end
 
   test "excluded_actions with no matches is a no-op" do
@@ -203,8 +196,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
     issues =
       run_check(MissingCodeInterface, source, excluded_actions: ["No.Such.Resource.nope"])
 
-    triggers = Enum.map(issues, & &1.trigger) |> MapSet.new()
-    assert MapSet.equal?(triggers, MapSet.new(~w(create update destroy draft)))
+    assert MapSet.equal?(trigger_set(issues), MapSet.new(~w(create update destroy draft)))
   end
 
   test "emits a not-loadable config issue for an unknown resource" do

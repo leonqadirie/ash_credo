@@ -406,17 +406,16 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
         run_check(MissingMacroDirective, source, macro_modules: [Totally.Fake.Macros, Ash.Query])
 
       # One diagnostic for the unloadable module...
-      load_issue = Enum.find(issues, &(&1.message =~ "Could not load"))
+      load_issue = find_by_message(issues, "Could not load")
       assert load_issue
       assert load_issue.message =~ "Totally.Fake.Macros"
 
       # ...and the Ash.Query.filter call is still flagged normally.
-      filter_issue = Enum.find(issues, &(&1.trigger == "Ash.Query.filter"))
-      assert filter_issue
+      assert find_by_trigger(issues, "Ash.Query.filter")
 
       # No spurious issue is emitted for the unresolved `Totally.Fake.Macros`
       # call sites - they're silently skipped when their module is dropped.
-      refute Enum.any?(issues, &(&1.trigger == "Totally.Fake.Macros.do_thing"))
+      refute find_by_trigger(issues, "Totally.Fake.Macros.do_thing")
     end
   end
 end

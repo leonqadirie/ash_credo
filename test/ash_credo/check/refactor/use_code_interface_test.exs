@@ -427,8 +427,8 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       """
 
       issues = run_check(UseCodeInterface, source)
-      assert Enum.any?(issues, &(&1.trigger == "Ash.Changeset.for_update"))
-      update_issue = Enum.find(issues, &(&1.trigger == "Ash.Changeset.for_update"))
+      update_issue = find_by_trigger(issues, "Ash.Changeset.for_update")
+      assert update_issue
       assert update_issue.message =~ "changeset_to_archive"
     end
 
@@ -444,7 +444,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       """
 
       issues = run_check(UseCodeInterface, source)
-      update_issue = Enum.find(issues, &(&1.trigger == "Ash.Changeset.for_update"))
+      update_issue = find_by_trigger(issues, "Ash.Changeset.for_update")
       assert update_issue
       assert update_issue.message =~ "changeset_to_archive"
     end
@@ -460,7 +460,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       """
 
       issues = run_check(UseCodeInterface, source)
-      assert Enum.any?(issues, &(&1.trigger == "Ash.Changeset.for_destroy"))
+      assert find_by_trigger(issues, "Ash.Changeset.for_destroy")
     end
 
     test "non-bang Ash.get is not traced (it returns a result tuple, not a record)" do
@@ -474,7 +474,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       """
 
       issues = run_check(UseCodeInterface, source)
-      refute Enum.any?(issues, &(&1.trigger == "Ash.Changeset.for_update"))
+      refute find_by_trigger(issues, "Ash.Changeset.for_update")
     end
 
     test "no issue when the record origin is an unrelated helper" do
@@ -505,7 +505,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       # The for_create call is not flagged (post is not a literal module).
       # The Ash.get! call is also not flagged (action key is a positional arg).
       issues = run_check(UseCodeInterface, source)
-      refute Enum.any?(issues, &(&1.trigger == "Ash.Changeset.for_create"))
+      refute find_by_trigger(issues, "Ash.Changeset.for_create")
     end
   end
 
@@ -536,7 +536,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       """
 
       issues = run_check(UseCodeInterface, source)
-      assert Enum.any?(issues, &(&1.trigger == "Ash.bulk_update"))
+      assert find_by_trigger(issues, "Ash.bulk_update")
     end
 
     test "Ash.bulk_destroy! with piped query traces through the pipe" do
@@ -551,7 +551,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       """
 
       issues = run_check(UseCodeInterface, source)
-      assert Enum.any?(issues, &(&1.trigger == "Ash.bulk_destroy!"))
+      assert find_by_trigger(issues, "Ash.bulk_destroy!")
     end
   end
 
