@@ -202,6 +202,7 @@ The following checks accept custom parameters:
 | Check | Parameter | Default | Description |
 |---|---|---|---|
 | `Warning.AuthorizeFalse` | `include_non_ash_calls` | `true` | When `false`, only checks Ash API calls and action DSL definitions |
+| `Warning.AuthorizeFalse` | `excluded_paths` | `[~r"/test/", "test"]` | Paths or regexes to skip. Defaults to test directories where `authorize?: false` is typically intentional |
 | `Warning.MissingMacroDirective` | `macro_modules` | `[Ash.Query, Ash.Expr]` | Modules whose qualified macro calls the check validates. Macros are read from `module.__info__(:macros)`, so only real macros are flagged |
 | `Warning.SensitiveAttributeExposed` | `sensitive_names` | `~w(password hashed_password password_hash token secret api_key private_key ssn)a` | Attribute names to flag when not marked `sensitive?: true` |
 | `Warning.SensitiveFieldInAccept` | `dangerous_fields` | `~w(is_admin admin permissions api_key secret_key)a` | Field names to flag when found in `accept` lists |

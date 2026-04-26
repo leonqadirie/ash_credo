@@ -3,7 +3,10 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
     base_priority: :high,
     category: :warning,
     tags: [:ash, :security],
-    param_defaults: [include_non_ash_calls: true],
+    param_defaults: [
+      include_non_ash_calls: true,
+      excluded_paths: [~r"/test/", "test"]
+    ],
     explanations: [
       check: """
       Using `authorize?: false` bypasses Ash authorization entirely, making it
@@ -31,13 +34,20 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
       wrapper functions. Set `include_non_ash_calls: false` to restrict detection
       to Ash API calls and action DSL definitions only.
 
+      Test directories are excluded by default, since bypassing authorization in
+      test setup and factories is typically intentional. Override `excluded_paths`
+      to scope the check differently.
+
       In either mode the check is purely syntactic: it cannot follow values through
       variables, config lookups, or function return values.
       """,
       params: [
         include_non_ash_calls:
           "When `true` (default), flags `authorize?: false` anywhere in source. " <>
-            "When `false`, only checks Ash API calls and action DSL definitions."
+            "When `false`, only checks Ash API calls and action DSL definitions.",
+        excluded_paths:
+          "List of paths or regexes to exclude from this check. " <>
+            "Defaults to test directories, since `authorize?: false` is intentional in test setup."
       ]
     ]
 
@@ -45,24 +55,40 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
+    excluded_paths = Params.get(params, :excluded_paths, __MODULE__)
 
-    lines =
-      if Params.get(params, :include_non_ash_calls, __MODULE__) do
-        all_authorize_false_lines(source_file)
-      else
-        ash_authorize_false_lines(source_file)
-      end
+    if ignore_path?(source_file.filename, excluded_paths) do
+      []
+    else
+      issue_meta = IssueMeta.for(source_file, params)
 
-    Enum.map(lines, fn line ->
-      format_issue(issue_meta,
-        message:
-          "`authorize?: false` bypasses authorization. Use system actors with bypass policies instead.",
-        trigger: "authorize?: false",
-        line_no: line
-      )
-    end)
+      lines =
+        if Params.get(params, :include_non_ash_calls, __MODULE__) do
+          all_authorize_false_lines(source_file)
+        else
+          ash_authorize_false_lines(source_file)
+        end
+
+      Enum.map(lines, fn line ->
+        format_issue(issue_meta,
+          message:
+            "`authorize?: false` bypasses authorization. Use system actors with bypass policies instead.",
+          trigger: "authorize?: false",
+          line_no: line
+        )
+      end)
+    end
   end
+
+  defp ignore_path?(filename, excluded_paths) do
+    directory = Path.dirname(filename)
+    Enum.any?(excluded_paths, &matches_path?(directory, &1))
+  end
+
+  defp matches_path?(directory, %Regex{} = regex), do: Regex.match?(regex, directory)
+
+  defp matches_path?(directory, path) when is_binary(path),
+    do: String.starts_with?(directory, path)
 
   defp ash_authorize_false_lines(source_file) do
     call_lines =
