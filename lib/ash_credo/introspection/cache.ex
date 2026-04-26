@@ -31,31 +31,23 @@ defmodule AshCredo.Introspection.Cache do
   end
 
   @doc """
-  Ensures the cache GenServer is running and its ETS table is ready for
-  use. Safe to call from any process at any time. Raises if startup fails
-  for a reason other than "already started."
+  Ensures the cache GenServer is running under `AshCredo.Application` and
+  its ETS table is ready for use. Safe to call from any process at any
+  time; idempotent.
 
-  Blocks via a `:ready` GenServer call after start so that a concurrent
-  caller racing with another caller's `init/1` cannot proceed before the
-  ETS table exists. (`GenServer.start_link/3` returning `{:error,
-  {:already_started, pid}}` only proves the GenServer is registered, not
-  that its `init/1` has finished.)
+  Goes through `Application.ensure_all_started/1` so the cache is always
+  supervised. A direct `start_link/1` here would orphan the GenServer from
+  the supervisor in scenarios where `:ash_credo` has not been booted yet
+  (e.g. `mix credo` only loads code paths) - and a later
+  `Application.ensure_all_started(:ash_credo)` would then fail to start
+  with `{:already_started, pid}`.
   """
   @spec ensure_started!() :: :ok
   def ensure_started! do
-    pid =
-      case start_link() do
-        {:ok, pid} ->
-          pid
-
-        {:error, {:already_started, pid}} ->
-          pid
-
-        {:error, reason} ->
-          raise "AshCredo.Introspection.Cache failed to start: #{inspect(reason)}"
-      end
-
-    :ok = GenServer.call(pid, :ready)
+    case Application.ensure_all_started(:ash_credo) do
+      {:ok, _apps} -> :ok
+      {:error, reason} -> raise "AshCredo.Introspection.Cache failed to start: #{inspect(reason)}"
+    end
   end
 
   @doc """
