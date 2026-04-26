@@ -1,6 +1,17 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.9.0](https://github.com/leonqadirie/ash_credo/compare/v0.8.0...v0.9.0) (2026-04-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* AuthorizeFalse now excludes test directories by default via the new `excluded_paths` param ([#92](https://github.com/leonqadirie/ash_credo/issues/92))
+
+### Features
+
+* add excluded_paths param to AuthorizeFalse check, excluding test directories by default ([#92](https://github.com/leonqadirie/ash_credo/issues/92)) ([3f725fd](https://github.com/leonqadirie/ash_credo/commit/3f725fdf8446323e9c5440267d5a704dde564062)) by [@leonqadirie](https://github.com/leonqadirie)
+
 ## [0.8.0](https://github.com/leonqadirie/ash_credo/compare/v0.7.0...v0.8.0) (2026-04-22)
 
 
