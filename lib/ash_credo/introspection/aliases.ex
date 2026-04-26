@@ -9,16 +9,18 @@ defmodule AshCredo.Introspection.Aliases do
   def module_aliases({:defmodule, _, _} = module_ast, opts) do
     before_line = Keyword.get(opts, :before_line)
 
-    Enum.reduce(Introspection.module_body(module_ast), [], fn
-      {:alias, meta, _} = alias_ast, aliases ->
+    module_ast
+    |> Introspection.module_body()
+    |> Enum.flat_map(fn
+      {:alias, meta, _} = alias_ast ->
         if alias_before?(meta[:line], before_line) do
-          alias_entries(alias_ast) ++ aliases
+          alias_entries(alias_ast)
         else
-          aliases
+          []
         end
 
-      _stmt, aliases ->
-        aliases
+      _stmt ->
+        []
     end)
   end
 
@@ -45,7 +47,7 @@ defmodule AshCredo.Introspection.Aliases do
     end
   end
 
-  def expand_alias(other, _aliases), do: other
+  def expand_alias(segments, _aliases), do: segments
 
   @doc "Resolves a module reference or segments within a module or resource context."
   def resolved_module_ref(ref_or_segments, module_or_context, opts \\ [])
@@ -116,7 +118,9 @@ defmodule AshCredo.Introspection.Aliases do
     end)
   end
 
-  defp default_alias(target_segments), do: [List.last(target_segments)]
+  defp default_alias([last]), do: [last]
+  defp default_alias([_head | rest]), do: default_alias(rest)
+  defp default_alias([]), do: [nil]
 
   defp context_aliases(%{module_ast: module_ast, aliases: aliases}, opts) do
     case Keyword.get(opts, :before_line) do

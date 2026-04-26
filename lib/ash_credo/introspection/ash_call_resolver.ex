@@ -259,8 +259,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
     end
   end
 
-  defp literal_segments({:__aliases__, _, [{:__MODULE__, _, _} | rest]}, context)
-       when is_list(rest) do
+  defp literal_segments({:__aliases__, _, [{:__MODULE__, _, _} | rest]}, context) do
     if Enum.all?(rest, &is_atom/1) do
       case context.enclosing_module_segments do
         segs when is_list(segs) and segs != [] -> {:ok, segs ++ rest}
@@ -358,8 +357,8 @@ defmodule AshCredo.Introspection.AshCallResolver do
   defp arg_at(args, idx), do: Enum.fetch(args, idx)
 
   defp action_from_opts(args) do
-    case List.last(args) do
-      kwl when is_list(kwl) -> Keyword.get(kwl, :action)
+    case Enum.reverse(args) do
+      [kwl | _] when is_list(kwl) -> Keyword.get(kwl, :action)
       _ -> nil
     end
   end

@@ -255,8 +255,12 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   defp maybe_push_binding_frame(state, _node_name), do: state
 
+  defp maybe_pop_binding_frame(%{binding_frames: [_current | frames]} = state, :fn) do
+    %{state | binding_frames: frames}
+  end
+
   defp maybe_pop_binding_frame(%{binding_frames: [_current | frames]} = state, node_name)
-       when node_name in @function_scope_nodes or node_name == :fn do
+       when node_name in @function_scope_nodes do
     %{state | binding_frames: frames}
   end
 
