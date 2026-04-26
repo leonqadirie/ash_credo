@@ -572,10 +572,15 @@ defmodule AshCredo.IntrospectionTest do
     test "returns top-level statements from a module body" do
       [resource] = Introspection.resource_modules(source_file(@ash_resource))
       body = Introspection.module_body(resource)
-
       assert is_list(body)
-      assert Enum.any?(body, &match?({:use, _, _}, &1))
-      assert Enum.any?(body, &match?({:actions, _, _}, &1))
+
+      {has_use?, has_actions?} =
+        Enum.reduce(body, {false, false}, fn node, {use_acc, actions_acc} ->
+          {use_acc or match?({:use, _, _}, node), actions_acc or match?({:actions, _, _}, node)}
+        end)
+
+      assert has_use?
+      assert has_actions?
     end
 
     test "returns empty list for non-modules" do

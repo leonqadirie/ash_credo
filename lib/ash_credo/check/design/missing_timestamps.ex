@@ -96,8 +96,13 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
   # specific attribute names, while still catching partial setups where
   # only one side is present.
   defp has_timestamps?(attributes) do
-    Enum.any?(attributes, &create_timestamp_attribute?/1) and
-      Enum.any?(attributes, &update_timestamp_attribute?/1)
+    {has_create?, has_update?} =
+      Enum.reduce(attributes, {false, false}, fn attr, {has_create?, has_update?} ->
+        {has_create? or create_timestamp_attribute?(attr),
+         has_update? or update_timestamp_attribute?(attr)}
+      end)
+
+    has_create? and has_update?
   end
 
   defp create_timestamp_attribute?(attribute) do

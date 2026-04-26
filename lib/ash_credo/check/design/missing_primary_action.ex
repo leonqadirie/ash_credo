@@ -77,19 +77,31 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
 
   defp flag_missing_primaries(actions, module_ast, context, issue_meta) do
     actions_line = actions_section_line(module_ast, context)
+    {counts, primaries} = summarise_actions(actions)
 
-    @action_types
-    |> Enum.map(fn type -> {type, Enum.filter(actions, &(&1.type == type))} end)
-    |> Enum.reject(fn {_type, actions} ->
-      length(actions) <= 1 or Enum.any?(actions, & &1.primary?)
-    end)
-    |> Enum.map(fn {type, _actions} ->
+    for type <- @action_types,
+        Map.get(counts, type, 0) > 1,
+        not MapSet.member?(primaries, type) do
       format_issue(issue_meta,
         message:
           "Multiple `#{type}` actions exist on this resource but none is marked `primary?: true`.",
         trigger: "#{type}",
         line_no: actions_line
       )
+    end
+  end
+
+  # Single pass over `actions` collecting both per-type counts and the set
+  # of types that already have a `primary?: true` action. Avoids a per-type
+  # filter+any? scan of the action list.
+  defp summarise_actions(actions) do
+    Enum.reduce(actions, {%{}, MapSet.new()}, fn action, {counts, primaries} ->
+      next_counts = Map.update(counts, action.type, 1, &(&1 + 1))
+
+      next_primaries =
+        if action.primary?, do: MapSet.put(primaries, action.type), else: primaries
+
+      {next_counts, next_primaries}
     end)
   end
 

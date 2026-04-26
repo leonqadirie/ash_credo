@@ -66,8 +66,8 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
     issues = run_check(WildcardAcceptOnAction, source)
 
     assert length(issues) == 2
-    assert Enum.any?(issues, &String.contains?(&1.message, "Default `create` action"))
-    assert Enum.any?(issues, &String.contains?(&1.message, "Default `update` action"))
+    assert find_by_message(issues, "Default `create` action")
+    assert find_by_message(issues, "Default `update` action")
   end
 
   test "reports issue for inline accept: :* on create" do

@@ -264,8 +264,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
 
   defp collect_directive({directive, _, [{:__aliases__, _, segs} | _]}, acc, targets)
        when directive in @directive_kinds do
-    with true <- Enum.all?(segs, &is_atom/1),
-         mod = Module.concat(segs),
+    with {:ok, mod} <- atomic_module(segs),
          true <- MapSet.member?(targets, mod) do
       MapSet.put(acc, mod)
     else
@@ -274,6 +273,21 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
   end
 
   defp collect_directive(_stmt, acc, _targets), do: acc
+
+  # Walks `segs` once: returns `{:ok, Module.concat(segs)}` only if every
+  # segment is an atom (rejecting interpolated/quoted aliases like
+  # `unquote(mod)` or `__MODULE__` mid-segment), otherwise `:error`.
+  defp atomic_module(segs) do
+    segs
+    |> Enum.reduce_while([], fn
+      seg, acc when is_atom(seg) -> {:cont, [seg | acc]}
+      _seg, _acc -> {:halt, :error}
+    end)
+    |> case do
+      :error -> :error
+      reversed -> {:ok, reversed |> Enum.reverse() |> Module.concat()}
+    end
+  end
 
   defp collect_call_sites(body, resolved) do
     {_ast, %{sites: sites}} =
@@ -307,11 +321,11 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
          resolved
        )
        when is_atom(fun) and is_list(args) do
-    if state.defmodule_depth == 0 and state.quote_depth == 0 and
-         Enum.all?(segs, &is_atom/1) do
-      maybe_record_call(node, state, resolved, Module.concat(segs), fun, args, meta)
+    with true <- state.defmodule_depth == 0 and state.quote_depth == 0,
+         {:ok, mod} <- atomic_module(segs) do
+      maybe_record_call(node, state, resolved, mod, fun, args, meta)
     else
-      {node, state}
+      _ -> {node, state}
     end
   end
 

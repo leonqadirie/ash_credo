@@ -22,8 +22,11 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpressionTest do
 
     issues = run_check(PinnedTimeInExpression, source)
     assert length(issues) == 2
-    assert Enum.all?(issues, &(&1.message =~ "today()"))
-    assert Enum.all?(issues, &(&1.trigger =~ "^Date.utc_today()"))
+
+    Enum.each(issues, fn issue ->
+      assert issue.message =~ "today()"
+      assert issue.trigger =~ "^Date.utc_today()"
+    end)
   end
 
   test "reports issue for ^DateTime.utc_now() in filter expr" do
