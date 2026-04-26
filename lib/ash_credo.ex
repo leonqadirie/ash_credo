@@ -63,6 +63,9 @@ defmodule AshCredo do
   def init(exec) do
     Cache.ensure_started!()
     Cache.clear()
-    register_default_config(exec, @config_file)
+
+    exec
+    |> register_default_config(@config_file)
+    |> append_task(:halt_execution, AshCredo.ClearCacheTask)
   end
 end
