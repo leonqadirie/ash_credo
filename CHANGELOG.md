@@ -1,6 +1,23 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.10.0](https://github.com/leonqadirie/ash_credo/compare/v0.9.0...v0.10.0) (2026-04-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* `UseCodeInterface` now flags `Ash.read!(MyApp.Post)`, `Ash.read/1`, `Ash.get!/3`, `Ash.get/3`, and `Ash.stream!/2` calls that omit the `:action` keyword, treating them as targeting the resource's primary `:read` action. Projects whose CI was previously green on bare- form calls will see new issues - either define a code interface, add an explicit `action: :read`, or disable the check.
+
+### Features
+
+* refine use code interface and missing macro directive against real semantics ([#97](https://github.com/leonqadirie/ash_credo/issues/97)) ([9eaa617](https://github.com/leonqadirie/ash_credo/commit/9eaa617136bc057702ee3dedcac4f0e270be376c))
+* replace persistent term-based cache with ETS ([#100](https://github.com/leonqadirie/ash_credo/issues/100)) ([e6ba2f1](https://github.com/leonqadirie/ash_credo/commit/e6ba2f1700e39c26a78e2de25e056bdfedbecbcd))
+
+
+### Bug Fixes
+
+* failures when ash_credo is consumed as a dependency ([#102](https://github.com/leonqadirie/ash_credo/issues/102)) ([6be6898](https://github.com/leonqadirie/ash_credo/commit/6be68986c7ea411c6ba620459b1704d0a6a37671))
+
 ## [0.9.0](https://github.com/leonqadirie/ash_credo/compare/v0.8.0...v0.9.0) (2026-04-26)
 
 
