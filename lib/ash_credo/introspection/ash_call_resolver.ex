@@ -38,7 +38,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
   """
 
   alias AshCredo.Introspection
-  alias AshCredo.Introspection.AshCallScanner
+  alias AshCredo.Introspection.{AshCallScanner, AshCallSite}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias Credo.Code.Name
 
@@ -77,32 +77,11 @@ defmodule AshCredo.Introspection.AshCallResolver do
   # binding like `post = Ash.get(Post, id)` holds a result tuple, not a record.
   @record_origin_funs ~w(get!)a
 
-  @type resolution ::
-          {:ok, module(), map()}
-          | {:not_loadable, module()}
-          | :not_a_resource
-          | :ash_missing
-
-  @type site :: %{
-          resolution: resolution(),
-          action_name: atom(),
-          fun_name: atom(),
-          module: [atom()],
-          arity: non_neg_integer(),
-          call_ast: Macro.t(),
-          call_meta: keyword(),
-          call_info: map(),
-          builder_prefix: :changeset_to | :query_to | :input_to | nil,
-          trace_record?: boolean(),
-          call_kind: :read_many | :get_one | :stream_many | :builder | :bulk | nil,
-          lookup_keys: [atom()] | nil
-        }
-
   @doc """
   Walks `source_file` and returns the list of resolved Ash call sites in
   source order.
   """
-  @spec sites(Credo.SourceFile.t()) :: [site()]
+  @spec sites(Credo.SourceFile.t()) :: [AshCallSite.t()]
   def sites(source_file) do
     source_file
     |> AshCallScanner.calls_with_context()
@@ -110,8 +89,8 @@ defmodule AshCredo.Introspection.AshCallResolver do
   end
 
   @doc "Returns `\"<module>.<fun>\"` for a resolved call site."
-  @spec qualified_call(site()) :: String.t()
-  def qualified_call(%{module: module, fun_name: fun_name}),
+  @spec qualified_call(AshCallSite.t()) :: String.t()
+  def qualified_call(%AshCallSite{module: module, fun_name: fun_name}),
     do: Name.full(module) <> ".#{fun_name}"
 
   @doc """
@@ -119,10 +98,11 @@ defmodule AshCredo.Introspection.AshCallResolver do
   Builder calls (`changeset_to_*`/`query_to_*`/`input_to_*`) are never
   bang-suffixed because their generated helpers do not raise.
   """
-  @spec bang?(site()) :: boolean()
-  def bang?(%{builder_prefix: prefix}) when not is_nil(prefix), do: false
+  @spec bang?(AshCallSite.t()) :: boolean()
+  def bang?(%AshCallSite{builder_prefix: prefix}) when not is_nil(prefix), do: false
 
-  def bang?(%{fun_name: fun_name}), do: fun_name |> Atom.to_string() |> String.ends_with?("!")
+  def bang?(%AshCallSite{fun_name: fun_name}),
+    do: fun_name |> Atom.to_string() |> String.ends_with?("!")
 
   # ── Site resolution ──
 
@@ -207,11 +187,14 @@ defmodule AshCredo.Introspection.AshCallResolver do
   end
 
   defp build_site_with(ctx, action_name, resolution) do
-    Map.merge(ctx, %{
-      resolution: resolution,
-      action_name: action_name,
-      lookup_keys: lookup_keys(ctx, resolution)
-    })
+    struct!(
+      AshCallSite,
+      Map.merge(ctx, %{
+        resolution: resolution,
+        action_name: action_name,
+        lookup_keys: lookup_keys(ctx, resolution)
+      })
+    )
   end
 
   defp primary_read_action_name(actions) when is_list(actions) do
