@@ -17,7 +17,7 @@ defmodule Mix.Tasks.Lint.Credence do
 
   use Mix.Task
 
-  @source_dirs ["lib", "test/support"]
+  @source_dirs ["lib", "test"]
   @excluded_dirs ["test/support/fixtures"]
   @extensions [".ex", ".exs"]
 
