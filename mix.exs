@@ -14,6 +14,7 @@ defmodule AshCredo.MixProject do
       aliases: aliases(),
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
+      test_ignore_filters: [~r{^test/integration/fixtures/}],
       package: package(),
       docs: docs(),
       source_url: "https://github.com/leonqadirie/ash_credo",

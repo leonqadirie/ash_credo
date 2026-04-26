@@ -7,7 +7,7 @@
           "lib/",
           "test/"
         ],
-        excluded: [~r"/_build/", ~r"/deps/"]
+        excluded: [~r"/_build/", ~r"/deps/", ~r"/test/integration/fixtures/"]
       },
       plugins: [{ExDNA.Credo, []}],
       requires: [],
