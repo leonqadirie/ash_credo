@@ -61,9 +61,9 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
     end
 
     test "Ash.read without an :action key falls back to the primary :read action" do
-      # `Ash.read!/get!/stream!` without an `:action` keyword dispatches to the
-      # resource's primary :read action. The check mirrors that, so bare-form
-      # callers get the same code-interface suggestion as the explicit form.
+      # `Ash.read!/2` without an `:action` keyword dispatches to the resource's
+      # primary :read action. The check mirrors that, so bare-form callers get
+      # the same list-interface suggestion as the explicit form.
       source = """
       defmodule AshCredoFixtures.Blog do
         def list_posts(actor) do
@@ -91,6 +91,53 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       assert [issue] = run_check(UseCodeInterface, source)
       assert issue.trigger == "Ash.read!"
       assert issue.message =~ "AshCredoFixtures.Blog.Post.all_posts!"
+    end
+
+    test "bare Ash.get! uses a matching get-by code interface" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def get_post(id) do
+          Ash.get!(AshCredoFixtures.Blog.Post, id)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.get!"
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.get_post_by_id!"
+      assert issue.message =~ "id, not_found_error?: false"
+      refute issue.message =~ "all_posts"
+    end
+
+    test "bare Ash.get! without a matching get-by interface suggests defining one" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def get_user(id) do
+          Ash.get!(AshCredoFixtures.Accounts.User, id)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.get!"
+      assert issue.message =~ "Prefer a get-by code interface"
+      assert issue.message =~ "AshCredoFixtures.Accounts.User"
+      assert issue.message =~ "define :get_by_id, action: :read, get_by: [:id]"
+      refute issue.message =~ "define :read"
+    end
+
+    test "bare Ash.stream! uses a list interface with stream enabled" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def stream_posts do
+          Ash.stream!(AshCredoFixtures.Blog.Post)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.stream!"
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.all_posts!(stream?: true)"
     end
 
     test "bare Ash.read!(Unloadable) still emits the :not_loadable diagnostic" do

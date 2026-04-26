@@ -145,7 +145,9 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
         classification = classify(resource, site.action_name, info, site, config)
 
         if enforced?(classification, config) do
-          [build_issue(classification, site, issue_meta)]
+          classification
+          |> build_issue(site, issue_meta)
+          |> List.wrap()
         else
           []
         end
@@ -191,14 +193,89 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       resource: resource,
       action: action_name,
       resource_domain: resource_domain,
-      resource_iface: CompiledIntrospection.find_interface(info.interfaces, action_name),
-      domain_iface:
-        CompiledIntrospection.domain_interface(resource_domain, resource, action_name),
+      resource_iface: matching_interface(info.interfaces, action_name, site, info),
+      domain_iface: domain_interface(resource_domain, resource, action_name, site, info),
       same_domain?: same_domain?,
       scope: config.scope,
       bang?: AshCallResolver.bang?(site),
-      builder_prefix: site.builder_prefix
+      builder_prefix: site.builder_prefix,
+      call_kind: site.call_kind,
+      lookup_keys: site.lookup_keys,
+      identities: info.identities
     }
+  end
+
+  defp domain_interface(nil, _resource, _action_name, _site, _info), do: nil
+
+  defp domain_interface(domain, resource, action_name, site, info) do
+    domain
+    |> CompiledIntrospection.domain_interfaces(resource)
+    |> matching_interface(action_name, site, info)
+  end
+
+  defp matching_interface(interfaces, action_name, site, info) do
+    Enum.find(interfaces, fn iface ->
+      interface_action?(iface, action_name) and interface_matches_site?(iface, site, info)
+    end)
+  end
+
+  defp interface_action?(iface, action_name) do
+    (Map.get(iface, :action) || Map.get(iface, :name)) == action_name
+  end
+
+  defp interface_matches_site?(iface, %{call_kind: :get_one, lookup_keys: keys}, info) do
+    get_interface_for_keys?(iface, keys, info)
+  end
+
+  defp interface_matches_site?(iface, %{call_kind: kind}, _info)
+       when kind in [:read_many, :stream_many] do
+    not get_interface?(iface)
+  end
+
+  defp interface_matches_site?(iface, %{builder_prefix: prefix}, _info) when not is_nil(prefix) do
+    not get_interface?(iface)
+  end
+
+  defp interface_matches_site?(_iface, _site, _info), do: true
+
+  defp get_interface_for_keys?(_iface, keys, _info) when keys in [nil, []], do: false
+
+  defp get_interface_for_keys?(iface, keys, info) do
+    case interface_lookup_keys(iface, info) do
+      nil -> false
+      iface_keys -> same_keys?(iface_keys, keys)
+    end
+  end
+
+  defp interface_lookup_keys(iface, info) do
+    cond do
+      Map.get(iface, :get_by) ->
+        List.wrap(Map.get(iface, :get_by))
+
+      Map.get(iface, :get_by_identity) ->
+        identity_keys(info, Map.get(iface, :get_by_identity))
+
+      true ->
+        nil
+    end
+  end
+
+  defp identity_keys(%{identities: identities}, identity_name) when is_list(identities) do
+    Enum.find_value(identities, fn identity ->
+      if Map.get(identity, :name) == identity_name, do: Map.get(identity, :keys)
+    end)
+  end
+
+  defp identity_keys(_info, _identity_name), do: nil
+
+  defp same_keys?(left, right) when is_list(left) and is_list(right) do
+    MapSet.new(left) == MapSet.new(right)
+  end
+
+  defp get_interface?(iface) do
+    Map.get(iface, :get?) == true or
+      not is_nil(Map.get(iface, :get_by)) or
+      not is_nil(Map.get(iface, :get_by_identity))
   end
 
   defp caller_atom(%{enclosing_module_segments: segs}) when is_list(segs) and segs != [] do
@@ -227,15 +304,23 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   defp build_issue(classification, site, issue_meta) do
     qualified = AshCallResolver.qualified_call(site)
-    suggestion = pick_suggestion(classification)
-    message = format_message(suggestion, classification, qualified, site.arity)
 
-    format_issue(issue_meta,
-      message: message,
-      trigger: qualified,
-      line_no: site.call_meta[:line]
-    )
+    case pick_suggestion(classification) do
+      nil ->
+        nil
+
+      suggestion ->
+        message = format_message(suggestion, classification, qualified, site.arity)
+
+        format_issue(issue_meta,
+          message: message,
+          trigger: qualified,
+          line_no: site.call_meta[:line]
+        )
+    end
   end
+
+  defp pick_suggestion(%{call_kind: :get_one, lookup_keys: keys}) when keys in [nil, []], do: nil
 
   # `:resource` preference: always direct at the resource, even across domains.
   defp pick_suggestion(%{scope: :resource, resource_iface: iface}) when not is_nil(iface),
@@ -275,24 +360,50 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   defp format_message(
          {:use, :resource, iface},
-         %{resource: resource, bang?: bang?, builder_prefix: prefix},
+         %{resource: resource} = classification,
          qualified,
          arity
        ) do
-    fun = interface_function_name(iface.name, prefix, bang?)
+    fun = interface_call(iface, classification)
 
     "Prefer `#{inspect(resource)}.#{fun}` over `#{qualified}/#{arity}`."
   end
 
   defp format_message(
          {:use, :domain, iface},
-         %{resource_domain: domain, bang?: bang?, builder_prefix: prefix},
+         %{resource_domain: domain} = classification,
          qualified,
          arity
        ) do
-    fun = interface_function_name(iface.name, prefix, bang?)
+    fun = interface_call(iface, classification)
 
     "Prefer `#{inspect(domain)}.#{fun}` over `#{qualified}/#{arity}`."
+  end
+
+  defp format_message(
+         {:define, :resource},
+         %{resource: resource, action: action, call_kind: :get_one, lookup_keys: keys},
+         qualified,
+         arity
+       ) do
+    "Prefer a get-by code interface on `#{inspect(resource)}` over `#{qualified}/#{arity}`. " <>
+      "Define one with `define :#{get_define_name(action, keys)}, action: :#{action}, get_by: #{inspect(keys)}` inside the resource's `code_interface` block."
+  end
+
+  defp format_message(
+         {:define, :domain},
+         %{
+           resource: resource,
+           resource_domain: domain,
+           action: action,
+           call_kind: :get_one,
+           lookup_keys: keys
+         },
+         qualified,
+         arity
+       ) do
+    "Prefer a get-by code interface on `#{inspect(domain)}` over `#{qualified}/#{arity}`. " <>
+      "Define one with `define :#{get_define_name(action, keys)}, action: :#{action}, get_by: #{inspect(keys)}` inside the `resource #{inspect(resource)} do ... end` block of the domain."
   end
 
   defp format_message(
@@ -320,6 +431,42 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   defp interface_function_name(name, :changeset_to, _), do: "changeset_to_#{name}"
   defp interface_function_name(name, :query_to, _), do: "query_to_#{name}"
   defp interface_function_name(name, :input_to, _), do: "input_to_#{name}"
+
+  defp interface_call(iface, %{call_kind: :get_one, identities: identities} = classification) do
+    fun = interface_function_name(iface.name, classification.builder_prefix, classification.bang?)
+    keys = interface_lookup_keys(iface, %{identities: identities}) || classification.lookup_keys
+    args = get_call_args(keys, iface)
+
+    "#{fun}(#{Enum.join(args, ", ")})"
+  end
+
+  defp interface_call(iface, %{call_kind: :stream_many} = classification) do
+    fun = interface_function_name(iface.name, classification.builder_prefix, true)
+
+    "#{fun}(stream?: true)"
+  end
+
+  defp interface_call(iface, classification) do
+    interface_function_name(iface.name, classification.builder_prefix, classification.bang?)
+  end
+
+  defp get_call_args(keys, iface) when is_list(keys) do
+    args = Enum.map(keys, &Atom.to_string/1)
+
+    if Map.get(iface, :not_found_error?) == false do
+      args
+    else
+      args ++ ["not_found_error?: false"]
+    end
+  end
+
+  defp get_define_name(:read, keys), do: "get_by_#{keys_suffix(keys)}"
+  defp get_define_name(action, keys), do: "get_#{action}_by_#{keys_suffix(keys)}"
+
+  defp keys_suffix(keys) do
+    keys
+    |> Enum.map_join("_and_", &Atom.to_string/1)
+  end
 
   defp not_loadable_issue(resource, site, issue_meta) do
     qualified = AshCallResolver.qualified_call(site)

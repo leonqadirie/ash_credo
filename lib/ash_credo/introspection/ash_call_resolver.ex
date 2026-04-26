@@ -9,7 +9,10 @@ defmodule AshCredo.Introspection.AshCallResolver do
   Four dispatch patterns are recognised:
 
     * Pattern A - resource at arg 0, `:action` in keyword opts (`Ash.read!`,
-      `Ash.get`, `Ash.stream!`, ...).
+      `Ash.get`, `Ash.stream!`, ...). When no `:action` is present, read-like
+      calls resolve to the resource's primary `:read` action, but still carry
+      their original call shape so checks can preserve list/get/stream
+      semantics in suggestions.
     * Pattern B - `Ash.bulk_create/3` (resource at arg 1, action at arg 2).
     * Pattern C - `Ash.bulk_update`/`bulk_destroy` (query/stream at arg 0,
       action at arg 1, resource traced through the query origin).
@@ -90,7 +93,9 @@ defmodule AshCredo.Introspection.AshCallResolver do
           call_meta: keyword(),
           call_info: map(),
           builder_prefix: :changeset_to | :query_to | :input_to | nil,
-          trace_record?: boolean()
+          trace_record?: boolean(),
+          call_kind: :read_many | :get_one | :stream_many | :builder | :bulk | nil,
+          lookup_keys: [atom()] | nil
         }
 
   @doc """
@@ -133,7 +138,8 @@ defmodule AshCredo.Introspection.AshCallResolver do
       call_meta: call_meta,
       call_info: call_info,
       builder_prefix: nil,
-      trace_record?: false
+      trace_record?: false,
+      call_kind: call_kind(expanded_module, fun_name)
     }
 
     cond do
@@ -150,6 +156,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
         extract_positional(args, 0, 1, %{
           ctx
           | builder_prefix: builder_prefix(expanded_module),
+            call_kind: :builder,
             trace_record?: MapSet.member?(@record_first_builders, {expanded_module, fun_name})
         })
 
@@ -200,7 +207,11 @@ defmodule AshCredo.Introspection.AshCallResolver do
   end
 
   defp build_site_with(ctx, action_name, resolution) do
-    Map.merge(ctx, %{resolution: resolution, action_name: action_name})
+    Map.merge(ctx, %{
+      resolution: resolution,
+      action_name: action_name,
+      lookup_keys: lookup_keys(ctx, resolution)
+    })
   end
 
   defp primary_read_action_name(actions) when is_list(actions) do
@@ -209,6 +220,52 @@ defmodule AshCredo.Introspection.AshCallResolver do
       _ -> nil
     end)
   end
+
+  defp call_kind([:Ash], fun_name) when fun_name in [:read, :read!], do: :read_many
+  defp call_kind([:Ash], fun_name) when fun_name in [:get, :get!], do: :get_one
+  defp call_kind([:Ash], :stream!), do: :stream_many
+  defp call_kind([:Ash], fun_name) when fun_name in @bulk_create_funs, do: :bulk
+  defp call_kind([:Ash], fun_name) when fun_name in @bulk_query_funs, do: :bulk
+  defp call_kind(_module, _fun_name), do: nil
+
+  defp lookup_keys(%{call_kind: :get_one, call_info: %{args: args}}, {:ok, _resource, info}) do
+    case arg_at(args, 1) do
+      {:ok, id_ast} -> literal_lookup_keys(id_ast) || simple_primary_key(info)
+      _ -> nil
+    end
+  end
+
+  defp lookup_keys(_ctx, _resolution), do: nil
+
+  defp literal_lookup_keys({:%{}, _, pairs}) when is_list(pairs) do
+    pairs
+    |> Enum.map(fn
+      {key, _value} when is_atom(key) -> key
+      _ -> nil
+    end)
+    |> all_or_nil()
+  end
+
+  defp literal_lookup_keys(keys) when is_list(keys) do
+    if Keyword.keyword?(keys) do
+      keys
+      |> Keyword.keys()
+      |> Enum.reject(&(&1 == :action))
+      |> case do
+        [] -> nil
+        literal_keys -> literal_keys
+      end
+    end
+  end
+
+  defp literal_lookup_keys(_ast), do: nil
+
+  defp all_or_nil(values) do
+    if Enum.all?(values, &is_atom/1), do: values
+  end
+
+  defp simple_primary_key(%{primary_key: [key]}) when is_atom(key), do: [key]
+  defp simple_primary_key(_info), do: nil
 
   defp extract_positional(args, resource_idx, action_idx, ctx) do
     context = ast_context(ctx.call_info)
@@ -237,10 +294,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
   end
 
   defp build_site(segments, action_name, ctx) do
-    Map.merge(ctx, %{
-      resolution: resolve_resource(segments, ctx),
-      action_name: action_name
-    })
+    build_site_with(ctx, action_name, resolve_resource(segments, ctx))
   end
 
   defp resolve_resource(segments, ctx) do
