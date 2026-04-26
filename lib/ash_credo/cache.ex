@@ -7,14 +7,14 @@ defmodule AshCredo.Cache do
   GenServer exists only to keep the table alive across Credo's transient
   task churn.
 
-  Cleared at the start AND end of every Credo run by `AshCredo.init/1`
-  (and `AshCredo.ClearCacheTask`), so each `mix credo` invocation sees a
-  fresh table regardless of how long the host VM has been alive.
+  Cleared at the start and end of every Credo run, so each `mix credo`
+  invocation sees a fresh table regardless of how long the host VM has
+  been alive.
 
-  Started by `AshCredo.Application` (see `mix.exs` `:mod`).
-  `AshCredo.init/1` additionally calls `ensure_started!/0` before any
-  check runs, so the table is also available when `mix credo` runs
-  without booting the `:ash_credo` application.
+  The OTP application callback starts the cache under supervision when the
+  `:ash_credo` application boots. `AshCredo.init/1` additionally calls
+  `ensure_started!/0` before any check runs, so the table is also available
+  when `mix credo` runs without booting the `:ash_credo` application.
   """
 
   use GenServer
@@ -38,8 +38,8 @@ defmodule AshCredo.Cache do
   The latter would cascade through `:ash_credo`'s runtime application deps -
   notably `:credo` - and during `mix credo` the live `Credo.Supervisor` collides
   with that re-start, causing the whole cascade to roll back and the cache to
-  fail to start. `AshCredo.Application` co-operates by skipping its cache child
-  when this function has already started it.
+  fail to start. The OTP application callback skips its cache child when this
+  function has already started it.
   """
   @spec ensure_started!() :: :ok
   def ensure_started! do
