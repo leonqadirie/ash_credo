@@ -15,6 +15,7 @@ defmodule AshCredo.PluginIntegrationTest do
 
   use ExUnit.Case, async: false
 
+  alias AshCredo.Cache
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias Credo.CLI.Output.Shell
 
@@ -79,5 +80,11 @@ defmodule AshCredo.PluginIntegrationTest do
            must not fire by default.
            Triggered checks: #{inspect(MapSet.to_list(triggered))}
            """
+
+    # `AshCredo.ClearCacheTask` is appended to the `:halt_execution` pipeline
+    # group, so the introspection cache must be empty after the run completes.
+    # This proves the post-run task fired end-to-end.
+    refute Cache.member?({AshCredo.Introspection.Compiled, :ash_available?}),
+           "Cache should be empty after the Credo run; ClearCacheTask did not fire"
   end
 end

@@ -17,6 +17,8 @@ defmodule AshCredo do
 
   import Credo.Plugin
 
+  alias AshCredo.Cache
+
   @config_file """
   %{
     configs: [
@@ -59,6 +61,11 @@ defmodule AshCredo do
   """
 
   def init(exec) do
-    register_default_config(exec, @config_file)
+    Cache.ensure_started!()
+    Cache.clear()
+
+    exec
+    |> register_default_config(@config_file)
+    |> append_task(:halt_execution, AshCredo.ClearCacheTask)
   end
 end
