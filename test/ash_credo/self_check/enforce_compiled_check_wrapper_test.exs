@@ -135,6 +135,38 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapperTest do
     assert issue.line_no == 2
   end
 
+  test "alias to Compiled inside a `for` generator does not leak into a later wrapper-resolving call" do
+    # Regression: an alias declared inside a `for` generator is scoped to
+    # the construct in Elixir (verified empirically). The walker's default
+    # `lexical_scope_nodes: [:with, :for]` enforces that. Without it, the
+    # leaked alias would let a later `Compiled.with_compiled_check(...)`
+    # call resolve and falsely satisfy the check, producing a false
+    # negative. With the default in place, the later call does NOT resolve
+    # to Compiled, so the check correctly flags the missing wrapper.
+    source = """
+    defmodule AshCredo.Check.Warning.LeakedFor do
+      def run(source_file, _params) do
+        for _ <- (alias AshCredo.Introspection.Compiled; [1]) do
+          :ok
+        end
+
+        # Outside the `for`, `Compiled` is no longer aliased. Pre-fix, the
+        # walker leak made this call look like a real wrapper call.
+        Compiled.with_compiled_check(fn -> nil end, fn -> [] end)
+      end
+    end
+    """
+
+    assert [issue] =
+             run_check_with_filename(source, "lib/ash_credo/check/warning/leaked_for.ex")
+
+    # The alias was visited inside the for, so compiled_alias_line is set
+    # to that line (3). With the fix, has_wrapper_call? stays false, so
+    # the issue fires.
+    assert issue.line_no == 3
+    assert issue.trigger == "AshCredo.Introspection.Compiled"
+  end
+
   test "handles grouped alias syntax" do
     source = """
     defmodule AshCredo.Check.Warning.GroupedAlias do

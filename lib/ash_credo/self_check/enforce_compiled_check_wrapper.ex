@@ -26,11 +26,9 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapper do
       """
     ]
 
-  alias AshCredo.Introspection.{Aliases, LexicalAliases}
+  alias AshCredo.Introspection.{Aliases, LexicalScopeWalker}
 
   @compiled_segments [:AshCredo, :Introspection, :Compiled]
-  @scope_keys ~w(do else after rescue catch)a
-  @lexical_scope_nodes ~w(defmodule def defp defmacro defmacrop fn if unless case cond with try receive for)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
@@ -64,70 +62,31 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapper do
   end
 
   defp compiled_usage(ast) do
-    {_, state} =
-      Macro.traverse(ast, initial_scan_state(), &enter_node/2, &leave_node/2)
+    {state, _scope} =
+      LexicalScopeWalker.traverse(
+        ast,
+        %{compiled_alias_line: nil, has_wrapper_call?: false},
+        &on_enter/3,
+        fn _node, _scope, acc -> acc end
+      )
 
-    Map.take(state, [:compiled_alias_line, :has_wrapper_call?])
+    state
   end
 
-  defp initial_scan_state do
-    %{
-      alias_frames: [[]],
-      compiled_alias_line: nil,
-      has_wrapper_call?: false
-    }
+  defp on_enter({:alias, meta, _} = node, _scope, state) do
+    maybe_record_compiled_alias_line(state, meta[:line], Aliases.alias_entries(node))
   end
 
-  defp enter_node({scope_key, _body} = node, state) when scope_key in @scope_keys do
-    {node, push_alias_frame(state)}
-  end
-
-  defp enter_node({:->, _, [_args, _body]} = node, state) do
-    {node, push_alias_frame(state)}
-  end
-
-  defp enter_node({node_name, _, _} = node, state) when node_name in @lexical_scope_nodes do
-    {node, push_alias_frame(state)}
-  end
-
-  defp enter_node({:alias, meta, _} = node, state) do
-    alias_entries = Aliases.alias_entries(node)
-
-    state =
-      state
-      |> maybe_record_compiled_alias_line(meta[:line], alias_entries)
-      |> put_aliases(alias_entries)
-
-    {node, state}
-  end
-
-  defp enter_node({{:., _, [module_ast, :with_compiled_check]}, _, args} = node, state)
+  defp on_enter({{:., _, [module_ast, :with_compiled_check]}, _, args}, scope, state)
        when is_list(args) do
-    state =
-      if length(args) == 2 and compiled_module_ref?(module_ast, state) do
-        %{state | has_wrapper_call?: true}
-      else
-        state
-      end
-
-    {node, state}
+    if length(args) == 2 and compiled_module_ref?(module_ast, scope) do
+      %{state | has_wrapper_call?: true}
+    else
+      state
+    end
   end
 
-  defp enter_node(node, state), do: {node, state}
-
-  defp leave_node({scope_key, _body} = node, state) when scope_key in @scope_keys do
-    {node, pop_alias_frame(state)}
-  end
-
-  defp leave_node({:->, _, [_args, _body]} = node, state) do
-    {node, pop_alias_frame(state)}
-  end
-
-  defp leave_node({node_name, _, _} = node, state) when node_name in @lexical_scope_nodes do
-    {node, pop_alias_frame(state)}
-  end
-
-  defp leave_node(node, state), do: {node, state}
+  defp on_enter(_node, _scope, state), do: state
 
   defp maybe_record_compiled_alias_line(%{compiled_alias_line: nil} = state, line, alias_entries) do
     if Enum.any?(alias_entries, &compiled_alias_entry?/1) do
@@ -142,27 +101,11 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapper do
   defp compiled_alias_entry?({_alias_segments, @compiled_segments}), do: true
   defp compiled_alias_entry?(_alias_entry), do: false
 
-  defp compiled_module_ref?({:__aliases__, _, segments}, state) when is_list(segments) do
-    Aliases.expand_alias(segments, current_aliases(state)) == @compiled_segments
+  defp compiled_module_ref?({:__aliases__, _, segments}, scope) when is_list(segments) do
+    Aliases.expand_alias(segments, LexicalScopeWalker.aliases(scope)) == @compiled_segments
   end
 
-  defp compiled_module_ref?(_module_ast, _state), do: false
-
-  defp push_alias_frame(state) do
-    update_in(state.alias_frames, &LexicalAliases.push_frame/1)
-  end
-
-  defp pop_alias_frame(%{alias_frames: frames} = state) do
-    %{state | alias_frames: LexicalAliases.pop_frame(frames)}
-  end
-
-  defp put_aliases(state, alias_entries) do
-    update_in(state.alias_frames, &LexicalAliases.put_aliases(&1, alias_entries))
-  end
-
-  defp current_aliases(%{alias_frames: frames}) do
-    LexicalAliases.current_aliases(frames)
-  end
+  defp compiled_module_ref?(_module_ast, _scope), do: false
 
   defp check_file?(filename) when is_binary(filename) do
     filename
