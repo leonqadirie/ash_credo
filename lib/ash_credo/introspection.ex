@@ -1,13 +1,11 @@
 defmodule AshCredo.Introspection do
   @moduledoc "Utilities for inspecting Ash DSL constructs in source AST."
 
-  alias AshCredo.Introspection.{Aliases, AshCallScanner, LexicalAliases}
+  alias AshCredo.Introspection.{Aliases, AshCallScanner, LexicalScopeWalker}
   alias Credo.Code.Block
   alias Credo.SourceFile
 
   @action_entities ~w(create read update destroy action)a
-  @scope_keys ~w(do else after rescue catch)a
-  @lexical_scope_nodes ~w(defmodule def defp defmacro defmacrop fn if unless case cond with try receive for)a
 
   @doc "Returns all modules in the source file that directly `use Ash.Resource`."
   def resource_modules(source_file), do: modules_using(source_file, [:Ash, :Resource])
@@ -36,97 +34,33 @@ defmodule AshCredo.Introspection do
   reported with `absolute_segments: nil` (they still appear in the output).
   """
   def all_modules_with_path(source_file) do
-    {_, %{out: out}} =
+    {%{out: out}, _scope} =
       source_file
       |> Credo.SourceFile.ast()
-      |> Macro.traverse(
-        %{stack: [], alias_frames: [[]], out: []},
-        &enter_module_for_path/2,
-        &leave_module_for_path/2
+      |> LexicalScopeWalker.traverse(
+        %{out: []},
+        &collect_module_with_path/3,
+        fn _node, _scope, acc -> acc end,
+        track_module_stack: true
       )
 
     Enum.reverse(out)
   end
 
-  defp enter_module_for_path({scope_key, _body} = ast, state) when scope_key in @scope_keys do
-    {ast, push_alias_frame(state)}
-  end
-
-  defp enter_module_for_path({:->, _, [_args, _body]} = ast, state) do
-    {ast, push_alias_frame(state)}
-  end
-
-  defp enter_module_for_path({:defmodule, _, [{:__aliases__, _, segs}, [do: _body]]} = ast, state)
+  # Only literal `defmodule Name do ... end` forms are emitted; non-literal
+  # names (e.g. `defmodule unquote(name) do ... end`) are skipped to match
+  # the pre-walker behaviour. The walker still tracks them on the module
+  # stack so nested modules under a non-literal parent are reported as nil.
+  defp collect_module_with_path(
+         {:defmodule, _, [{:__aliases__, _, segs}, [do: _body]]} = ast,
+         scope,
+         state
+       )
        when is_list(segs) do
-    parent_absolute =
-      case state.stack do
-        [top | _] -> top
-        [] -> []
-      end
-
-    absolute = LexicalAliases.absolute_module_segments(segs, parent_absolute, state.alias_frames)
-
-    new_state = %{
-      state
-      | stack: [absolute | state.stack],
-        alias_frames: LexicalAliases.push_frame(state.alias_frames),
-        out: [{ast, absolute} | state.out]
-    }
-
-    {ast, new_state}
+    %{state | out: [{ast, LexicalScopeWalker.current_module_segments(scope)} | state.out]}
   end
 
-  defp enter_module_for_path({node_name, _, _} = ast, state)
-       when node_name in @lexical_scope_nodes and node_name != :defmodule do
-    {ast, push_alias_frame(state)}
-  end
-
-  defp enter_module_for_path({:defmodule, _, _} = ast, state) do
-    new_state = %{
-      state
-      | stack: [nil | state.stack],
-        alias_frames: LexicalAliases.push_frame(state.alias_frames)
-    }
-
-    {ast, new_state}
-  end
-
-  defp enter_module_for_path({:alias, _, _} = ast, state) do
-    entries = Aliases.alias_entries(ast)
-    {ast, %{state | alias_frames: LexicalAliases.put_aliases(state.alias_frames, entries)}}
-  end
-
-  defp enter_module_for_path(ast, state), do: {ast, state}
-
-  defp leave_module_for_path({scope_key, _body} = ast, state) when scope_key in @scope_keys do
-    {ast, pop_alias_frame(state)}
-  end
-
-  defp leave_module_for_path({:->, _, [_args, _body]} = ast, state) do
-    {ast, pop_alias_frame(state)}
-  end
-
-  defp leave_module_for_path(
-         {:defmodule, _, _} = ast,
-         %{stack: [_ | s_rest], alias_frames: alias_frames} = state
-       ) do
-    {ast, %{state | stack: s_rest, alias_frames: LexicalAliases.pop_frame(alias_frames)}}
-  end
-
-  defp leave_module_for_path({node_name, _, _} = ast, state)
-       when node_name in @lexical_scope_nodes and node_name != :defmodule do
-    {ast, pop_alias_frame(state)}
-  end
-
-  defp leave_module_for_path(ast, state), do: {ast, state}
-
-  defp push_alias_frame(state) do
-    update_in(state.alias_frames, &LexicalAliases.push_frame/1)
-  end
-
-  defp pop_alias_frame(%{alias_frames: frames} = state) do
-    %{state | alias_frames: LexicalAliases.pop_frame(frames)}
-  end
+  defp collect_module_with_path(_node, _scope, state), do: state
 
   defp resource_context_with_segments(module_ast, absolute_segments) do
     use_metadata = find_use(module_ast, [:Ash, :Resource])
