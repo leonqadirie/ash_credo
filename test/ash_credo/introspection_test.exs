@@ -662,8 +662,9 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      [resource] = Introspection.resource_modules(source_file(source))
-      context = Introspection.resource_context(resource)
+      sf = source_file(source)
+      [resource] = Introspection.resource_modules(sf)
+      [context] = Introspection.resource_contexts(sf)
 
       assert context.module_ast == resource
       assert is_integer(context.use_line)
@@ -748,8 +749,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      [resource] = Introspection.resource_modules(source_file(source))
-      context = Introspection.resource_context(resource)
+      [context] = Introspection.resource_contexts(source_file(source))
       [authorizer] = Keyword.get(context.use_opts, :authorizers)
 
       assert [:Ash, :Policy, :Authorizer] ==
@@ -769,8 +769,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      [resource] = Introspection.resource_modules(source_file(source))
-      context = Introspection.resource_context(resource)
+      [context] = Introspection.resource_contexts(source_file(source))
       [authorizer] = Keyword.get(context.use_opts, :authorizers)
 
       assert [:Authorizer] == Introspection.resolved_module_ref(authorizer, context)
@@ -1116,8 +1115,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      [resource] = Introspection.resource_modules(source_file(source))
-      context = Introspection.resource_context(resource)
+      [context] = Introspection.resource_contexts(source_file(source))
 
       assert {:__aliases__, _, [:AshPostgres, :DataLayer]} =
                Introspection.resource_data_layer(context)
@@ -1146,8 +1144,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      [resource] = Introspection.resource_modules(source_file(source))
-      context = Introspection.resource_context(resource)
+      [context] = Introspection.resource_contexts(source_file(source))
 
       refute Introspection.has_data_layer?(context)
       assert Introspection.embedded_resource?(context)

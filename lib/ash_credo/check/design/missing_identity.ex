@@ -36,6 +36,7 @@ defmodule AshCredo.Check.Design.MissingIdentity do
 
   alias AshCredo.Introspection
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
+  alias AshCredo.Introspection.ResourceContext
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
@@ -58,9 +59,13 @@ defmodule AshCredo.Check.Design.MissingIdentity do
     )
   end
 
-  defp check_resource(%{absolute_segments: nil}, _candidates, _issue_meta), do: []
+  defp check_resource(%ResourceContext{absolute_segments: nil}, _candidates, _issue_meta), do: []
 
-  defp check_resource(%{absolute_segments: segments} = context, candidates, issue_meta) do
+  defp check_resource(
+         %ResourceContext{absolute_segments: segments} = context,
+         candidates,
+         issue_meta
+       ) do
     resource = Module.concat(segments)
 
     case CompiledIntrospection.inspect_module(resource) do

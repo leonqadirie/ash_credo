@@ -63,6 +63,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
 
   alias AshCredo.Introspection
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
+  alias AshCredo.Introspection.ResourceContext
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
@@ -86,10 +87,11 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
     )
   end
 
-  defp check_resource(%{absolute_segments: nil}, _issue_meta, _excluded_actions), do: []
+  defp check_resource(%ResourceContext{absolute_segments: nil}, _issue_meta, _excluded_actions),
+    do: []
 
   defp check_resource(
-         %{absolute_segments: segments, module_ast: module_ast} = context,
+         %ResourceContext{absolute_segments: segments, module_ast: module_ast} = context,
          issue_meta,
          excluded_actions
        ) do

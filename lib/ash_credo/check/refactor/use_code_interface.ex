@@ -103,7 +103,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       ]
     ]
 
-  alias AshCredo.Introspection.AshCallResolver
+  alias AshCredo.Introspection.{AshCallResolver, AshCallSite}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   @impl true
@@ -139,7 +139,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     }
   end
 
-  defp check_site(%{resolution: {:ok, resource, info}} = site, issue_meta, config) do
+  defp check_site(%AshCallSite{resolution: {:ok, resource, info}} = site, issue_meta, config) do
     case CompiledIntrospection.action(resource, site.action_name) do
       {:ok, _action} ->
         classification = classify(resource, site.action_name, info, site, config)
@@ -167,7 +167,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   # confirm the caller shares a domain with something we can't introspect.
   # The dedup wrapper ensures one diagnostic per unique broken module across
   # all compile-dependent checks.
-  defp check_site(%{resolution: {:not_loadable, resource}} = site, issue_meta, %{
+  defp check_site(%AshCallSite{resolution: {:not_loadable, resource}} = site, issue_meta, %{
          outside_domain: true
        }) do
     CompiledIntrospection.with_unique_not_loadable(resource, fn ->
@@ -175,7 +175,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     end)
   end
 
-  defp check_site(_site, _issue_meta, _config), do: []
+  defp check_site(%AshCallSite{}, _issue_meta, _config), do: []
 
   defp enforced?(%{same_domain?: true}, %{in_domain: in_domain}), do: in_domain
   defp enforced?(%{same_domain?: false}, %{outside_domain: outside}), do: outside

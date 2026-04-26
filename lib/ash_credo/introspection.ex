@@ -1,7 +1,14 @@
 defmodule AshCredo.Introspection do
   @moduledoc "Utilities for inspecting Ash DSL constructs in source AST."
 
-  alias AshCredo.Introspection.{Aliases, AshCallScanner, LexicalScopeWalker}
+  alias AshCredo.Introspection.{
+    Aliases,
+    AshCallScanner,
+    LexicalScopeWalker,
+    ResourceContext,
+    UseMetadata
+  }
+
   alias Credo.Code.Block
   alias Credo.SourceFile
 
@@ -65,7 +72,7 @@ defmodule AshCredo.Introspection do
   defp resource_context_with_segments(module_ast, absolute_segments) do
     use_metadata = find_use(module_ast, [:Ash, :Resource])
 
-    %{
+    %ResourceContext{
       module_ast: module_ast,
       aliases: module_aliases(module_ast),
       use_line: use_metadata_line(use_metadata),
@@ -110,7 +117,7 @@ defmodule AshCredo.Introspection do
   def ash_domain?(source_file), do: domain_modules(source_file) != []
 
   @doc "Returns the value of the resource's `data_layer` option, if present."
-  def resource_data_layer(%{use_opts: opts}) when is_list(opts) do
+  def resource_data_layer(%ResourceContext{use_opts: opts}) when is_list(opts) do
     Keyword.get(opts, :data_layer)
   end
 
@@ -147,7 +154,7 @@ defmodule AshCredo.Introspection do
   end
 
   @doc "Finds the AST node for a top-level DSL section (e.g. :attributes) in a module AST or resource/domain context."
-  def find_dsl_section(%{module_ast: module_ast}, section_name) do
+  def find_dsl_section(%ResourceContext{module_ast: module_ast}, section_name) do
     find_dsl_section(module_ast, section_name)
   end
 
@@ -210,22 +217,8 @@ defmodule AshCredo.Introspection do
 
   def module_line_count(_), do: nil
 
-  @doc "Returns shared resource metadata for a resource module."
-  def resource_context({:defmodule, _, _} = module_ast) do
-    use_metadata = find_use(module_ast, [:Ash, :Resource])
-
-    %{
-      module_ast: module_ast,
-      aliases: module_aliases(module_ast),
-      use_line: use_metadata_line(use_metadata),
-      use_opts: normalized_resource_use_opts(use_metadata)
-    }
-  end
-
-  def resource_context(_), do: nil
-
   @doc "Finds a top-level DSL section from a resource context."
-  def resource_section(%{module_ast: _} = resource_context, section_name) do
+  def resource_section(%ResourceContext{} = resource_context, section_name) do
     find_dsl_section(resource_context, section_name)
   end
 
@@ -239,7 +232,7 @@ defmodule AshCredo.Introspection do
   @doc "Returns the best issue anchor line for a resource section, falling back to the `use` line and then `fallback`."
   def resource_issue_line(resource_context, section_ast \\ nil, fallback \\ 1)
 
-  def resource_issue_line(%{use_line: use_line}, section_ast, fallback) do
+  def resource_issue_line(%ResourceContext{use_line: use_line}, section_ast, fallback) do
     section_issue_line(section_ast, use_line, fallback)
   end
 
@@ -263,9 +256,8 @@ defmodule AshCredo.Introspection do
     Aliases.module_ref?(ref_or_segments, module_or_context, target_segments, opts)
   end
 
-  defp normalized_use_opts(%{opts: opts}) when is_list(opts), do: opts
+  defp normalized_use_opts(%UseMetadata{opts: opts}), do: opts
   defp normalized_use_opts(nil), do: nil
-  defp normalized_use_opts(_), do: []
 
   defp normalized_resource_use_opts(use_metadata) do
     case normalized_use_opts(use_metadata) do
@@ -274,10 +266,10 @@ defmodule AshCredo.Introspection do
     end
   end
 
-  defp use_metadata_line(%{line: line}) when is_integer(line), do: line
+  defp use_metadata_line(%UseMetadata{line: line}) when is_integer(line), do: line
   defp use_metadata_line(_), do: nil
 
-  defp use_metadata_opt(%{opts: opts}, key) when is_list(opts), do: Keyword.get(opts, key)
+  defp use_metadata_opt(%UseMetadata{opts: opts}, key), do: Keyword.get(opts, key)
   defp use_metadata_opt(_, _key), do: nil
 
   defp section_entries(section_ast), do: do_block_entries(section_ast)
@@ -438,11 +430,11 @@ defmodule AshCredo.Introspection do
 
   defp find_use({:defmodule, _, _} = module_ast, module_aliases) do
     Enum.find_value(module_body(module_ast), fn
-      {:use, meta, [{:__aliases__, _, ^module_aliases}, opts]} = use_ast when is_list(opts) ->
-        %{module_ast: module_ast, use_ast: use_ast, line: meta[:line], opts: opts}
+      {:use, meta, [{:__aliases__, _, ^module_aliases}, opts]} when is_list(opts) ->
+        %UseMetadata{line: meta[:line], opts: opts}
 
-      {:use, meta, [{:__aliases__, _, ^module_aliases}]} = use_ast ->
-        %{module_ast: module_ast, use_ast: use_ast, line: meta[:line], opts: []}
+      {:use, meta, [{:__aliases__, _, ^module_aliases}]} ->
+        %UseMetadata{line: meta[:line], opts: []}
 
       _ ->
         nil

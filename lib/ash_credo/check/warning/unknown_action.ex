@@ -35,7 +35,7 @@ defmodule AshCredo.Check.Warning.UnknownAction do
       """
     ]
 
-  alias AshCredo.Introspection.AshCallResolver
+  alias AshCredo.Introspection.{AshCallResolver, AshCallSite}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   @impl true
@@ -58,7 +58,7 @@ defmodule AshCredo.Check.Warning.UnknownAction do
     )
   end
 
-  defp check_site(%{resolution: {:ok, resource, info}} = site, issue_meta) do
+  defp check_site(%AshCallSite{resolution: {:ok, resource, info}} = site, issue_meta) do
     case CompiledIntrospection.action(resource, site.action_name) do
       {:error, :unknown_action} ->
         [unknown_action_issue(resource, info.actions, site, issue_meta)]
@@ -71,7 +71,7 @@ defmodule AshCredo.Check.Warning.UnknownAction do
   # `:not_loadable` resources are reported by `UseCodeInterface` (gated on its
   # `enforce_code_interface_outside_domain` flag) - emitting a second
   # "could not load" diagnostic from here would just double the noise.
-  defp check_site(_site, _issue_meta), do: []
+  defp check_site(%AshCallSite{}, _issue_meta), do: []
 
   defp unknown_action_issue(resource, known_actions, site, issue_meta) do
     qualified = AshCallResolver.qualified_call(site)

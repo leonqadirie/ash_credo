@@ -24,6 +24,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Introspection.ResourceContext
 
   @writable_action_types ~w(create update)a
 
@@ -34,7 +35,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
 
     source_file
     |> Introspection.resource_contexts()
-    |> Enum.flat_map(fn context ->
+    |> Enum.flat_map(fn %ResourceContext{} = context ->
       context
       |> Introspection.resource_section(:actions)
       |> check_actions(dangerous, issue_meta)
