@@ -52,6 +52,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Introspection.ResourceContext
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
@@ -101,7 +102,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
     action_lines =
       source_file
       |> Introspection.resource_contexts()
-      |> Enum.flat_map(fn context ->
+      |> Enum.flat_map(fn %ResourceContext{} = context ->
         context
         |> Introspection.resource_section(:actions)
         |> action_authorize_false_lines()

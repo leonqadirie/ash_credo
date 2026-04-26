@@ -30,6 +30,7 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
 
   alias AshCredo.Introspection
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
+  alias AshCredo.Introspection.ResourceContext
 
   @action_types ~w(create read update destroy action)a
 
@@ -53,10 +54,10 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
     )
   end
 
-  defp check_resource(%{absolute_segments: nil}, _issue_meta), do: []
+  defp check_resource(%ResourceContext{absolute_segments: nil}, _issue_meta), do: []
 
   defp check_resource(
-         %{module_ast: module_ast, absolute_segments: segments} = context,
+         %ResourceContext{module_ast: module_ast, absolute_segments: segments} = context,
          issue_meta
        ) do
     resource = Module.concat(segments)

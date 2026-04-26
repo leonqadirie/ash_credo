@@ -31,43 +31,30 @@ defmodule AshCredo.Check.Warning.NoActions do
 
   alias AshCredo.Introspection
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
+  alias AshCredo.Introspection.ResourceContext
+  alias AshCredo.Orchestration
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
-
     CompiledIntrospection.with_compiled_check(
       fn ->
-        format_issue(issue_meta,
+        format_issue(IssueMeta.for(source_file, params),
           message:
             "Ash is not loaded in the VM running Credo - `NoActions` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
           line_no: 1
         )
       end,
       fn ->
-        source_file
-        |> Introspection.resource_contexts()
-        |> Enum.flat_map(&check_resource(&1, issue_meta))
+        Orchestration.flat_map_loadable_resource(source_file, params, &check_loaded_resource/3)
       end
     )
   end
 
-  defp check_resource(%{absolute_segments: nil}, _issue_meta), do: []
-
-  defp check_resource(context, issue_meta) do
-    if Introspection.has_data_layer?(context) do
-      check_loaded_resource(context, issue_meta)
-    else
-      []
-    end
-  end
-
   defp check_loaded_resource(
-         %{absolute_segments: segments, module_ast: module_ast} = context,
+         resource,
+         %ResourceContext{module_ast: module_ast} = context,
          issue_meta
        ) do
-    resource = Module.concat(segments)
-
     case CompiledIntrospection.actions(resource) do
       {:ok, []} ->
         [no_actions_issue(module_ast, context, issue_meta)]
