@@ -60,7 +60,10 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       assert [] = run_check(UseCodeInterface, source)
     end
 
-    test "no issue when Ash.read has no action key" do
+    test "Ash.read without an :action key falls back to the primary :read action" do
+      # `Ash.read!/get!/stream!` without an `:action` keyword dispatches to the
+      # resource's primary :read action. The check mirrors that, so bare-form
+      # callers get the same code-interface suggestion as the explicit form.
       source = """
       defmodule AshCredoFixtures.Blog do
         def list_posts(actor) do
@@ -69,7 +72,39 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       end
       """
 
-      assert [] = run_check(UseCodeInterface, source)
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.read!"
+      # Same-domain caller, :read has both a resource and a domain interface;
+      # `:auto` prefers the resource interface (`all_posts`).
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.all_posts!"
+    end
+
+    test "bare Ash.read!(Resource) (no opts) also flags via the primary :read fallback" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def list_posts do
+          Ash.read!(AshCredoFixtures.Blog.Post)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.read!"
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.all_posts!"
+    end
+
+    test "bare Ash.read!(Unloadable) still emits the :not_loadable diagnostic" do
+      source = """
+      defmodule SomeController do
+        def list do
+          Ash.read!(Totally.Fake.NoOpts)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "Could not load"
+      assert issue.message =~ "Totally.Fake.NoOpts"
     end
   end
 

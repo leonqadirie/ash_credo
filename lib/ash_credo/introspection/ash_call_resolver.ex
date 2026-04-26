@@ -160,12 +160,54 @@ defmodule AshCredo.Introspection.AshCallResolver do
 
   defp extract_action_in_opts(args, ctx) do
     with {:ok, resource_ast} <- arg_at(args, 0),
-         {:ok, segs} <- literal_segments(resource_ast, ast_context(ctx.call_info)),
-         action when is_atom(action) and not is_nil(action) <- action_from_opts(args) do
-      [build_site(segs, action, ctx)]
+         {:ok, segs} <- literal_segments(resource_ast, ast_context(ctx.call_info)) do
+      case action_in_opts(args) do
+        {:literal, action} -> [build_site(segs, action, ctx)]
+        :absent -> implicit_read_sites(segs, ctx)
+        # `:action` is present but not a literal atom (e.g. a bound variable).
+        # Caller intends a specific runtime action; do not silently fall back
+        # to `:read`.
+        :non_literal -> []
+      end
     else
       _ -> []
     end
+  end
+
+  # `Ash.read!/get!/stream!` without an `:action` keyword dispatches to the
+  # resource's primary :read action at runtime. Mirror that here so bare
+  # `Ash.read!(MyApp.Post)` gets the same code-interface suggestion as the
+  # explicit `Ash.read!(MyApp.Post, action: :read)` form, and so a `:not_loadable`
+  # diagnostic still fires for projects that only ever call the bare shape.
+  defp implicit_read_sites(segments, ctx) do
+    case resolve_resource(segments, ctx) do
+      {:ok, _resource, %{actions: actions}} = resolution ->
+        case primary_read_action_name(actions) do
+          nil -> []
+          action -> [build_site_with(ctx, action, resolution)]
+        end
+
+      {:not_loadable, _resource} = resolution ->
+        # action_name is only used by the `{:ok, ...}` branch in checks; the
+        # `:not_loadable` branch ignores it. We pass `:read` as a stable
+        # placeholder rather than a sentinel so any future inspection reads
+        # naturally.
+        [build_site_with(ctx, :read, resolution)]
+
+      _ ->
+        []
+    end
+  end
+
+  defp build_site_with(ctx, action_name, resolution) do
+    Map.merge(ctx, %{resolution: resolution, action_name: action_name})
+  end
+
+  defp primary_read_action_name(actions) when is_list(actions) do
+    Enum.find_value(actions, fn
+      %{type: :read, primary?: true, name: name} -> name
+      _ -> nil
+    end)
   end
 
   defp extract_positional(args, resource_idx, action_idx, ctx) do
@@ -356,10 +398,12 @@ defmodule AshCredo.Introspection.AshCallResolver do
 
   defp arg_at(args, idx), do: Enum.fetch(args, idx)
 
-  defp action_from_opts(args) do
-    case Enum.reverse(args) do
-      [kwl | _] when is_list(kwl) -> Keyword.get(kwl, :action)
-      _ -> nil
+  defp action_in_opts(args) do
+    with [kwl | _] when is_list(kwl) <- Enum.reverse(args),
+         {:ok, value} <- Keyword.fetch(kwl, :action) do
+      if is_atom(value) and not is_nil(value), do: {:literal, value}, else: :non_literal
+    else
+      _ -> :absent
     end
   end
 end
