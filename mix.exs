@@ -38,8 +38,8 @@ defmodule AshCredo.MixProject do
 
   defp deps do
     [
-      {:credo, "~> 1.7"},
-      {:igniter, "~> 0.7", optional: true},
+      {:credo, "~> 1.7", runtime: false},
+      {:igniter, "~> 0.7", optional: true, runtime: false},
       {:ash, "~> 3.0", only: [:dev, :test], runtime: false},
       {:simple_sat, "~> 0.1", only: [:dev, :test], runtime: false},
       {:credence, github: "Cinderella-Man/credence", only: [:dev, :test], runtime: false},
