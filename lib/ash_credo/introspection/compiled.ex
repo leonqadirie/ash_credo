@@ -500,18 +500,14 @@ defmodule AshCredo.Introspection.Compiled do
   """
   @spec enclosing_domain(module()) :: module() | nil
   def enclosing_domain(module) when is_atom(module) do
-    module
-    |> Module.split()
-    |> Enum.drop(-1)
-    |> name_ancestors()
-    |> Enum.find_value(fn segs ->
-      candidate = Module.concat(segs)
+    segments = Module.split(module)
+
+    (length(segments) - 1)..1//-1
+    |> Enum.find_value(fn take_n ->
+      candidate = Module.concat(Enum.take(segments, take_n))
       if domain?(candidate), do: candidate
     end)
   end
-
-  defp name_ancestors([]), do: []
-  defp name_ancestors(segs), do: [segs | name_ancestors(Enum.drop(segs, -1))]
 
   @doc """
   Clears every cache entry: per-module introspection results, per-domain

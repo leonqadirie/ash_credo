@@ -118,10 +118,13 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapper do
   end
 
   defp tail_from_last_lib(segments) when is_list(segments) do
-    case Enum.reduce(Enum.with_index(segments), nil, fn
-           {"lib", idx}, _acc -> idx
-           {_segment, _idx}, acc -> acc
-         end) do
+    segments
+    |> Stream.with_index()
+    |> Enum.reduce(nil, fn
+      {"lib", idx}, _acc -> idx
+      {_segment, _idx}, acc -> acc
+    end)
+    |> case do
       nil -> []
       idx -> Enum.drop(segments, idx)
     end
