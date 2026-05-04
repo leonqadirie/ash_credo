@@ -59,7 +59,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
 
       assert [aliases_in_first, aliases_in_second] = results
       assert {[:Q], [:Ash, :Query]} in aliases_in_first
-      refute Enum.any?(aliases_in_second, fn {a, _t} -> a == [:Q] end)
+      refute Enum.any?(aliases_in_second, fn {alias_segs, _target} -> alias_segs == [:Q] end)
     end
 
     test "alias inside one branch does not leak into the sibling branch" do
@@ -83,7 +83,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
 
       [in_do, in_else] = results
       assert {[:Q], [:Ash, :Query]} in in_do
-      refute Enum.any?(in_else, fn {a, _t} -> a == [:Q] end)
+      refute Enum.any?(in_else, fn {alias_segs, _target} -> alias_segs == [:Q] end)
     end
   end
 
@@ -109,8 +109,8 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
 
       [inside_quote, after_quote] = results
       # The Q alias was dropped, so it's NOT visible at either probe site.
-      refute Enum.any?(inside_quote, fn {a, _t} -> a == [:Q] end)
-      refute Enum.any?(after_quote, fn {a, _t} -> a == [:Q] end)
+      refute Enum.any?(inside_quote, fn {alias_segs, _target} -> alias_segs == [:Q] end)
+      refute Enum.any?(after_quote, fn {alias_segs, _target} -> alias_segs == [:Q] end)
     end
 
     test "in_quote? reflects nesting" do
@@ -185,7 +185,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
 
       [aliases_after_with] = walk(ast, [], record_aliases_at(:mark), noop())
 
-      refute Enum.any?(aliases_after_with, fn {a, _t} -> a == [:Q] end)
+      refute Enum.any?(aliases_after_with, fn {alias_segs, _target} -> alias_segs == [:Q] end)
     end
 
     test "for-construct scopes aliases by default (matches Elixir)" do
@@ -203,7 +203,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
 
       [aliases_after_for] = walk(ast, [], record_aliases_at(:mark), noop())
 
-      refute Enum.any?(aliases_after_for, fn {a, _t} -> a == [:Q] end)
+      refute Enum.any?(aliases_after_for, fn {alias_segs, _target} -> alias_segs == [:Q] end)
     end
 
     test "passing lexical_scope_nodes: [] opts out of with/for scoping" do
@@ -444,8 +444,8 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
                walk(
                  ast,
                  %{count: 0},
-                 fn _node, _scope, %{count: c} ->
-                   %{count: c + 1}
+                 fn _node, _scope, %{count: count} ->
+                   %{count: count + 1}
                  end,
                  noop()
                )
