@@ -56,6 +56,7 @@ defmodule AshCredo.Introspection.Compiled do
   @cache_key_tag {__MODULE__, :cache}
   @domain_refs_key_tag {__MODULE__, :domain_refs}
   @macros_key_tag {__MODULE__, :macros}
+  @enclosing_domain_key_tag {__MODULE__, :enclosing_domain}
   @ash_available_key {__MODULE__, :ash_available?}
   @ash_missing_warned_key {__MODULE__, :ash_missing_warned}
   @not_loadable_warned_key_tag {__MODULE__, :not_loadable_warned}
@@ -294,7 +295,9 @@ defmodule AshCredo.Introspection.Compiled do
   Returns `true` if `module` is an Ash domain loadable in this VM.
 
   Determined by the `spark_is/0` function that Spark DSL modules inject.
-  Not cached - the check is cheap (already-loaded module attribute read).
+  Not cached. Cheap on positive probes (already-loaded module lookup), but
+  pays a `Code.ensure_compiled/1` filesystem search on negative probes -
+  avoid calling in hot loops with mostly-non-domain inputs.
   """
   @spec domain?(module()) :: boolean()
   def domain?(module) when is_atom(module) do
@@ -500,6 +503,18 @@ defmodule AshCredo.Introspection.Compiled do
   """
   @spec enclosing_domain(module()) :: module() | nil
   def enclosing_domain(module) when is_atom(module) do
+    case Cache.get({@enclosing_domain_key_tag, module}, :miss) do
+      :miss ->
+        result = compute_enclosing_domain(module)
+        Cache.put({@enclosing_domain_key_tag, module}, result)
+        result
+
+      cached ->
+        cached
+    end
+  end
+
+  defp compute_enclosing_domain(module) do
     segments = Module.split(module)
 
     (length(segments) - 1)..1//-1

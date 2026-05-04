@@ -1,6 +1,7 @@
 defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
   use AshCredo.CheckCase
 
+  alias AshCredo.Cache
   alias AshCredo.Check.Refactor.UseCodeInterface
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
@@ -1060,6 +1061,29 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       assert issue.message =~ "AshCredoFixtures.Blog.Post.all_posts!"
 
       assert [] = run_check(UseCodeInterface, outside_domain, opts)
+    end
+  end
+
+  describe "enclosing_domain memoization" do
+    test "caches the resolved domain so repeat calls hit the cache" do
+      module = AshCredoFixtures.Blog.Changes.Archive
+      cache_key = {{CompiledIntrospection, :enclosing_domain}, module}
+
+      refute Cache.member?(cache_key)
+
+      assert CompiledIntrospection.enclosing_domain(module) == AshCredoFixtures.Blog
+      assert Cache.member?(cache_key)
+      assert CompiledIntrospection.enclosing_domain(module) == AshCredoFixtures.Blog
+    end
+
+    test "caches nil for modules with no enclosing domain" do
+      module = AshCredoFixtures.Plain
+      cache_key = {{CompiledIntrospection, :enclosing_domain}, module}
+
+      refute Cache.member?(cache_key)
+      assert CompiledIntrospection.enclosing_domain(module) == nil
+      assert Cache.member?(cache_key)
+      assert CompiledIntrospection.enclosing_domain(module) == nil
     end
   end
 end
