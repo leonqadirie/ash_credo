@@ -39,6 +39,7 @@ defmodule AshCredo.Introspection.Compiled do
   # Ash is not a runtime dependency of ash_credo - users bring their own.
   # Suppress compile-time warnings for the remote calls below; they are guarded
   # at runtime by `ash_available?/0`.
+  alias Ash.Resource.Info, as: ResourceInfo
   alias Ash.Type.NewType
   alias AshCredo.Cache
 
@@ -232,7 +233,7 @@ defmodule AshCredo.Introspection.Compiled do
   def action(module, action_name) when is_atom(action_name) do
     case inspect_module(module) do
       {:ok, _info} ->
-        case Ash.Resource.Info.action(module, action_name) do
+        case ResourceInfo.action(module, action_name) do
           nil -> {:error, :unknown_action}
           action -> {:ok, action}
         end
@@ -566,17 +567,17 @@ defmodule AshCredo.Introspection.Compiled do
   defp do_inspect(module) do
     case Code.ensure_compiled(module) do
       {:module, ^module} ->
-        if Ash.Resource.Info.resource?(module) do
+        if ResourceInfo.resource?(module) do
           {:ok,
            %{
              resource?: true,
-             domain: Ash.Resource.Info.domain(module),
-             interfaces: Ash.Resource.Info.interfaces(module),
-             actions: Ash.Resource.Info.actions(module),
-             attributes: Ash.Resource.Info.attributes(module),
-             primary_key: Ash.Resource.Info.primary_key(module),
-             identities: Ash.Resource.Info.identities(module),
-             authorizers: Ash.Resource.Info.authorizers(module),
+             domain: ResourceInfo.domain(module),
+             interfaces: ResourceInfo.interfaces(module),
+             actions: ResourceInfo.actions(module),
+             attributes: ResourceInfo.attributes(module),
+             primary_key: ResourceInfo.primary_key(module),
+             identities: ResourceInfo.identities(module),
+             authorizers: ResourceInfo.authorizers(module),
              policies: read_policies(module)
            }}
         else
