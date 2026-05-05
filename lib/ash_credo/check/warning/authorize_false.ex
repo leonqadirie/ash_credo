@@ -93,11 +93,9 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
 
   defp ash_authorize_false_lines(source_file) do
     call_lines =
-      source_file
-      |> Introspection.ash_api_calls()
-      |> Enum.flat_map(fn {_call, meta, args} ->
-        if has_authorize_false?(args), do: [meta[:line]], else: []
-      end)
+      for {_call, meta, args} <- Introspection.ash_api_calls(source_file),
+          has_authorize_false?(args),
+          do: meta[:line]
 
     action_lines =
       source_file

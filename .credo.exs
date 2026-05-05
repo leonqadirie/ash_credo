@@ -22,8 +22,10 @@
           {ExSlop.Check.Warning.RepoAllThenFilter, []},
           {ExSlop.Check.Warning.QueryInEnumMap, []},
           {ExSlop.Check.Warning.GenserverAsKvStore, []},
+          {ExSlop.Check.Warning.PathExpandPriv, []},
+          {ExSlop.Check.Warning.DualKeyAccess, []},
 
-          # ExSlop - Refactoring Checks
+          # ExSlop - Refactor Checks
           {ExSlop.Check.Refactor.FilterNil, []},
           {ExSlop.Check.Refactor.RejectNil, []},
           {ExSlop.Check.Refactor.ReduceAsMap, []},
@@ -36,14 +38,29 @@
           {ExSlop.Check.Refactor.WithIdentityDo, []},
           {ExSlop.Check.Refactor.SortThenReverse, []},
           {ExSlop.Check.Refactor.StringConcatInReduce, []},
+          {ExSlop.Check.Refactor.ReduceMapPut, []},
+          {ExSlop.Check.Refactor.RedundantBooleanIf, []},
+          {ExSlop.Check.Refactor.FlatMapFilter, []},
+          {ExSlop.Check.Refactor.RedundantEnumJoinSeparator, []},
+          {ExSlop.Check.Refactor.UseMapJoin, []},
+          {ExSlop.Check.Refactor.PreferEnumSlice, []},
+          {ExSlop.Check.Refactor.GraphemesLength, []},
+          {ExSlop.Check.Refactor.ManualStringReverse, []},
+          {ExSlop.Check.Refactor.SortThenAt, []},
+          {ExSlop.Check.Refactor.SortForTopK, []},
+          {ExSlop.Check.Refactor.ListFold, []},
+          {ExSlop.Check.Refactor.ListLast, []},
+          {ExSlop.Check.Refactor.LengthInGuard, []},
+          {ExSlop.Check.Refactor.ExplicitSumReduce, []},
 
           # ExSlop - Readability Checks
           {ExSlop.Check.Readability.NarratorDoc, []},
           {ExSlop.Check.Readability.DocFalseOnPublicFunction, []},
           {ExSlop.Check.Readability.BoilerplateDocParams, []},
-          {ExSlop.Check.Readability.ObviousComment, []},
+          {ExSlop.Check.Readability.ObviousComment, [additional_keywords: []]},
           {ExSlop.Check.Readability.StepComment, []},
           {ExSlop.Check.Readability.NarratorComment, []},
+          {ExSlop.Check.Readability.UnaliasedModuleUse, []},
 
           # Internal - enforce architectural invariants
           {AshCredo.SelfCheck.EnforceCompiledIntrospectionBoundary, []},
