@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Lint.Credence do
-  @shortdoc "Runs Credence semantic checks against lib/"
+  @shortdoc "Runs Credence semantic checks against lib/ and test/"
 
   @moduledoc """
   Runs [Credence](https://github.com/Cinderella-Man/credence) on every
@@ -39,7 +39,9 @@ defmodule Mix.Tasks.Lint.Credence do
   end
 
   defp analyze_file(path) do
-    case Credence.analyze(File.read!(path)) do
+    source = File.read!(path)
+
+    case Credence.analyze(source, source: source) do
       %{valid: true} -> []
       %{issues: issues} -> Enum.map(issues, &{path, &1})
     end
@@ -47,6 +49,6 @@ defmodule Mix.Tasks.Lint.Credence do
 
   defp report({path, issue}) do
     line = Map.get(issue.meta || %{}, :line, "?")
-    Mix.shell().error("#{path}:#{line}: [#{issue.severity}] #{issue.rule}: #{issue.message}")
+    Mix.shell().error("#{path}:#{line}: #{issue.rule}: #{issue.message}")
   end
 end
