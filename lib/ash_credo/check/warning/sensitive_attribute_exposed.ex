@@ -35,7 +35,7 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
     end)
   end
 
-  defp check_sensitive_attrs(nil, _names, _issue_meta), do: []
+  defp check_sensitive_attrs(nil, _sensitive_names, _issue_meta), do: []
 
   defp check_sensitive_attrs(attrs_ast, sensitive_names, issue_meta) do
     attrs_ast

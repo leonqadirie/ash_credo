@@ -65,7 +65,7 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
 
     issues = run_check(WildcardAcceptOnAction, source)
 
-    assert length(issues) == 2
+    assert [_, _] = issues
     assert find_by_message(issues, "Default `create` action")
     assert find_by_message(issues, "Default `update` action")
   end

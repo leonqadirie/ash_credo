@@ -331,7 +331,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
     %{scope | alias_frames: LexicalAliases.pop_frame(frames)}
   end
 
-  defp capture_alias(%Scope{quote_depth: depth} = scope, _node, %{
+  defp capture_alias(%Scope{quote_depth: depth} = scope, _alias_node, %{
          track_quote: true,
          track_aliases_in_quote: false
        })

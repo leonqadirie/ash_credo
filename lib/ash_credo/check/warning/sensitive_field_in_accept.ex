@@ -91,8 +91,8 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
     defaults_ast
     |> Introspection.default_action_entries()
     |> Enum.flat_map(fn
-      {type, fields} when type in @writable_action_types and is_list(fields) ->
-        fields
+      {type, default_fields} when type in @writable_action_types and is_list(default_fields) ->
+        default_fields
         |> Enum.filter(&(&1 in dangerous))
         |> Enum.map(fn field ->
           format_issue(issue_meta,

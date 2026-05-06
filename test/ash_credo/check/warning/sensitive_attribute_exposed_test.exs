@@ -52,7 +52,7 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposedTest do
     """
 
     issues = run_check(SensitiveAttributeExposed, source)
-    assert length(issues) == 3
+    assert [_, _, _] = issues
   end
 
   test "ignores non-sensitive attributes" do

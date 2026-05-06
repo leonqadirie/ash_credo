@@ -55,7 +55,7 @@ defmodule AshCredo.Check.Readability.ActionMissingDescriptionTest do
     """
 
     issues = run_check(ActionMissingDescription, source)
-    assert length(issues) == 2
+    assert [_, _] = issues
   end
 
   test "no issue when inline description option is present" do

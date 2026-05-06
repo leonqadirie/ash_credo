@@ -212,7 +212,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = Introspection.ash_api_calls(source_file(source))
-      assert length(calls) == 1
+      assert [_] = calls
     end
 
     test "finds direct Ash calls" do
@@ -225,7 +225,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = Introspection.ash_api_calls(source_file(source))
-      assert length(calls) == 1
+      assert [_] = calls
     end
 
     test "finds aliased Ash calls" do
@@ -240,7 +240,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = Introspection.ash_api_calls(source_file(source))
-      assert length(calls) == 1
+      assert [_] = calls
     end
 
     test "finds function-local aliases before the call site" do
@@ -254,7 +254,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = Introspection.ash_api_calls(source_file(source))
-      assert length(calls) == 1
+      assert [_] = calls
     end
 
     test "respects alias order at the call site" do
@@ -273,7 +273,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = Introspection.ash_api_calls(source_file(source))
-      assert length(calls) == 1
+      assert [_] = calls
     end
 
     test "does not find non-Ash calls" do
@@ -305,7 +305,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = Introspection.ash_api_calls(source_file(source))
-      assert length(calls) == 2
+      assert [_, _] = calls
     end
   end
 
@@ -348,7 +348,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = Introspection.ash_api_calls_with_module(source_file(source))
-      assert length(calls) == 1
+      assert [_] = calls
     end
   end
 
@@ -507,7 +507,7 @@ defmodule AshCredo.IntrospectionTest do
     test "finds all attribute entities" do
       attrs = first_resource_section(@ash_resource, :attributes)
       attributes = Introspection.entities(attrs, :attribute)
-      assert length(attributes) == 2
+      assert [_, _] = attributes
     end
 
     test "returns empty list for nil section" do
@@ -793,8 +793,8 @@ defmodule AshCredo.IntrospectionTest do
 
       actions = first_resource_section(source, :actions)
 
-      assert length(Introspection.action_entities(actions, [:read, :create])) == 2
-      assert length(Introspection.action_entities(actions)) == 3
+      assert [_, _] = Introspection.action_entities(actions, [:read, :create])
+      assert [_, _, _] = Introspection.action_entities(actions)
     end
   end
 
@@ -1038,7 +1038,7 @@ defmodule AshCredo.IntrospectionTest do
 
       policies = first_resource_section(source, :policies)
       entities = Introspection.policy_entities(policies)
-      assert length(entities) == 2
+      assert [_, _] = entities
     end
 
     test "finds policies nested inside policy_group" do
@@ -1058,7 +1058,7 @@ defmodule AshCredo.IntrospectionTest do
 
       policies = first_resource_section(source, :policies)
       entities = Introspection.policy_entities(policies)
-      assert length(entities) == 1
+      assert [_] = entities
     end
 
     test "returns empty list for nil" do

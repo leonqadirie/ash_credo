@@ -79,7 +79,7 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapper do
 
   defp on_enter({{:., _, [module_ast, :with_compiled_check]}, _, args}, scope, state)
        when is_list(args) do
-    if length(args) == 2 and compiled_module_ref?(module_ast, scope) do
+    if match?([_, _], args) and compiled_module_ref?(module_ast, scope) do
       %{state | has_wrapper_call?: true}
     else
       state
