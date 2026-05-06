@@ -54,5 +54,6 @@ jobs:
           restore-keys: |
             mix-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
       - run: mix deps.get
+      - run: rm -rf _build/*/lib/ash_credo
       - run: mix test
       - run: mix lint
