@@ -115,7 +115,7 @@ defmodule AshCredo.Check.Refactor.DirectiveInFunctionBodyTest do
       """
 
       assert issues = run_check(DirectiveInFunctionBody, source)
-      assert length(issues) == 3
+      assert [_, _, _] = issues
       assert Enum.all?(issues, &(&1.trigger == "Ash.Query"))
     end
 

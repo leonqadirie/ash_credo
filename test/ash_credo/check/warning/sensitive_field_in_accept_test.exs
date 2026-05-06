@@ -35,7 +35,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAcceptTest do
     """
 
     issues = run_check(SensitiveFieldInAccept, source)
-    assert length(issues) == 2
+    assert [_, _] = issues
     triggers = Enum.map(issues, & &1.trigger)
     assert "is_admin" in triggers
     assert "permissions" in triggers

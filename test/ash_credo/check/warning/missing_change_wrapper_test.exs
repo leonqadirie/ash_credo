@@ -105,7 +105,7 @@ defmodule AshCredo.Check.Warning.MissingChangeWrapperTest do
     """
 
     issues = run_check(MissingChangeWrapper, source)
-    assert length(issues) == 2
+    assert [_, _] = issues
     triggers = Enum.map(issues, & &1.trigger)
     assert "set_attribute" in triggers
     assert "manage_relationship" in triggers

@@ -208,7 +208,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       """
 
       issues = run_check(MissingMacroDirective, source)
-      triggers = issues |> Enum.map(& &1.trigger) |> Enum.sort()
+      triggers = sorted_triggers(issues)
 
       assert triggers == [
                "Ash.Query.equivalent_to",
@@ -274,7 +274,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       """
 
       issues = run_check(MissingMacroDirective, source)
-      triggers = issues |> Enum.map(& &1.trigger) |> Enum.sort()
+      triggers = sorted_triggers(issues)
       assert triggers == ["Ash.Expr.calc", "Ash.Expr.or_where", "Ash.Expr.where"]
     end
 
@@ -486,7 +486,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       issues =
         run_check(MissingMacroDirective, source, macro_modules: [AshCredoFixtures.FakeMacros])
 
-      triggers = issues |> Enum.map(& &1.trigger) |> Enum.sort()
+      triggers = sorted_triggers(issues)
 
       assert triggers == [
                "AshCredoFixtures.FakeMacros.do_thing",
@@ -673,7 +673,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       """
 
       issues = run_check(MissingMacroDirective, source)
-      triggers = issues |> Enum.map(& &1.trigger) |> Enum.sort()
+      triggers = sorted_triggers(issues)
       assert triggers == ["Ash.Expr.expr", "Ash.Query.filter"]
     end
   end
