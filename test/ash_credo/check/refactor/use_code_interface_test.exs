@@ -595,7 +595,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
   # ── Bulk operations ────────────────────────────────────────────────────────
 
   describe "bulk operations" do
-    test "Ash.bulk_create classifies arg 1 and arg 2" do
+    test "Ash.bulk_create classifies arg 1 and arg 2 and explains bulk dispatch" do
       source = """
       defmodule AshCredoFixtures.Blog do
         def import(inputs) do
@@ -606,6 +606,15 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
 
       assert [issue] = run_check(UseCodeInterface, source)
       assert issue.trigger == "Ash.bulk_create"
+      # `:create` has no resource-level interface on Post → "define :create"
+      # path with the bulk-aware tail appended.
+      assert issue.message =~ "define :create"
+
+      assert issue.message =~
+               "Code interfaces dispatch to `Ash.bulk_create` when called with a list or stream"
+
+      assert issue.message =~ "bulk_options: [...]"
+      assert issue.message =~ "return_records?"
     end
 
     test "Ash.bulk_update traces query variable back to a literal resource" do
@@ -619,7 +628,16 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       """
 
       issues = run_check(UseCodeInterface, source)
-      assert find_by_trigger(issues, "Ash.bulk_update")
+      issue = find_by_trigger(issues, "Ash.bulk_update")
+      assert issue
+      # `:archive` has a resource-level interface on Post → "use" path with
+      # the bulk-aware tail appended.
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.archive`"
+
+      assert issue.message =~
+               "Code interfaces dispatch to `Ash.bulk_update` when called with a query, list, or stream"
+
+      assert issue.message =~ "bulk_options: [...]"
     end
 
     test "Ash.bulk_destroy! with piped query traces through the pipe" do
@@ -634,7 +652,38 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       """
 
       issues = run_check(UseCodeInterface, source)
-      assert find_by_trigger(issues, "Ash.bulk_destroy!")
+      issue = find_by_trigger(issues, "Ash.bulk_destroy!")
+      assert issue
+
+      assert issue.message =~
+               "Code interfaces dispatch to `Ash.bulk_destroy` when called with a query, list, or stream"
+
+      assert issue.message =~ "bulk_options: [...]"
+      # Destroy code interfaces honor top-level `return_destroyed?:` and
+      # overwrite any `return_records?:` passed under `bulk_options:` (see
+      # `Ash.CodeInterface.destroy_act/9`). The destroy tail must steer
+      # users at `return_destroyed?:` and avoid suggesting `return_records?`.
+      assert issue.message =~ "use `return_destroyed?: true` to return destroyed records"
+      refute issue.message =~ "return_records?"
+    end
+
+    test "no bulk tail when the action type does not match the bulk function" do
+      # Invalid Ash code: `Ash.bulk_create` paired with a read action. The
+      # check still flags the call site, but the bulk-dispatch hint would be
+      # nonsense - verify it is suppressed and the standard suggestion stands
+      # alone. The source is left to fail at runtime via Ash's own errors.
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def import(inputs) do
+          Ash.bulk_create(inputs, AshCredoFixtures.Blog.Post, :read)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.bulk_create"
+      refute issue.message =~ "Code interfaces dispatch"
+      refute issue.message =~ "bulk_options"
     end
   end
 

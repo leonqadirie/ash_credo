@@ -141,8 +141,8 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   defp check_site(%AshCallSite{resolution: {:ok, resource, info}} = site, issue_meta, config) do
     case CompiledIntrospection.action(resource, site.action_name) do
-      {:ok, _action} ->
-        classification = classify(resource, site.action_name, info, site, config)
+      {:ok, action} ->
+        classification = classify(resource, site.action_name, action.type, info, site, config)
 
         if enforced?(classification, config) do
           classification
@@ -180,7 +180,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   defp enforced?(%{same_domain?: true}, %{in_domain: in_domain}), do: in_domain
   defp enforced?(%{same_domain?: false}, %{outside_domain: outside}), do: outside
 
-  defp classify(resource, action_name, info, site, config) do
+  defp classify(resource, action_name, action_type, info, site, config) do
     caller = caller_atom(site.call_info)
     caller_domain = caller_domain(caller)
     resource_domain = info.domain
@@ -192,6 +192,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     %{
       resource: resource,
       action: action_name,
+      action_type: action_type,
       resource_domain: resource_domain,
       resource_iface: matching_interface(info.interfaces, action_name, site, info),
       domain_iface: domain_interface(resource_domain, resource, action_name, site, info),
@@ -200,6 +201,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       bang?: AshCallResolver.bang?(site),
       builder_prefix: site.builder_prefix,
       call_kind: site.call_kind,
+      fun_name: site.fun_name,
       lookup_keys: site.lookup_keys,
       identities: info.identities
     }
@@ -310,7 +312,9 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
         nil
 
       suggestion ->
-        message = format_message(suggestion, classification, qualified, site.arity)
+        message =
+          format_message(suggestion, classification, qualified, site.arity) <>
+            bulk_suffix(classification)
 
         format_issue(issue_meta,
           message: message,
@@ -466,6 +470,46 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   defp keys_suffix(keys) do
     keys
     |> Enum.map_join("_and_", &Atom.to_string/1)
+  end
+
+  # Appended to bulk-call suggestions so users know the code-interface form
+  # dispatches to `Ash.bulk_*` based on input shape, and that bulk-only opts
+  # (e.g. `return_records?`, `return_errors?`) must live under `bulk_options:`
+  # - they are not part of the single-action option schema and Spark.Options
+  # rejects them at the top level.
+  #
+  # Destroy gets a distinct tail: the generated destroy code interface
+  # overwrites `return_records?` from the top-level `return_destroyed?` opt
+  # (see `Ash.CodeInterface.destroy_act/9`), so passing `return_records?`
+  # under `bulk_options:` silently fails to return records. Point users at
+  # `return_destroyed?: true` instead.
+  defp bulk_suffix(%{call_kind: :bulk, fun_name: fun, action_type: type}) do
+    cond do
+      fun in [:bulk_create, :bulk_create!] and type == :create ->
+        " " <> bulk_tail("Ash.bulk_create", "a list or stream")
+
+      fun in [:bulk_update, :bulk_update!] and type == :update ->
+        " " <> bulk_tail("Ash.bulk_update", "a query, list, or stream")
+
+      fun in [:bulk_destroy, :bulk_destroy!] and type == :destroy ->
+        " " <> destroy_bulk_tail()
+
+      true ->
+        ""
+    end
+  end
+
+  defp bulk_suffix(_), do: ""
+
+  defp bulk_tail(verb, subject) do
+    "Code interfaces dispatch to `#{verb}` when called with #{subject}; " <>
+      "pass bulk-only opts (e.g. `return_records?`, `return_errors?`) under `bulk_options: [...]`."
+  end
+
+  defp destroy_bulk_tail do
+    "Code interfaces dispatch to `Ash.bulk_destroy` when called with a query, list, or stream; " <>
+      "pass bulk-only opts such as `return_errors?` under `bulk_options: [...]`; " <>
+      "use `return_destroyed?: true` to return destroyed records."
   end
 
   defp not_loadable_issue(resource, site, issue_meta) do
