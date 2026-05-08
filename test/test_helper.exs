@@ -1,2 +1,2 @@
-Application.ensure_all_started(:credo)
+Credo.Application.start(nil, nil)
 ExUnit.start()
