@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.11.0](https://github.com/leonqadirie/ash_credo/compare/v0.10.0...v0.11.0) (2026-05-09)
+
+
+### Features
+
+* clarify UseCodeInterface suggestion for bulk operations ([#113](https://github.com/leonqadirie/ash_credo/issues/113)) ([da19a48](https://github.com/leonqadirie/ash_credo/commit/da19a4891dad010ae2ba1acaebbf87786786c72d)) by [@leonqadirie](https://github.com/leonqadirie)
+
 ## [0.10.0](https://github.com/leonqadirie/ash_credo/compare/v0.9.0...v0.10.0) (2026-04-26)
 
 
@@ -10,13 +17,13 @@ All notable changes to this project will be documented in this file.
 
 ### Features
 
-* refine use code interface and missing macro directive against real semantics ([#97](https://github.com/leonqadirie/ash_credo/issues/97)) ([9eaa617](https://github.com/leonqadirie/ash_credo/commit/9eaa617136bc057702ee3dedcac4f0e270be376c))
-* replace persistent term-based cache with ETS ([#100](https://github.com/leonqadirie/ash_credo/issues/100)) ([e6ba2f1](https://github.com/leonqadirie/ash_credo/commit/e6ba2f1700e39c26a78e2de25e056bdfedbecbcd))
+* refine use code interface and missing macro directive against real semantics ([#97](https://github.com/leonqadirie/ash_credo/issues/97)) ([9eaa617](https://github.com/leonqadirie/ash_credo/commit/9eaa617136bc057702ee3dedcac4f0e270be376c)) by [@leonqadirie](https://github.com/leonqadirie)
+* replace persistent term-based cache with ETS ([#100](https://github.com/leonqadirie/ash_credo/issues/100)) ([e6ba2f1](https://github.com/leonqadirie/ash_credo/commit/e6ba2f1700e39c26a78e2de25e056bdfedbecbcd)) by [@leonqadirie](https://github.com/leonqadirie)
 
 
 ### Bug Fixes
 
-* failures when ash_credo is consumed as a dependency ([#102](https://github.com/leonqadirie/ash_credo/issues/102)) ([6be6898](https://github.com/leonqadirie/ash_credo/commit/6be68986c7ea411c6ba620459b1704d0a6a37671))
+* failures when ash_credo is consumed as a dependency ([#102](https://github.com/leonqadirie/ash_credo/issues/102)) ([6be6898](https://github.com/leonqadirie/ash_credo/commit/6be68986c7ea411c6ba620459b1704d0a6a37671)) by [@leonqadirie](https://github.com/leonqadirie)
 
 ## [0.9.0](https://github.com/leonqadirie/ash_credo/compare/v0.8.0...v0.9.0) (2026-04-26)
 
