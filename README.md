@@ -85,6 +85,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `WildcardAcceptOnAction` | Warning | High | No | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
 | `DirectiveInFunctionBody` | Refactor | Normal | No | Flags `require`/`import`/`alias` of configured modules (default `Ash.Query`, `Ash.Expr`) declared inside function bodies instead of at module level |
 | `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |
+| `RaisingCall` | Refactor | Low | No | Flags Ash bang calls - top-level `Ash.read!`/`Ash.create!`/`Ash.Filter.parse!` plus code-interface bangs like `MyApp.Blog.create_post!`. Orphan bangs (those without a non-bang counterpart, e.g. `Ash.stream!`, `Ash.Seed.seed!`) are detected dynamically and skipped. Test directories excluded by default. **Requires compiled project.** |
 | `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals - names the exact code interface function to call instead. **Requires compiled project** and **configurable** (see below). Pair with `Warning.UnknownAction` for typo detection. |
 | `MissingCodeInterface` | Design | Low | No | Flags each action that has no code interface (resource- or domain-level). **Requires compiled project.** |
 | `MissingIdentity` | Design | Normal | No | Suggests identities for attributes like `email`, `username`, `slug`. **Requires compiled project.** |
@@ -98,6 +99,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 Several checks read Ash's runtime introspection (`Ash.Resource.Info`, `Ash.Domain.Info`, and `Ash.Policy.Info`) rather than source AST.
 They see the fully-resolved resource state - including anything Spark transformers or extensions contribute - and catch bugs that pure AST scanning would miss (e.g. identities on AshAuthentication-injected `:email` attributes, fragment-spliced actions, extension-added authorizers).
 
+- `Refactor.RaisingCall`
 - `Refactor.UseCodeInterface`
 - `Design.MissingCodeInterface`
 - `Design.MissingPrimaryAction`
@@ -173,6 +175,7 @@ checks: %{
     {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
     {AshCredo.Check.Refactor.DirectiveInFunctionBody, []},
     {AshCredo.Check.Refactor.LargeResource, []},
+    {AshCredo.Check.Refactor.RaisingCall, []},
     {AshCredo.Check.Refactor.UseCodeInterface, []},
     {AshCredo.Check.Design.MissingCodeInterface, []},
     {AshCredo.Check.Design.MissingIdentity, []},
@@ -197,6 +200,9 @@ The following checks accept custom parameters:
 | `Warning.SensitiveFieldInAccept` | `dangerous_fields` | `~w(is_admin admin permissions api_key secret_key)a` | Field names to flag when found in `accept` lists |
 | `Refactor.DirectiveInFunctionBody` | `directive_modules` | `[Ash.Query, Ash.Expr]` | List of modules whose `require`/`import`/`alias` must live at module level. Add any other macro module your team treats the same way |
 | `Refactor.LargeResource` | `max_lines` | `400` | Maximum line count before triggering |
+| `Refactor.RaisingCall` | `excluded_functions` | `[]` | `{module, :fun!}` tuples to allow without flagging. Bang-only APIs (those with no non-bang counterpart) are detected dynamically by probing `module.__info__(:functions)`, so no curated allowlist is needed - this option only exists for cases where you want to silence a real bang/non-bang pair |
+| `Refactor.RaisingCall` | `excluded_paths` | `[~r"/test/", "test"]` | Paths or regexes to skip. Binary entries match as path segments (`"test"` excludes any file under a `test/` directory) or as full file paths (`"priv/seeds.exs"` excludes that file). Defaults to test directories, where bang versions are idiomatic |
+| `Refactor.RaisingCall` | `flag_bang_only_apis` | `false` | When `true`, also flag bangs whose non-bang counterpart doesn't exist (e.g. `Ash.stream!`, `Ash.Seed.seed!`) with a generic "ensure failures are properly handled" message. Default is `false` since the suggested non-bang twin wouldn't exist for these calls; opt in only if your team policy is "no bare bang calls anywhere" |
 | `Refactor.UseCodeInterface` | `enforce_code_interface_in_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
 | `Refactor.UseCodeInterface` | `enforce_code_interface_outside_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
 | `Refactor.UseCodeInterface` | `prefer_interface_scope` | `:auto` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
