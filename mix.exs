@@ -51,7 +51,7 @@ defmodule AshCredo.MixProject do
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
-      {:igniter, "~> 0.7", optional: true, runtime: false},
+      {:igniter, "~> 0.8", optional: true, runtime: false},
       {:quokka, "~> 2.12", only: [:dev, :test], runtime: false},
       {:reach, "~> 2.3", only: [:dev, :test], runtime: false},
       {:simple_sat, "~> 0.1", only: [:dev, :test], runtime: false}
