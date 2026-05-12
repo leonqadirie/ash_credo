@@ -39,6 +39,7 @@ defmodule AshCredo.MixProject do
   defp deps do
     [
       {:ash, "~> 3.0", only: [:dev, :test], runtime: false},
+      {:boxart, "~> 0.3.3", only: [:dev, :test], runtime: false},
       {:credence, "~> 0.4", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", runtime: false},
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
