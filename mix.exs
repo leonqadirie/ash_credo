@@ -46,6 +46,7 @@ defmodule AshCredo.MixProject do
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
       {:igniter, "~> 0.7", optional: true, runtime: false},
       {:quokka, "~> 2.12", only: [:dev, :test], runtime: false},
+      {:reach, "~> 2.3", only: [:dev, :test], runtime: false},
       {:simple_sat, "~> 0.1", only: [:dev, :test], runtime: false}
     ]
   end
