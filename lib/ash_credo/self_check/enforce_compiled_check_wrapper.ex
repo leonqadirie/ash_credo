@@ -111,10 +111,7 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapper do
     filename
     |> Path.split()
     |> tail_from_last_lib()
-    |> case do
-      ["lib", "ash_credo", "check" | _] -> true
-      _ -> false
-    end
+    |> then(&match?(["lib", "ash_credo", "check" | _], &1))
   end
 
   defp tail_from_last_lib(segments) when is_list(segments) do
