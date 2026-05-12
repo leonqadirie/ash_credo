@@ -31,3 +31,6 @@ ash_credo-*.tar
 *AGENTS.md
 *.claude/
 *.codex/
+
+# Reports
+reach_report
