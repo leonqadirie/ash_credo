@@ -51,14 +51,14 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
       ]
     ]
 
-  alias AshCredo.Introspection
+  alias AshCredo.{Introspection, PathFilter}
   alias AshCredo.Introspection.ResourceContext
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
     excluded_paths = Params.get(params, :excluded_paths, __MODULE__)
 
-    if ignore_path?(source_file.filename, excluded_paths) do
+    if PathFilter.excluded?(source_file.filename, excluded_paths) do
       []
     else
       issue_meta = IssueMeta.for(source_file, params)
@@ -80,16 +80,6 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
       end)
     end
   end
-
-  defp ignore_path?(filename, excluded_paths) do
-    directory = Path.dirname(filename)
-    Enum.any?(excluded_paths, &matches_path?(directory, &1))
-  end
-
-  defp matches_path?(directory, %Regex{} = regex), do: Regex.match?(regex, directory)
-
-  defp matches_path?(directory, path) when is_binary(path),
-    do: String.starts_with?(directory, path)
 
   defp ash_authorize_false_lines(source_file) do
     call_lines =
