@@ -28,7 +28,13 @@ defmodule AshCredo.MixProject do
 
   defp aliases do
     [
-      lint: ["format --check-formatted", "credo", "lint.no_emdash", "lint.credence"]
+      lint: [
+        "format --check-formatted",
+        "credo",
+        "lint.no_emdash",
+        "lint.credence",
+        "lint.reach"
+      ]
     ]
   end
 
@@ -39,6 +45,7 @@ defmodule AshCredo.MixProject do
   defp deps do
     [
       {:ash, "~> 3.0", only: [:dev, :test], runtime: false},
+      {:boxart, "~> 0.3.3", only: [:dev, :test], runtime: false},
       {:credence, "~> 0.4", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", runtime: false},
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
@@ -46,6 +53,7 @@ defmodule AshCredo.MixProject do
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
       {:igniter, "~> 0.7", optional: true, runtime: false},
       {:quokka, "~> 2.12", only: [:dev, :test], runtime: false},
+      {:reach, "~> 2.3", only: [:dev, :test], runtime: false},
       {:simple_sat, "~> 0.1", only: [:dev, :test], runtime: false}
     ]
   end
