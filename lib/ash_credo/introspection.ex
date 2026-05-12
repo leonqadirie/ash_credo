@@ -5,6 +5,7 @@ defmodule AshCredo.Introspection do
     Aliases,
     AshCallScanner,
     LexicalScopeWalker,
+    RemoteBangScanner,
     ResourceContext,
     UseMetadata
   }
@@ -111,6 +112,14 @@ defmodule AshCredo.Introspection do
   `:aliases`, and `:bindings`.
   """
   def ash_api_calls_with_context(source_file), do: AshCallScanner.calls_with_context(source_file)
+
+  @doc """
+  Returns every literal `Mod.fun!(args)` call site in the source file as
+  `{call_ast, expanded_module_segments, fun_name}` tuples. Aliases are
+  resolved lexically. Dynamic call shapes (`apply/3`, variable modules,
+  `__MODULE__`) are skipped.
+  """
+  def remote_bang_calls(source_file), do: RemoteBangScanner.calls(source_file)
 
   @doc "Returns true if the source file or module contains `use Ash.Domain`."
   def ash_domain?({:defmodule, _, _} = module_ast), do: module_uses?(module_ast, [:Ash, :Domain])
