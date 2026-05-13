@@ -78,6 +78,7 @@ defmodule AshCredoFixtures.Blog do
     resource AshCredoFixtures.Blog.Tag
     resource AshCredoFixtures.Blog.Empty
     resource AshCredoFixtures.Blog.WithAuthorizer
+    resource AshCredoFixtures.Blog.WithCalcInterface
   end
 end
 
@@ -283,6 +284,37 @@ defmodule AshCredoFixtures.Blog.WithAuthorizer do
 
   attributes do
     uuid_primary_key :id
+  end
+end
+
+defmodule AshCredoFixtures.Blog.WithCalcInterface do
+  @moduledoc """
+  Fixture resource with a calculation code interface, used by
+  `Refactor.RaisingCall` tests to verify that calculation-interface bang
+  variants (`upcased_title!`) are flagged alongside regular code-interface
+  bangs.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  code_interface do
+    define_calculation :upcased_title
+  end
+
+  actions do
+    defaults [:read]
+    default_accept []
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :title, :string, public?: true
+  end
+
+  calculations do
+    calculate :upcased_title, :string, expr(fragment("upper(?)", title))
   end
 end
 

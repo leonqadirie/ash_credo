@@ -44,6 +44,7 @@ defmodule AshCredo do
             # Refactor
             {AshCredo.Check.Refactor.DirectiveInFunctionBody, false},
             {AshCredo.Check.Refactor.LargeResource, false},
+            {AshCredo.Check.Refactor.RaisingCall, false},
             {AshCredo.Check.Refactor.UseCodeInterface, false},
             # Design
             {AshCredo.Check.Design.MissingCodeInterface, false},

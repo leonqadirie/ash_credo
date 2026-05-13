@@ -58,6 +58,7 @@ defmodule AshCredo.Introspection.Compiled do
   @domain_refs_key_tag {__MODULE__, :domain_refs}
   @macros_key_tag {__MODULE__, :macros}
   @enclosing_domain_key_tag {__MODULE__, :enclosing_domain}
+  @code_interface_bang_key_tag {__MODULE__, :code_interface_bang}
   @ash_available_key {__MODULE__, :ash_available?}
   @ash_missing_warned_key {__MODULE__, :ash_missing_warned}
   @not_loadable_warned_key_tag {__MODULE__, :not_loadable_warned}
@@ -82,6 +83,7 @@ defmodule AshCredo.Introspection.Compiled do
           resource?: boolean(),
           domain: module() | nil,
           interfaces: [struct()],
+          calculation_interfaces: [struct()],
           actions: [struct()],
           attributes: [struct()],
           primary_key: [atom()],
@@ -150,6 +152,15 @@ defmodule AshCredo.Introspection.Compiled do
   def interfaces(module) do
     case inspect_module(module) do
       {:ok, %{interfaces: interfaces}} -> {:ok, interfaces}
+      error -> error
+    end
+  end
+
+  @doc "Returns the resource's list of `%Ash.Resource.CalculationInterface{}` entries."
+  @spec calculation_interfaces(module()) :: {:ok, [struct()]} | {:error, error()}
+  def calculation_interfaces(module) do
+    case inspect_module(module) do
+      {:ok, %{calculation_interfaces: ifaces}} -> {:ok, ifaces}
       error -> error
     end
   end
@@ -347,6 +358,94 @@ defmodule AshCredo.Introspection.Compiled do
       (iface.action || iface.name) == action_name
     end)
   end
+
+  @doc """
+  Returns `{:ok, info}` if `Mod.fun!` resolves to an Ash code-interface bang
+  - i.e. `Mod` is either a resource whose `code_interface` defines `fun`
+  without the trailing `!`, or a domain whose `resources` block declares a
+  matching `define`. `info` is `%{scope: :resource | :domain, interface:
+  struct(), resource: module()}`, where `:resource` is the resource the
+  interface acts on (same as `Mod` for `:resource` scope, the
+  domain-referenced target for `:domain` scope).
+
+  Returns `{:error, :not_code_interface}` for everything else, including
+  non-bang function names, modules that aren't Ash resources or domains,
+  and modules whose interfaces do not declare a matching name. Results
+  (including negatives) are cached per `{module, fun}` so repeated probes
+  of non-Ash modules don't re-run `Code.ensure_compiled/1` on every call.
+
+  Match is by interface `:name` - i.e. the generated function name -
+  not by `:action`. For `define :publish_post, action: :publish`, the
+  generated function is `publish_post!`, which matches against
+  `iface.name == :publish_post`.
+  """
+  @spec code_interface_bang(module(), atom()) ::
+          {:ok, %{scope: :resource | :domain, interface: struct(), resource: module() | nil}}
+          | {:error, :not_code_interface | error()}
+  def code_interface_bang(module, fun) when is_atom(module) and is_atom(fun) do
+    key = {@code_interface_bang_key_tag, module, fun}
+
+    case Cache.get(key, :miss) do
+      :miss ->
+        result = do_code_interface_bang(module, fun)
+        Cache.put(key, result)
+        result
+
+      cached ->
+        cached
+    end
+  end
+
+  defp do_code_interface_bang(module, fun) do
+    fun_str = Atom.to_string(fun)
+
+    if String.ends_with?(fun_str, "!") and ash_available?() do
+      non_bang = String.trim_trailing(fun_str, "!")
+
+      case resource_code_interface(module, non_bang) do
+        {:ok, _info} = ok -> ok
+        {:error, :not_code_interface} -> domain_code_interface(module, non_bang)
+      end
+    else
+      {:error, :not_code_interface}
+    end
+  end
+
+  defp resource_code_interface(module, non_bang) do
+    case inspect_module(module) do
+      {:ok, %{interfaces: ifaces, calculation_interfaces: calc_ifaces}} ->
+        case Enum.find(ifaces ++ calc_ifaces, &interface_named?(&1, non_bang)) do
+          nil -> {:error, :not_code_interface}
+          iface -> {:ok, %{scope: :resource, interface: iface, resource: module}}
+        end
+
+      {:error, _} ->
+        {:error, :not_code_interface}
+    end
+  end
+
+  defp domain_code_interface(module, non_bang) do
+    if domain?(module) do
+      module
+      |> cached_domain_references()
+      |> Enum.find_value({:error, :not_code_interface}, &reference_match(&1, non_bang))
+    else
+      {:error, :not_code_interface}
+    end
+  end
+
+  defp reference_match(ref, non_bang) do
+    case Enum.find(ref.definitions, &interface_named?(&1, non_bang)) do
+      nil -> nil
+      iface -> {:ok, %{scope: :domain, interface: iface, resource: ref.resource}}
+    end
+  end
+
+  defp interface_named?(%{name: name}, non_bang) when is_atom(name) do
+    Atom.to_string(name) == non_bang
+  end
+
+  defp interface_named?(_iface, _non_bang), do: false
 
   @doc """
   Returns the domain-level interface definition for `resource`'s `action_name`
@@ -573,6 +672,7 @@ defmodule AshCredo.Introspection.Compiled do
              resource?: true,
              domain: ResourceInfo.domain(module),
              interfaces: ResourceInfo.interfaces(module),
+             calculation_interfaces: ResourceInfo.calculation_interfaces(module),
              actions: ResourceInfo.actions(module),
              attributes: ResourceInfo.attributes(module),
              primary_key: ResourceInfo.primary_key(module),
