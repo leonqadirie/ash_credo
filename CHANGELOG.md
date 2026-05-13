@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.12.0](https://github.com/leonqadirie/ash_credo/compare/v0.11.0...v0.12.0) (2026-05-13)
+
+
+### Features
+
+* **check:** raising call in ash sites ([#119](https://github.com/leonqadirie/ash_credo/issues/119)) ([a67e75d](https://github.com/leonqadirie/ash_credo/commit/a67e75df603dfc7420322b2471c38bbdc1846fef)) by [@leonqadirie](https://github.com/leonqadirie)
+
 ## [0.11.0](https://github.com/leonqadirie/ash_credo/compare/v0.10.0...v0.11.0) (2026-05-09)
 
 
