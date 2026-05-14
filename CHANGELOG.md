@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.12.1](https://github.com/leonqadirie/ash_credo/compare/v0.12.0...v0.12.1) (2026-05-14)
+
+
+### Bug Fixes
+
+* skip uniqueness checks in embedded resources ([#123](https://github.com/leonqadirie/ash_credo/issues/123)) ([9e6b04e](https://github.com/leonqadirie/ash_credo/commit/9e6b04e33e342316ca21434a8846d9ceeb1ce21c)) by [@leonqadirie](https://github.com/leonqadirie)
+
 ## [0.12.0](https://github.com/leonqadirie/ash_credo/compare/v0.11.0...v0.12.0) (2026-05-13)
 
 
