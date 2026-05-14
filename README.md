@@ -87,8 +87,8 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |
 | `RaisingCall` | Refactor | Low | No | Flags Ash bang calls - top-level `Ash.read!`/`Ash.create!`/`Ash.Filter.parse!` plus code-interface bangs like `MyApp.Blog.create_post!`. Orphan bangs (those without a non-bang counterpart, e.g. `Ash.stream!`, `Ash.Seed.seed!`) are detected dynamically and skipped. Test directories excluded by default. **Requires compiled project.** |
 | `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals - names the exact code interface function to call instead. **Requires compiled project** and **configurable** (see below). Pair with `Warning.UnknownAction` for typo detection. |
-| `MissingCodeInterface` | Design | Low | No | Flags each action that has no code interface (resource- or domain-level). **Requires compiled project.** |
-| `MissingIdentity` | Design | Normal | No | Suggests identities for attributes like `email`, `username`, `slug`. **Requires compiled project.** |
+| `MissingCodeInterface` | Design | Low | No | Flags each action on non-embedded resources that has no code interface (resource- or domain-level). **Requires compiled project.** |
+| `MissingIdentity` | Design | Normal | No | Suggests identities for attributes like `email`, `username`, `slug` on non-embedded resources. **Requires compiled project.** |
 | `MissingPrimaryAction` | Design | Normal | No | Flags missing `primary?: true` when multiple actions of the same type exist. **Requires compiled project.** |
 | `MissingTimestamps` | Design | Normal | No | Suggests adding `timestamps()` to persisted resources. **Requires compiled project.** |
 | `ActionMissingDescription` | Readability | Low | No | Flags actions without a `description` |

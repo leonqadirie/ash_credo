@@ -68,6 +68,14 @@ defmodule AshCredo.Check.Design.MissingIdentity do
        ) do
     resource = Module.concat(segments)
 
+    if CompiledIntrospection.embedded?(resource) do
+      []
+    else
+      inspect_resource(resource, context, candidates, issue_meta)
+    end
+  end
+
+  defp inspect_resource(resource, context, candidates, issue_meta) do
     case CompiledIntrospection.inspect_module(resource) do
       {:ok, info} ->
         flag_missing_identities(resource, info, context, candidates, issue_meta)

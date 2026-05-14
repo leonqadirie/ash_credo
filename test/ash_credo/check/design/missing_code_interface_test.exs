@@ -88,7 +88,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
 
   test "no issue for embedded resources" do
     source = """
-    defmodule MyApp.Blog.PostMetadata do
+    defmodule AshCredoFixtures.Accounts.EmbeddedContact do
       use Ash.Resource, data_layer: :embedded
     end
     """

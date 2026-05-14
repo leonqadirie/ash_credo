@@ -95,10 +95,11 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
          issue_meta,
          excluded_actions
        ) do
-    if Introspection.embedded_resource?(context) do
+    resource = Module.concat(segments)
+
+    if CompiledIntrospection.embedded?(resource) do
       []
     else
-      resource = Module.concat(segments)
       inspect_resource(resource, module_ast, context, issue_meta, excluded_actions)
     end
   end

@@ -147,6 +147,21 @@ defmodule AshCredoFixtures.Accounts.Profile do
   end
 end
 
+defmodule AshCredoFixtures.Accounts.EmbeddedContact do
+  @moduledoc """
+  `MissingIdentity` embedded-resource fixture: declares `data_layer: :embedded`
+  and an `:email` attribute with no covering identity. Identities on embedded
+  resources are silently ignored by Ash (the `Ash.DataLayer.Simple` data layer
+  has no identity enforcement), so the check must skip them.
+  """
+
+  use Ash.Resource, data_layer: :embedded
+
+  attributes do
+    attribute :email, :string, public?: true
+  end
+end
+
 defmodule AshCredoFixtures.Accounts do
   @moduledoc "Fixture domain for cross-domain tests."
 
