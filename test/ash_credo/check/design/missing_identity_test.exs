@@ -58,6 +58,16 @@ defmodule AshCredo.Check.Design.MissingIdentityTest do
              run_check(MissingIdentity, source, identity_candidates: ~w(slug handle phone)a)
   end
 
+  test "ignores embedded resources" do
+    source = """
+    defmodule AshCredoFixtures.Accounts.EmbeddedContact do
+      use Ash.Resource, data_layer: :embedded
+    end
+    """
+
+    assert [] = run_check(MissingIdentity, source)
+  end
+
   test "ignores non-Ash modules" do
     source = """
     defmodule MyApp.Utils do

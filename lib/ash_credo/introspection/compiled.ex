@@ -81,6 +81,7 @@ defmodule AshCredo.Introspection.Compiled do
 
   @type info_map :: %{
           resource?: boolean(),
+          embedded?: boolean(),
           domain: module() | nil,
           interfaces: [struct()],
           calculation_interfaces: [struct()],
@@ -301,6 +302,16 @@ defmodule AshCredo.Introspection.Compiled do
   @spec resource?(module()) :: boolean()
   def resource?(module) when is_atom(module) do
     match?({:ok, %{resource?: true}}, inspect_module(module))
+  end
+
+  @doc """
+  Returns `true` if `module` is a loaded Ash resource flagged as embedded
+  (via `Ash.Resource.Info.embedded?/1`). Returns `false` for non-embedded
+  resources, non-resources, and unloadable modules.
+  """
+  @spec embedded?(module()) :: boolean()
+  def embedded?(module) when is_atom(module) do
+    match?({:ok, %{embedded?: true}}, inspect_module(module))
   end
 
   @doc """
@@ -670,6 +681,7 @@ defmodule AshCredo.Introspection.Compiled do
           {:ok,
            %{
              resource?: true,
+             embedded?: ResourceInfo.embedded?(module),
              domain: ResourceInfo.domain(module),
              interfaces: ResourceInfo.interfaces(module),
              calculation_interfaces: ResourceInfo.calculation_interfaces(module),
