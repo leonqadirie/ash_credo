@@ -4,13 +4,13 @@ defmodule AshCredo.Introspection do
   alias AshCredo.Introspection.{
     Aliases,
     AshCallScanner,
+    Block,
     LexicalScopeWalker,
     RemoteBangScanner,
     ResourceContext,
     UseMetadata
   }
 
-  alias Credo.Code.Block
   alias Credo.SourceFile
 
   @action_entities ~w(create read update destroy action)a
@@ -210,8 +210,7 @@ defmodule AshCredo.Introspection do
   def section_line(_), do: nil
 
   @doc "Returns the flattened list of top-level statements inside a module body."
-  def module_body({:defmodule, _, _} = module_ast), do: do_block_entries(module_ast)
-  def module_body(_), do: []
+  defdelegate module_body(module_ast), to: Block
 
   @doc "Returns the line span of a module AST, if end metadata is available."
   def module_line_count({:defmodule, meta, _}) do
@@ -281,14 +280,9 @@ defmodule AshCredo.Introspection do
   defp use_metadata_opt(%UseMetadata{opts: opts}, key), do: Keyword.get(opts, key)
   defp use_metadata_opt(_, _key), do: nil
 
-  defp section_entries(section_ast), do: do_block_entries(section_ast)
+  defp section_entries(section_ast), do: Block.do_block_entries(section_ast)
 
-  defp do_block_entries(ast) do
-    case Block.do_block_for(ast) do
-      {:ok, _body} -> Block.calls_in_do_block(ast)
-      nil -> []
-    end
-  end
+  defp do_block_entries(ast), do: Block.do_block_entries(ast)
 
   @doc "Extracts keyword options from an entity AST call."
   def entity_opts({_name, _meta, args}) when is_list(args) do
