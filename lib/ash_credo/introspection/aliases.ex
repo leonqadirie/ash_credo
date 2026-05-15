@@ -1,7 +1,7 @@
 defmodule AshCredo.Introspection.Aliases do
   @moduledoc false
 
-  alias AshCredo.Introspection
+  alias AshCredo.Introspection.Block
 
   @doc "Returns top-level alias mappings in a module body, optionally filtered by `:before_line`."
   def module_aliases(module_ast, opts \\ [])
@@ -10,7 +10,7 @@ defmodule AshCredo.Introspection.Aliases do
     before_line = Keyword.get(opts, :before_line)
 
     module_ast
-    |> Introspection.module_body()
+    |> Block.module_body()
     |> Enum.flat_map(fn
       {:alias, meta, _} = alias_ast ->
         if alias_before?(meta[:line], before_line) do
