@@ -160,7 +160,7 @@ Enable additional checks by adding them to the `extra` section of your `.credo.e
 }
 ```
 
-To enable **all** checks at once (`Warning.MissingChangeWrapper`, `Warning.MissingMacroDirective`, and `Warning.PinnedTimeInExpression` are already on by default and do not need an entry):
+To enable **all** checks at once (the default-on checks listed above do not need an entry):
 
 ```elixir
 checks: %{
