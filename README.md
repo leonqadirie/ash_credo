@@ -11,7 +11,11 @@ AshCredo detects common anti-patterns, security pitfalls, and missing best pract
 > [!WARNING]
 > This project is experimental and might break frequently.
 
-**Note: Only `MissingChangeWrapper` and `MissingMacroDirective` are enabled by default.** All other checks are opt-in - enable them individually in your `.credo.exs` (see [Configuration](#configuration)).
+**Note: only the following checks are enabled by default.** All other checks are opt-in - enable them individually in your `.credo.exs` (see [Configuration](#configuration)).
+
+- `Warning.MissingChangeWrapper`
+- `Warning.MissingMacroDirective`
+- `Warning.PinnedTimeInExpression`
 
 ## Installation
 
@@ -78,7 +82,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `MissingPrimaryKey` | Warning | High | No | Ensures resources with data layers have a primary key |
 | `NoActions` | Warning | Normal | No | Flags resources with data layers but no actions defined. **Requires compiled project.** |
 | `OverlyPermissivePolicy` | Warning | High | No | Flags unscoped `authorize_if always()` policies |
-| `PinnedTimeInExpression` | Warning | High | No | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
+| `PinnedTimeInExpression` | Warning | High | Yes | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
 | `SensitiveAttributeExposed` | Warning | High | No | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
 | `SensitiveFieldInAccept` | Warning | High | No | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
 | `UnknownAction` | Warning | High | No | Flags `Ash.*` calls referencing actions that do not exist on the resolved resource, with a fuzzy `Did you mean` hint. **Requires compiled project.** |
@@ -156,7 +160,7 @@ Enable additional checks by adding them to the `extra` section of your `.credo.e
 }
 ```
 
-To enable **all** checks at once (`Warning.MissingChangeWrapper` and `Warning.MissingMacroDirective` are already on by default and do not need an entry):
+To enable **all** checks at once (`Warning.MissingChangeWrapper`, `Warning.MissingMacroDirective`, and `Warning.PinnedTimeInExpression` are already on by default and do not need an entry):
 
 ```elixir
 checks: %{
@@ -168,7 +172,6 @@ checks: %{
     {AshCredo.Check.Warning.MissingPrimaryKey, []},
     {AshCredo.Check.Warning.NoActions, []},
     {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
-    {AshCredo.Check.Warning.PinnedTimeInExpression, []},
     {AshCredo.Check.Warning.SensitiveAttributeExposed, []},
     {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
     {AshCredo.Check.Warning.UnknownAction, []},

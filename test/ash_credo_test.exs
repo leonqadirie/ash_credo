@@ -16,7 +16,8 @@ defmodule AshCredoTest do
   # "enable all checks" README block.
   @default_on_checks [
     {"Warning", "MissingChangeWrapper"},
-    {"Warning", "MissingMacroDirective"}
+    {"Warning", "MissingMacroDirective"},
+    {"Warning", "PinnedTimeInExpression"}
   ]
 
   # A check requires a compiled project iff it aliases
@@ -155,6 +156,43 @@ defmodule AshCredoTest do
       assert_category_ordering(
         enable_all_entries,
         ~s("enable all checks" block in #{@readme_file})
+      )
+    end
+
+    test "default-on bullet list in #{@readme_file} matches @default_on_checks" do
+      readme_content = File.read!(@readme_file)
+
+      bullet_block =
+        case Regex.run(
+               ~r/\*\*Note: only the following checks are enabled by default.*?\n((?:- `[\w.]+`\n)+)/s,
+               readme_content,
+               capture: :all_but_first
+             ) do
+          [block] ->
+            block
+
+          _ ->
+            flunk(~s(Could not find the "enabled by default" bullet list in #{@readme_file}))
+        end
+
+      bullet_entries =
+        Regex.scan(~r/- `(\w+)\.(\w+)`/, bullet_block)
+        |> Enum.map(fn [_full, category, name] -> {category, name} end)
+
+      assert_set_equality(
+        @default_on_checks,
+        bullet_entries,
+        fn {cat, name} ->
+          ~s(AshCredo.Check.#{cat}.#{name} is in @default_on_checks but missing from the "enabled by default" bullet list in #{@readme_file})
+        end,
+        fn {cat, name} ->
+          ~s(`#{cat}.#{name}` is listed in the "enabled by default" bullet list in #{@readme_file} but not in @default_on_checks)
+        end
+      )
+
+      assert_category_ordering(
+        bullet_entries,
+        ~s("enabled by default" bullet list in #{@readme_file})
       )
     end
 
