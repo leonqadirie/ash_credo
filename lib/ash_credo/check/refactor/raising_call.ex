@@ -318,19 +318,13 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
   end
 
   defp counterpart_state(module, bang_name) do
-    non_bang =
-      bang_name |> Atom.to_string() |> String.trim_trailing("!") |> String.to_atom()
+    target = bang_name |> Atom.to_string() |> String.trim_trailing("!")
+    exports = module.__info__(:functions) ++ module.__info__(:macros)
 
-    cond do
-      not exports_name?(module, non_bang) -> :no_counterpart
-      tuple_returning?(module, non_bang) -> :has_tuple
-      true -> :has_non_tuple
+    case Enum.find(exports, fn {n, _} -> Atom.to_string(n) == target end) do
+      nil -> :no_counterpart
+      {non_bang, _} -> if tuple_returning?(module, non_bang), do: :has_tuple, else: :has_non_tuple
     end
-  end
-
-  defp exports_name?(module, name) do
-    Enum.any?(module.__info__(:functions), fn {n, _} -> n == name end) or
-      Enum.any?(module.__info__(:macros), fn {n, _} -> n == name end)
   end
 
   # Considers a function tuple-returning if any of its specs (any arity)
