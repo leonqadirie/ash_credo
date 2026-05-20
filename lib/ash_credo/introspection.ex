@@ -1,12 +1,30 @@
 defmodule AshCredo.Introspection do
-  @moduledoc "Utilities for inspecting Ash DSL constructs in source AST."
+  @moduledoc """
+  Resource- and domain-level introspection of Ash DSL constructs in source AST:
+  resource/domain detection, resource contexts, DSL sections, entities, options,
+  and policies.
+
+  This module owns only those DSL/resource semantics. Lower-level tools live in
+  sibling modules under `AshCredo.Introspection.*` and are called directly by
+  consumers; there is intentionally no single facade re-exporting them:
+
+    * `Aliases` - lexical alias resolution
+    * `AshCallScanner` / `AshCallResolver` / `AshCallSite` - `Ash.*` API call detection
+    * `RemoteBangScanner` - `Mod.fun!/n` call sites
+    * `Block` - do-block and module-body AST access
+    * `LexicalScopeWalker` / `LexicalAliases` - scope-aware traversal
+    * `ResourceContext` / `UseMetadata` - shared data structs
+    * `Compiled` - compile-time/runtime metadata, and the sole gateway for it,
+      enforced by `AshCredo.SelfCheck.EnforceCompiledIntrospectionBoundary`
+
+  Do not add thin pass-through wrappers here for those modules; call the owning
+  module directly so dependencies stay honest.
+  """
 
   alias AshCredo.Introspection.{
     Aliases,
-    AshCallScanner,
     Block,
     LexicalScopeWalker,
-    RemoteBangScanner,
     ResourceContext,
     UseMetadata
   }
@@ -75,7 +93,7 @@ defmodule AshCredo.Introspection do
 
     %ResourceContext{
       module_ast: module_ast,
-      aliases: module_aliases(module_ast),
+      aliases: Aliases.module_aliases(module_ast),
       use_line: use_metadata_line(use_metadata),
       use_opts: normalized_resource_use_opts(use_metadata),
       absolute_segments: absolute_segments
@@ -90,36 +108,6 @@ defmodule AshCredo.Introspection do
     do: module_uses?(module_ast, [:Ash, :Resource])
 
   def ash_resource?(source_file), do: resource_modules(source_file) != []
-
-  @doc "Returns true if the AST node is a call to an `Ash.*` module (e.g. `Ash.read!/2`)."
-  def ash_api_call?(ast, aliases \\ []), do: AshCallScanner.call?(ast, aliases)
-
-  @doc "Returns all `Ash.*` API call AST nodes found in the source file, resolving aliases lexically."
-  def ash_api_calls(source_file), do: AshCallScanner.calls(source_file)
-
-  @doc """
-  Returns all `Ash.*` API call AST nodes found in the source file together with
-  their alias-expanded module segments as `{call_ast, expanded_module_segments}` tuples.
-  """
-  def ash_api_calls_with_module(source_file), do: AshCallScanner.calls_with_module(source_file)
-
-  @doc """
-  Returns all `Ash.*` API call AST nodes found in the source file together with
-  their alias-expanded module segments, normalized call arguments, visible
-  alias mappings, and straight-line local bindings.
-
-  Each result is a map with keys `:call_ast`, `:expanded_module`, `:args`,
-  `:aliases`, and `:bindings`.
-  """
-  def ash_api_calls_with_context(source_file), do: AshCallScanner.calls_with_context(source_file)
-
-  @doc """
-  Returns every literal `Mod.fun!(args)` call site in the source file as
-  `{call_ast, expanded_module_segments, fun_name}` tuples. Aliases are
-  resolved lexically. Dynamic call shapes (`apply/3`, variable modules,
-  `__MODULE__`) are skipped.
-  """
-  def remote_bang_calls(source_file), do: RemoteBangScanner.calls(source_file)
 
   @doc "Returns true if the source file or module contains `use Ash.Domain`."
   def ash_domain?({:defmodule, _, _} = module_ast), do: module_uses?(module_ast, [:Ash, :Domain])
@@ -168,7 +156,7 @@ defmodule AshCredo.Introspection do
   end
 
   def find_dsl_section({:defmodule, _, _} = module_ast, section_name) do
-    Enum.find(module_body(module_ast), fn
+    Enum.find(Block.module_body(module_ast), fn
       {^section_name, _meta, [[do: _body]]} -> true
       _ -> false
     end)
@@ -209,9 +197,6 @@ defmodule AshCredo.Introspection do
   def section_line({_name, meta, _}), do: meta[:line]
   def section_line(_), do: nil
 
-  @doc "Returns the flattened list of top-level statements inside a module body."
-  defdelegate module_body(module_ast), to: Block
-
   @doc "Returns the line span of a module AST, if end metadata is available."
   def module_line_count({:defmodule, meta, _}) do
     with start_line when is_integer(start_line) <- meta[:line],
@@ -248,22 +233,6 @@ defmodule AshCredo.Introspection do
     section_issue_line(section_ast, nil, fallback)
   end
 
-  @doc "Returns top-level alias mappings in a module body, optionally only those declared before a given line."
-  def module_aliases(module_ast, opts \\ []), do: Aliases.module_aliases(module_ast, opts)
-
-  @doc "Expands module alias segments using alias mappings returned by module_aliases/2."
-  def expand_alias(segments, aliases), do: Aliases.expand_alias(segments, aliases)
-
-  @doc "Resolves a module reference within a module or resource context."
-  def resolved_module_ref(ref_or_segments, module_or_context, opts \\ []) do
-    Aliases.resolved_module_ref(ref_or_segments, module_or_context, opts)
-  end
-
-  @doc "Returns true if a module reference resolves to the given module segments."
-  def module_ref?(ref_or_segments, module_or_context, target_segments, opts \\ []) do
-    Aliases.module_ref?(ref_or_segments, module_or_context, target_segments, opts)
-  end
-
   defp normalized_use_opts(%UseMetadata{opts: opts}), do: opts
   defp normalized_use_opts(nil), do: nil
 
@@ -281,8 +250,6 @@ defmodule AshCredo.Introspection do
   defp use_metadata_opt(_, _key), do: nil
 
   defp section_entries(section_ast), do: Block.do_block_entries(section_ast)
-
-  defp do_block_entries(ast), do: Block.do_block_entries(ast)
 
   @doc "Extracts keyword options from an entity AST call."
   def entity_opts({_name, _meta, args}) when is_list(args) do
@@ -334,7 +301,7 @@ defmodule AshCredo.Introspection do
 
   defp do_block_option_occurrences(ast, key) do
     ast
-    |> do_block_entries()
+    |> Block.do_block_entries()
     |> Enum.flat_map(&do_block_option_occurrence(&1, key))
   end
 
@@ -390,7 +357,7 @@ defmodule AshCredo.Introspection do
       entries
       |> filter_entities(:policy_group)
       |> Enum.flat_map(fn group ->
-        group_body = do_block_entries(group)
+        group_body = Block.do_block_entries(group)
         filter_entities(group_body, :policy) ++ filter_entities(group_body, :bypass)
       end)
 
@@ -398,7 +365,7 @@ defmodule AshCredo.Introspection do
   end
 
   @doc "Extracts the body statements from an entity's do block."
-  def entity_body(ast), do: do_block_entries(ast)
+  def entity_body(ast), do: Block.do_block_entries(ast)
 
   defp filter_entities(stmts, name) do
     Enum.filter(stmts, &match?({^name, _, _}, &1))
@@ -406,7 +373,7 @@ defmodule AshCredo.Introspection do
 
   @doc "Searches inside an entity's `do` block for a call matching `call_name`."
   def find_in_body(ast, call_name),
-    do: Enum.find(do_block_entries(ast), &match?({^call_name, _, _}, &1))
+    do: Enum.find(Block.do_block_entries(ast), &match?({^call_name, _, _}, &1))
 
   @doc "Extracts the first atom argument from an entity call (e.g. action name)."
   def entity_name({_call, _meta, [name | _]}) when is_atom(name), do: name
@@ -432,7 +399,7 @@ defmodule AshCredo.Introspection do
   end
 
   defp find_use({:defmodule, _, _} = module_ast, module_aliases) do
-    Enum.find_value(module_body(module_ast), fn
+    Enum.find_value(Block.module_body(module_ast), fn
       {:use, meta, [{:__aliases__, _, ^module_aliases}, opts]} when is_list(opts) ->
         %UseMetadata{line: meta[:line], opts: opts}
 

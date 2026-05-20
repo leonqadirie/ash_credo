@@ -90,7 +90,8 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
       ]
     ]
 
-  alias AshCredo.{Cache, Introspection, PathFilter}
+  alias AshCredo.{Cache, PathFilter}
+  alias AshCredo.Introspection.{AshCallScanner, RemoteBangScanner}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   @counterpart_key_tag {__MODULE__, :counterpart}
@@ -129,13 +130,13 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
 
   defp ash_bang_issues(source_file, excluded_functions, flag_bang_only, issue_meta) do
     source_file
-    |> Introspection.ash_api_calls_with_module()
+    |> AshCallScanner.calls_with_module()
     |> Enum.flat_map(&check_ash_call(&1, excluded_functions, flag_bang_only, issue_meta))
   end
 
   defp code_interface_issues(source_file, excluded_functions, issue_meta) do
     source_file
-    |> Introspection.remote_bang_calls()
+    |> RemoteBangScanner.calls()
     |> Enum.flat_map(&check_code_interface_call(&1, excluded_functions, issue_meta))
   end
 

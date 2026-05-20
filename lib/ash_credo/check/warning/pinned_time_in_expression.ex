@@ -26,6 +26,7 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Introspection.Block
   alias Credo.Code.Name
 
   @time_calls %{
@@ -76,7 +77,7 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
 
   defp module_expr_issues(module_ast, issue_meta) do
     module_ast
-    |> Introspection.module_body()
+    |> Block.module_body()
     |> Enum.reject(&match?({:defmodule, _, _}, &1))
     |> Enum.flat_map(&expr_issues(&1, issue_meta))
   end
