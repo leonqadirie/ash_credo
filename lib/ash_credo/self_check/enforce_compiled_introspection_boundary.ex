@@ -21,7 +21,7 @@ defmodule AshCredo.SelfCheck.EnforceCompiledIntrospectionBoundary do
       """
     ]
 
-  alias AshCredo.Introspection
+  alias AshCredo.Introspection.AshCallScanner
 
   @banned_modules [
     [:Ash, :Resource, :Info],
@@ -45,7 +45,7 @@ defmodule AshCredo.SelfCheck.EnforceCompiledIntrospectionBoundary do
       issue_meta = IssueMeta.for(source_file, params)
 
       source_file
-      |> Introspection.ash_api_calls_with_module()
+      |> AshCallScanner.calls_with_module()
       |> Enum.flat_map(&issue_for_call(&1, issue_meta))
     end
   end

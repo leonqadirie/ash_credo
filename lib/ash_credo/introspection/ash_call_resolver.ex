@@ -37,8 +37,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
       that do not exist on the resolved resource.
   """
 
-  alias AshCredo.Introspection
-  alias AshCredo.Introspection.{AshCallScanner, AshCallSite}
+  alias AshCredo.Introspection.{Aliases, AshCallScanner, AshCallSite}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias Credo.Code.Name
 
@@ -351,7 +350,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
 
   defp literal_segments({:__aliases__, _, segs}, context) when is_list(segs) do
     if Enum.all?(segs, &is_atom/1) do
-      {:ok, Introspection.expand_alias(segs, context.aliases)}
+      {:ok, Aliases.expand_alias(segs, context.aliases)}
     else
       :error
     end
@@ -397,7 +396,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
 
   defp trace_origin({{:., _, [module_ast, fun_name]}, _meta, args}, context, seen)
        when is_list(args) do
-    module = Introspection.resolved_module_ref(module_ast, context)
+    module = Aliases.resolved_module_ref(module_ast, context)
     trace_call_origin(module, fun_name, args, context, seen)
   end
 
@@ -428,7 +427,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
 
   defp piped_call_signature(left, {{:., _, [module_ast, fun_name]}, _meta, args}, context)
        when is_list(args) do
-    {:ok, Introspection.resolved_module_ref(module_ast, context), fun_name, [left | args]}
+    {:ok, Aliases.resolved_module_ref(module_ast, context), fun_name, [left | args]}
   end
 
   defp piped_call_signature(_left, _right, _context), do: :error

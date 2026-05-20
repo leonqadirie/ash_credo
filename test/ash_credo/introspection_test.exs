@@ -2,6 +2,7 @@ defmodule AshCredo.IntrospectionTest do
   use AshCredo.CheckCase
 
   alias AshCredo.Introspection
+  alias AshCredo.Introspection.{Aliases, AshCallScanner, Block}
 
   @ash_resource """
   defmodule MyApp.Post do
@@ -173,35 +174,35 @@ defmodule AshCredo.IntrospectionTest do
   describe "ash_api_call?/2" do
     test "matches direct Ash.* calls" do
       ast = quote(do: Ash.read!(MyApp.User))
-      assert Introspection.ash_api_call?(ast)
+      assert AshCallScanner.call?(ast)
     end
 
     test "matches Ash submodule calls" do
       ast = quote(do: Ash.Query.for_read(MyApp.User, :list))
-      assert Introspection.ash_api_call?(ast)
+      assert AshCallScanner.call?(ast)
     end
 
     test "does not match non-Ash calls" do
       ast = quote(do: SomeOtherLib.run(query))
-      refute Introspection.ash_api_call?(ast)
+      refute AshCallScanner.call?(ast)
     end
 
     test "resolves aliased Ash module" do
       aliases = [{[:A], [:Ash]}]
       ast = quote(do: A.read!(MyApp.User))
-      assert Introspection.ash_api_call?(ast, aliases)
+      assert AshCallScanner.call?(ast, aliases)
     end
 
     test "resolves aliased Ash submodule" do
       aliases = [{[:Q], [:Ash, :Query]}]
       ast = quote(do: Q.for_read(MyApp.User, :list))
-      assert Introspection.ash_api_call?(ast, aliases)
+      assert AshCallScanner.call?(ast, aliases)
     end
 
     test "does not match aliased non-Ash module" do
       aliases = [{[:S], [:SomeOtherLib]}]
       ast = quote(do: S.run(query))
-      refute Introspection.ash_api_call?(ast, aliases)
+      refute AshCallScanner.call?(ast, aliases)
     end
   end
 
@@ -211,7 +212,7 @@ defmodule AshCredo.IntrospectionTest do
       Ash.read!(MyApp.User)
       """
 
-      calls = Introspection.ash_api_calls(source_file(source))
+      calls = AshCallScanner.calls(source_file(source))
       assert [_] = calls
     end
 
@@ -224,7 +225,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      calls = Introspection.ash_api_calls(source_file(source))
+      calls = AshCallScanner.calls(source_file(source))
       assert [_] = calls
     end
 
@@ -239,7 +240,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      calls = Introspection.ash_api_calls(source_file(source))
+      calls = AshCallScanner.calls(source_file(source))
       assert [_] = calls
     end
 
@@ -253,7 +254,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      calls = Introspection.ash_api_calls(source_file(source))
+      calls = AshCallScanner.calls(source_file(source))
       assert [_] = calls
     end
 
@@ -272,7 +273,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      calls = Introspection.ash_api_calls(source_file(source))
+      calls = AshCallScanner.calls(source_file(source))
       assert [_] = calls
     end
 
@@ -285,7 +286,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      calls = Introspection.ash_api_calls(source_file(source))
+      calls = AshCallScanner.calls(source_file(source))
       assert calls == []
     end
 
@@ -304,7 +305,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      calls = Introspection.ash_api_calls(source_file(source))
+      calls = AshCallScanner.calls(source_file(source))
       assert [_, _] = calls
     end
   end
@@ -323,7 +324,7 @@ defmodule AshCredo.IntrospectionTest do
       [{call_ast, expanded_module}] =
         source
         |> source_file()
-        |> Introspection.ash_api_calls_with_module()
+        |> AshCallScanner.calls_with_module()
 
       assert expanded_module == [:Ash, :Query]
 
@@ -347,7 +348,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      calls = Introspection.ash_api_calls_with_module(source_file(source))
+      calls = AshCallScanner.calls_with_module(source_file(source))
       assert [_] = calls
     end
   end
@@ -367,7 +368,7 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      calls = Introspection.ash_api_calls_with_context(source_file(source))
+      calls = AshCallScanner.calls_with_context(source_file(source))
 
       bulk_update =
         Enum.find(calls, fn %{call_ast: {{:., _, [_module, fun_name]}, _, _args}} ->
@@ -401,7 +402,7 @@ defmodule AshCredo.IntrospectionTest do
       calls =
         source
         |> source_file()
-        |> Introspection.ash_api_calls_with_context()
+        |> AshCallScanner.calls_with_context()
         |> Enum.filter(fn %{call_ast: {{:., _, [_module, fun_name]}, _, _args}} ->
           fun_name == :bulk_update
         end)
@@ -423,7 +424,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       [%{call_ast: call_ast, expanded_module: expanded_module, aliases: aliases}] =
-        Introspection.ash_api_calls_with_context(source_file(source))
+        AshCallScanner.calls_with_context(source_file(source))
 
       assert expanded_module == [:Ash]
       assert {[:A], [:Ash]} in aliases
@@ -571,7 +572,7 @@ defmodule AshCredo.IntrospectionTest do
   describe "module_body/1" do
     test "returns top-level statements from a module body" do
       [resource] = Introspection.resource_modules(source_file(@ash_resource))
-      body = Introspection.module_body(resource)
+      body = Block.module_body(resource)
       assert is_list(body)
 
       {has_use?, has_actions?} =
@@ -584,7 +585,7 @@ defmodule AshCredo.IntrospectionTest do
     end
 
     test "returns empty list for non-modules" do
-      assert [] == Introspection.module_body(nil)
+      assert [] == Block.module_body(nil)
     end
   end
 
@@ -600,7 +601,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       [resource] = Introspection.resource_modules(source_file(source))
-      aliases = Introspection.module_aliases(resource, before_line: 5)
+      aliases = Aliases.module_aliases(resource, before_line: 5)
 
       assert {[:Authorizer], [:Ash, :Policy, :Authorizer]} in aliases
       assert {[:Bypass], [:Ash, :Policy, :Bypass]} in aliases
@@ -621,7 +622,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       [resource] = Introspection.resource_modules(source_file(source))
-      aliases = Introspection.module_aliases(resource, before_line: 8)
+      aliases = Aliases.module_aliases(resource, before_line: 8)
 
       assert {[:Authorizer], [:Ash, :Policy, :Authorizer]} in aliases
 
@@ -639,10 +640,10 @@ defmodule AshCredo.IntrospectionTest do
       ]
 
       assert [:Ash, :Policy, :Authorizer] ==
-               Introspection.expand_alias([:PolicyAuthorizer], aliases)
+               Aliases.expand_alias([:PolicyAuthorizer], aliases)
 
       assert [:Ash, :Policy, :Authorizer] ==
-               Introspection.expand_alias([:Policy, :Authorizer], aliases)
+               Aliases.expand_alias([:Policy, :Authorizer], aliases)
     end
   end
 
@@ -753,9 +754,9 @@ defmodule AshCredo.IntrospectionTest do
       [authorizer] = Keyword.get(context.use_opts, :authorizers)
 
       assert [:Ash, :Policy, :Authorizer] ==
-               Introspection.resolved_module_ref(authorizer, context)
+               Aliases.resolved_module_ref(authorizer, context)
 
-      assert Introspection.module_ref?(authorizer, context, [:Ash, :Policy, :Authorizer])
+      assert Aliases.module_ref?(authorizer, context, [:Ash, :Policy, :Authorizer])
     end
 
     test "does not use aliases declared after the reference" do
@@ -772,8 +773,8 @@ defmodule AshCredo.IntrospectionTest do
       [context] = Introspection.resource_contexts(source_file(source))
       [authorizer] = Keyword.get(context.use_opts, :authorizers)
 
-      assert [:Authorizer] == Introspection.resolved_module_ref(authorizer, context)
-      refute Introspection.module_ref?(authorizer, context, [:Ash, :Policy, :Authorizer])
+      assert [:Authorizer] == Aliases.resolved_module_ref(authorizer, context)
+      refute Aliases.module_ref?(authorizer, context, [:Ash, :Policy, :Authorizer])
     end
   end
 

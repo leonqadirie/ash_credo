@@ -52,7 +52,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
     ]
 
   alias AshCredo.{Introspection, PathFilter}
-  alias AshCredo.Introspection.ResourceContext
+  alias AshCredo.Introspection.{AshCallScanner, ResourceContext}
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
@@ -83,7 +83,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
 
   defp ash_authorize_false_lines(source_file) do
     call_lines =
-      for {_call, meta, args} <- Introspection.ash_api_calls(source_file),
+      for {_call, meta, args} <- AshCallScanner.calls(source_file),
           has_authorize_false?(args),
           do: meta[:line]
 
