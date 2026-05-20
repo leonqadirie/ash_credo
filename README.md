@@ -38,7 +38,7 @@ Add `ash_credo` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:ash_credo, "~> 0.12", only: [:dev, :test], runtime: false}
+    {:ash_credo, "~> 0.13", only: [:dev, :test], runtime: false}
   ]
 end
 ```

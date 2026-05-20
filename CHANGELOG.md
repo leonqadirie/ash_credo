@@ -1,6 +1,17 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.13.0](https://github.com/leonqadirie/ash_credo/compare/v0.12.1...v0.13.0) (2026-05-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* hoist `PinnedTimeInExpression` check to be enabled by default. It is expected this is an accident in the overwhelming amount of times and in the unlikely case it is not, a local override is preferred.
+
+### Features
+
+* hoist `PinnedTimeInExpression` check to be enabled by default ([#127](https://github.com/leonqadirie/ash_credo/issues/127)) ([80397a6](https://github.com/leonqadirie/ash_credo/commit/80397a64e309476169a9b164909a174a6606f196)) by [@leonqadirie](https://github.com/leonqadirie)
+
 ## [0.12.1](https://github.com/leonqadirie/ash_credo/compare/v0.12.0...v0.12.1) (2026-05-14)
 
 
