@@ -196,7 +196,7 @@ defmodule AshCredoTest do
       )
     end
 
-    test "compiled-project bullet list in #{@readme_file} matches filesystem" do
+    test "compiled-project bullet list in #{@readme_file} matches filesystem and is sorted within categories" do
       compiled = compiled_check_modules()
       readme_content = File.read!(@readme_file)
 
@@ -228,6 +228,11 @@ defmodule AshCredoTest do
         fn {cat, name} ->
           ~s(`#{cat}.#{name}` is listed under "## Checks that require a compiled project" in #{@readme_file} but its source does not alias `AshCredo.Introspection.Compiled`)
         end
+      )
+
+      assert_category_ordering(
+        bullet_entries,
+        ~s("Checks that require a compiled project" bullet list in #{@readme_file})
       )
     end
 

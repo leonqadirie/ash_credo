@@ -103,16 +103,16 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 Several checks read Ash's runtime introspection (`Ash.Resource.Info`, `Ash.Domain.Info`, and `Ash.Policy.Info`) rather than source AST.
 They see the fully-resolved resource state - including anything Spark transformers or extensions contribute - and catch bugs that pure AST scanning would miss (e.g. identities on AshAuthentication-injected `:email` attributes, fragment-spliced actions, extension-added authorizers).
 
+- `Warning.AuthorizerWithoutPolicies`
+- `Warning.MissingMacroDirective`
+- `Warning.NoActions`
+- `Warning.UnknownAction`
 - `Refactor.RaisingCall`
 - `Refactor.UseCodeInterface`
 - `Design.MissingCodeInterface`
+- `Design.MissingIdentity`
 - `Design.MissingPrimaryAction`
 - `Design.MissingTimestamps`
-- `Design.MissingIdentity`
-- `Warning.MissingMacroDirective`
-- `Warning.NoActions`
-- `Warning.AuthorizerWithoutPolicies`
-- `Warning.UnknownAction`
 
 **Your project must be compiled before running `mix credo`**, otherwise these checks emit a configuration diagnostic and become a no-op.
 Typically chain the two commands in a Mix alias:
