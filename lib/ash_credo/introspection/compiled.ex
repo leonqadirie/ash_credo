@@ -295,7 +295,9 @@ defmodule AshCredo.Introspection.Compiled do
       _ -> {:error, :not_loadable}
     end
   rescue
-    _ -> {:error, :not_loadable}
+    # TOCTOU: module purged between the `function_exported?` check and the
+    # `__info__/1` call.
+    UndefinedFunctionError -> {:error, :not_loadable}
   end
 
   @doc "Returns `true` if `module` is an Ash resource loadable in this VM."
@@ -354,7 +356,8 @@ defmodule AshCredo.Introspection.Compiled do
     |> Keyword.get_values(:behaviour)
     |> List.flatten()
   rescue
-    _ -> []
+    # TOCTOU: module purged after the caller's `Code.ensure_compiled/1`.
+    UndefinedFunctionError -> []
   end
 
   @doc """
@@ -707,7 +710,9 @@ defmodule AshCredo.Introspection.Compiled do
   defp read_policies(module) do
     Ash.Policy.Info.policies(module)
   rescue
-    _ -> []
+    # `policies/1` raises `ArgumentError` when `module` is not a Spark DSL
+    # module, or `UndefinedFunctionError` if it was purged.
+    _ in [ArgumentError, UndefinedFunctionError] -> []
   end
 
   defp cache_fetch(module) do
