@@ -14,59 +14,91 @@ defmodule AshCredo.Check.Warning.MissingPrimaryKey do
           uuid_v7_primary_key :id
           integer_primary_key :id
           attribute :id, :uuid, primary_key?: true, allow_nil?: false
+
+      A composite primary key assembled from `belongs_to ..., primary_key?: true`
+      relationships counts too, as does a primary key contributed by a
+      `Spark.Dsl.Fragment` or by an extension (e.g. `AshEventLog.EventLog`).
+
+      This check reads Ash's runtime introspection
+      (`Ash.Resource.Info.primary_key/1`) to see the fully-resolved primary
+      key, so keys spliced in via fragments or added by extension
+      transformers are recognised - not just the ones declared lexically in
+      the resource's own `attributes`/`relationships` blocks.
+
+      ## Requirements
+
+      Your project must be compiled before running `mix credo`. If Ash is
+      not available in the VM running Credo, the check is a no-op and emits
+      a single diagnostic.
+
+      ## Notes
+
+      A resource counts as "backed by a data layer" only when it declares a
+      non-embedded `data_layer:` in its own `use Ash.Resource` call. A data
+      layer contributed entirely by a fragment or extension is not detected
+      here, so such a resource is skipped - the same AST-level gate every
+      compiled check shares.
       """
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
+  alias AshCredo.Introspection.ResourceContext
   alias AshCredo.Orchestration
 
-  @primary_key_entities ~w(uuid_primary_key uuid_v7_primary_key integer_primary_key)a
-
   @impl true
-  def run(%SourceFile{} = source_file, params),
-    do: Orchestration.flat_map_resource_context(source_file, params, &check_for_primary_key/2)
-
-  defp check_for_primary_key(context, issue_meta) do
-    if Introspection.has_data_layer?(context) do
-      attrs_ast = Introspection.resource_section(context, :attributes)
-      rels_ast = Introspection.resource_section(context, :relationships)
-
-      if has_pk_entity?(attrs_ast) or has_pk_attribute?(attrs_ast) or
-           has_pk_relationship?(rels_ast) do
-        []
-      else
-        [
-          format_issue(issue_meta,
-            message: "Resource is missing a primary key.",
-            trigger: "attributes",
-            line_no: Introspection.resource_issue_line(context, attrs_ast)
-          )
-        ]
+  def run(%SourceFile{} = source_file, params) do
+    CompiledIntrospection.with_compiled_check(
+      fn ->
+        format_issue(IssueMeta.for(source_file, params),
+          message:
+            "Ash is not loaded in the VM running Credo - `MissingPrimaryKey` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
+          line_no: 1
+        )
+      end,
+      fn ->
+        Orchestration.flat_map_loadable_resource(source_file, params, &check_loaded_resource/3)
       end
-    else
-      []
+    )
+  end
+
+  defp check_loaded_resource(
+         resource,
+         %ResourceContext{module_ast: module_ast} = context,
+         issue_meta
+       ) do
+    case CompiledIntrospection.primary_key(resource) do
+      {:ok, [_ | _]} ->
+        []
+
+      {:ok, []} ->
+        [missing_primary_key_issue(module_ast, context, issue_meta)]
+
+      {:error, :not_loadable} ->
+        CompiledIntrospection.with_unique_not_loadable(resource, fn ->
+          not_loadable_issue(resource, context, issue_meta)
+        end)
+
+      {:error, _} ->
+        []
     end
   end
 
-  defp has_pk_entity?(nil), do: false
+  defp missing_primary_key_issue(module_ast, context, issue_meta) do
+    attrs_ast = Introspection.find_dsl_section(module_ast, :attributes)
 
-  defp has_pk_entity?(attrs_ast) do
-    Enum.any?(@primary_key_entities, &Introspection.has_entity?(attrs_ast, &1))
+    format_issue(issue_meta,
+      message: "Resource is missing a primary key.",
+      trigger: "attributes",
+      line_no: Introspection.resource_issue_line(context, attrs_ast)
+    )
   end
 
-  defp has_pk_attribute?(nil), do: false
-
-  defp has_pk_attribute?(attrs_ast) do
-    attrs_ast
-    |> Introspection.entities(:attribute)
-    |> Enum.any?(&Introspection.entity_has_opt?(&1, :primary_key?, true))
-  end
-
-  defp has_pk_relationship?(nil), do: false
-
-  defp has_pk_relationship?(rels_ast) do
-    rels_ast
-    |> Introspection.entities(:belongs_to)
-    |> Enum.any?(&Introspection.entity_has_opt?(&1, :primary_key?, true))
+  defp not_loadable_issue(resource, context, issue_meta) do
+    format_issue(issue_meta,
+      message:
+        "Could not load `#{inspect(resource)}` for `MissingPrimaryKey`. Run `mix compile` before `mix credo`, or disable this check in `.credo.exs`.",
+      line_no: Map.get(context, :use_line) || 1
+    )
   end
 end
