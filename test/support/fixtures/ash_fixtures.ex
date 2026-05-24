@@ -473,3 +473,42 @@ defmodule AshCredoFixtures.Blog.PostTag do
     default_accept []
   end
 end
+
+defmodule AshCredoFixtures.OptOutPrimaryKey do
+  @moduledoc """
+  `MissingPrimaryKey` happy-path fixture for the `require_primary_key? false`
+  opt-out (Ash verifier branch 3). It has a field and no primary key, so
+  `Ash.Resource.Info.primary_key/1` returns `[]`, but the explicit opt-out
+  means Ash raises nothing - the check must not flag it.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  resource do
+    require_primary_key? false
+  end
+
+  attributes do
+    attribute :title, :string, public?: true
+  end
+end
+
+defmodule AshCredoFixtures.GenericOnlyNoFields do
+  @moduledoc """
+  `MissingPrimaryKey` happy-path fixture for the generic-only/no-fields
+  exemption (Ash verifier branch 4): a resource whose only action is generic
+  and which declares no fields, so Ash does not require a primary key.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  actions do
+    action :ping do
+      run fn _input, _ -> :ok end
+    end
+  end
+end

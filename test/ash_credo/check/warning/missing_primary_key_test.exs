@@ -55,6 +55,34 @@ defmodule AshCredo.Check.Warning.MissingPrimaryKeyTest do
     assert [] = run_check(MissingPrimaryKey, source)
   end
 
+  test "no issue when the resource opts out via require_primary_key? false" do
+    # Ash verifier branch 3: an explicit opt-out is respected, so a data-layer
+    # backed resource that legitimately has no PK must not be flagged.
+    source = """
+    defmodule AshCredoFixtures.OptOutPrimaryKey do
+      use Ash.Resource,
+        domain: AshCredoFixtures.Blog,
+        data_layer: AshPostgres.DataLayer
+    end
+    """
+
+    assert [] = run_check(MissingPrimaryKey, source)
+  end
+
+  test "no issue for a resource with only generic actions and no fields" do
+    # Ash verifier branch 4: a resource exposing only generic actions and no
+    # fields does not require a primary key.
+    source = """
+    defmodule AshCredoFixtures.GenericOnlyNoFields do
+      use Ash.Resource,
+        domain: AshCredoFixtures.Blog,
+        data_layer: AshPostgres.DataLayer
+    end
+    """
+
+    assert [] = run_check(MissingPrimaryKey, source)
+  end
+
   test "ignores resources without a data layer" do
     source = """
     defmodule AshCredoFixtures.NoPrimaryKey do

@@ -38,6 +38,11 @@ defmodule AshCredo.Check.Warning.MissingPrimaryKey do
       layer contributed entirely by a fragment or extension is not detected
       here, so such a resource is skipped - the same AST-level gate every
       compiled check shares.
+
+      Resources that Ash itself does not require a primary key for are not
+      flagged either: those that opt out with `require_primary_key? false`,
+      and those that expose only generic actions and have no fields. This
+      mirrors `Ash.Resource.Verifiers.VerifyPrimaryKeyPresent`.
       """
     ]
 
@@ -72,7 +77,11 @@ defmodule AshCredo.Check.Warning.MissingPrimaryKey do
         []
 
       {:ok, []} ->
-        [missing_primary_key_issue(module_ast, context, issue_meta)]
+        if CompiledIntrospection.primary_key_optional?(resource) do
+          []
+        else
+          [missing_primary_key_issue(module_ast, context, issue_meta)]
+        end
 
       {:error, :not_loadable} ->
         CompiledIntrospection.with_unique_not_loadable(resource, fn ->
