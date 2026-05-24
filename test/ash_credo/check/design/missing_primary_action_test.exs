@@ -57,6 +57,19 @@ defmodule AshCredo.Check.Design.MissingPrimaryActionTest do
     assert issue.message =~ "primary?"
   end
 
+  test "no issue for multiple generic actions without a primary" do
+    # Blog.GenericActions has `:ping` and `:pong` generic actions, neither
+    # primary. Generic actions are never invoked implicitly so `primary?` has
+    # no behavioral effect - the check must not flag them.
+    source = """
+    defmodule AshCredoFixtures.Blog.GenericActions do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+    end
+    """
+
+    assert [] = run_check(MissingPrimaryAction, source)
+  end
+
   test "alias-expands a top-level aliased defmodule name to the real module" do
     # Regression: `Introspection.all_modules_with_path/1` used to treat the
     # literal segments of a `defmodule` name as absolute, so a top-level

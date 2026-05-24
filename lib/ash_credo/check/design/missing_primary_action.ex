@@ -5,14 +5,20 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
     tags: [:ash],
     explanations: [
       check: """
-      When multiple actions of the same type exist (e.g., two `:create` actions),
-      one should declare `primary?: true`. Without this, Ash raises at runtime
-      when framework features implicitly invoke the primary action.
+      When multiple actions of the same CRUD type exist (e.g., two `:create`
+      actions), one should declare `primary?: true`. Without this, Ash raises
+      at runtime when framework features implicitly invoke the primary action,
+      e.g. default action resolution or `manage_relationship`.
 
           create :register do
             primary? true
             # ...
           end
+
+      Generic actions (type `:action`) are intentionally excluded: they are
+      never invoked implicitly - callers always name them via
+      `Ash.run_action/2` - so `primary?` has no behavioral effect for them. It
+      is only consulted for `:create`, `:read`, `:update`, and `:destroy`.
 
       This check uses Ash's runtime introspection (`Ash.Resource.Info.actions/1`)
       to see the fully-resolved action list - including actions contributed by
@@ -32,7 +38,9 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias AshCredo.Introspection.ResourceContext
 
-  @action_types ~w(create read update destroy action)a
+  # Generic actions (`:action`) are excluded: they are never invoked implicitly,
+  # so `primary?` has no behavioral effect for them.
+  @action_types ~w(create read update destroy)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
