@@ -93,7 +93,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `UseCodeInterface` | Refactor | Normal | No | Flags `Ash.*` calls where both resource and action are literals - names the exact code interface function to call instead. **Requires compiled project** and **configurable** (see below). Pair with `Warning.UnknownAction` for typo detection. |
 | `MissingCodeInterface` | Design | Low | No | Flags each action on non-embedded resources that has no code interface (resource- or domain-level). **Requires compiled project.** |
 | `MissingIdentity` | Design | Normal | No | Suggests identities for attributes like `email`, `username`, `slug` on non-embedded resources. **Requires compiled project.** |
-| `MissingPrimaryAction` | Design | Normal | No | Flags missing `primary?: true` when multiple actions of the same type exist. **Requires compiled project.** |
+| `MissingPrimaryAction` | Design | Normal | No | Flags missing `primary?: true` when multiple actions of the same CRUD type exist (generic `:action` types are excluded). **Requires compiled project.** |
 | `MissingTimestamps` | Design | Normal | No | Suggests adding `timestamps()` to persisted resources. **Requires compiled project.** |
 | `ActionMissingDescription` | Readability | Low | No | Flags actions without a `description` |
 | `BelongsToMissingAllowNil` | Readability | Normal | No | Flags `belongs_to` without explicit `allow_nil?` |

@@ -76,6 +76,7 @@ defmodule AshCredoFixtures.Blog do
     resource AshCredoFixtures.Blog.PartialTimestamps
     resource AshCredoFixtures.Blog.CustomTimestamps
     resource AshCredoFixtures.Blog.Tag
+    resource AshCredoFixtures.Blog.GenericActions
     resource AshCredoFixtures.Blog.Empty
     resource AshCredoFixtures.Blog.WithAuthorizer
     resource AshCredoFixtures.Blog.WithCalcInterface
@@ -336,9 +337,10 @@ end
 defmodule AshCredoFixtures.Blog.Tag do
   @moduledoc """
   Resource with multiple `:create` actions and no `primary?: true`. Ash
-  emits a verification warning but compiles the module, so we can
-  introspect it via `Ash.Resource.Info.actions/1` for the
-  `Design.MissingPrimaryAction` failure-path test.
+  compiles this without any error or warning - a missing primary action
+  only fails at runtime - so we can introspect it via
+  `Ash.Resource.Info.actions/1` for the `Design.MissingPrimaryAction`
+  failure-path test.
   """
 
   use Ash.Resource,
@@ -355,6 +357,37 @@ defmodule AshCredoFixtures.Blog.Tag do
   attributes do
     uuid_primary_key :id
     attribute :name, :string, public?: true
+  end
+end
+
+defmodule AshCredoFixtures.Blog.GenericActions do
+  @moduledoc """
+  `MissingPrimaryAction` regression fixture: has multiple generic actions
+  (type `:action`) and none marked `primary?: true`. Generic
+  actions are never invoked implicitly - callers always name them via
+  `Ash.run_action/2` - so `primary?` has no behavioral effect and the check
+  must not flag them.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  actions do
+    defaults [:read]
+    default_accept []
+
+    action :ping do
+      run fn _input, _ -> :ok end
+    end
+
+    action :pong do
+      run fn _input, _ -> :ok end
+    end
+  end
+
+  attributes do
+    uuid_primary_key :id
   end
 end
 
