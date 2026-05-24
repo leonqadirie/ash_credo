@@ -337,9 +337,10 @@ end
 defmodule AshCredoFixtures.Blog.Tag do
   @moduledoc """
   Resource with multiple `:create` actions and no `primary?: true`. Ash
-  emits a verification warning but compiles the module, so we can
-  introspect it via `Ash.Resource.Info.actions/1` for the
-  `Design.MissingPrimaryAction` failure-path test.
+  compiles this without any error or warning - a missing primary action
+  only fails at runtime - so we can introspect it via
+  `Ash.Resource.Info.actions/1` for the `Design.MissingPrimaryAction`
+  failure-path test.
   """
 
   use Ash.Resource,
