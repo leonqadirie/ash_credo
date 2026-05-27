@@ -51,6 +51,7 @@
           {ExSlop.Check.Refactor.ListFold, []},
           {ExSlop.Check.Refactor.ListLast, []},
           {ExSlop.Check.Refactor.LengthInGuard, []},
+          {ExSlop.Check.Refactor.LengthComparison, []},
           {ExSlop.Check.Refactor.ExplicitSumReduce, []},
 
           # ExSlop - Readability Checks
