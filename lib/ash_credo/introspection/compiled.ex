@@ -42,7 +42,6 @@ defmodule AshCredo.Introspection.Compiled do
   alias Ash.Resource.Info, as: ResourceInfo
   alias Ash.Type.NewType
   alias AshCredo.Cache
-  alias Spark.Dsl.Extension
 
   @compile {:no_warn_undefined,
             [
@@ -51,8 +50,7 @@ defmodule AshCredo.Introspection.Compiled do
               Ash.Policy.Info,
               Ash.Policy.Authorizer,
               Ash.Type,
-              Ash.Type.NewType,
-              Spark.Dsl.Extension
+              Ash.Type.NewType
             ]}
 
   # Tags namespace per-key entries inside the shared cache table.
@@ -90,8 +88,6 @@ defmodule AshCredo.Introspection.Compiled do
           actions: [struct()],
           attributes: [struct()],
           primary_key: [atom()],
-          require_primary_key?: boolean(),
-          has_fields?: boolean(),
           identities: [struct()],
           authorizers: [module()],
           policies: [struct()]
@@ -194,28 +190,6 @@ defmodule AshCredo.Introspection.Compiled do
     case inspect_module(module) do
       {:ok, %{primary_key: keys}} -> {:ok, keys}
       error -> error
-    end
-  end
-
-  @doc """
-  Returns `true` if Ash itself would not require a primary key on this
-  resource even though it has none - mirroring branches 3 and 4 of
-  `Ash.Resource.Verifiers.VerifyPrimaryKeyPresent`: the resource opts out via
-  `require_primary_key? false`, or it exposes only generic actions and has no
-  fields.
-
-  Only meaningful for a resource whose `primary_key/1` is empty. Returns
-  `false` for unloadable or non-resource modules.
-  """
-  @spec primary_key_optional?(module()) :: boolean()
-  def primary_key_optional?(module) when is_atom(module) do
-    case inspect_module(module) do
-      {:ok, info} ->
-        not info.require_primary_key? or
-          (not info.has_fields? and Enum.all?(info.actions, &(&1.type == :action)))
-
-      {:error, _} ->
-        false
     end
   end
 
@@ -717,9 +691,6 @@ defmodule AshCredo.Introspection.Compiled do
              actions: ResourceInfo.actions(module),
              attributes: ResourceInfo.attributes(module),
              primary_key: ResourceInfo.primary_key(module),
-             require_primary_key?:
-               Extension.get_opt(module, [:resource], :require_primary_key?, true),
-             has_fields?: ResourceInfo.fields(module) != [],
              identities: ResourceInfo.identities(module),
              authorizers: ResourceInfo.authorizers(module),
              policies: read_policies(module)

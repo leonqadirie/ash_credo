@@ -79,7 +79,6 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `MissingChangeWrapper` | Warning | High | Yes | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions |
 | `MissingDomain` | Warning | Normal | No | Ensures non-embedded resources set the `domain:` option |
 | `MissingMacroDirective` | Warning | High | Yes | Flags qualified calls to `Ash.Query`/`Ash.Expr` macros (`filter`, `expr`, ...) when the enclosing module does not have a matching module-level `require`/`import`. Catches the runtime `UndefinedFunctionError` that slips past the compiler when the macro argument is a bare runtime value. **Requires compiled project** and **configurable**. |
-| `MissingPrimaryKey` | Warning | High | No | Ensures resources with data layers have a primary key, including composite keys and keys supplied by fragments or extensions. **Requires compiled project.** |
 | `NoActions` | Warning | Normal | No | Flags resources with data layers but no actions defined. **Requires compiled project.** |
 | `OverlyPermissivePolicy` | Warning | High | No | Flags unscoped `authorize_if always()` policies |
 | `PinnedTimeInExpression` | Warning | High | Yes | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
@@ -105,7 +104,6 @@ They see the fully-resolved resource state - including anything Spark transforme
 
 - `Warning.AuthorizerWithoutPolicies`
 - `Warning.MissingMacroDirective`
-- `Warning.MissingPrimaryKey`
 - `Warning.NoActions`
 - `Warning.UnknownAction`
 - `Refactor.RaisingCall`
@@ -170,7 +168,6 @@ checks: %{
     {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
     {AshCredo.Check.Warning.EmptyDomain, []},
     {AshCredo.Check.Warning.MissingDomain, []},
-    {AshCredo.Check.Warning.MissingPrimaryKey, []},
     {AshCredo.Check.Warning.NoActions, []},
     {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
     {AshCredo.Check.Warning.SensitiveAttributeExposed, []},
