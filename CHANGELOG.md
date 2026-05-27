@@ -1,6 +1,23 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.14.0](https://github.com/leonqadirie/ash_credo/compare/v0.13.0...v0.14.0) (2026-05-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* `AshCredo.Check.Warning.MissingPrimaryKey` is removed. Drop any entry referencing it from `.credo.exs`. To fail CI on missing primary keys, rely on Ash's compile-time warning paired with `mix compile --warnings-as-errors`.
+
+### Features
+
+* remove MissingPrimaryKey check ([#141](https://github.com/leonqadirie/ash_credo/issues/141)) ([8aad232](https://github.com/leonqadirie/ash_credo/commit/8aad2327531188768c6a4cfcfd9ff14dcb8eb80a)) by [@leonqadirie](https://github.com/leonqadirie)
+
+
+### Bug Fixes
+
+* exclude generic actions from missing primary action check ([#137](https://github.com/leonqadirie/ash_credo/issues/137)) ([2236ac9](https://github.com/leonqadirie/ash_credo/commit/2236ac9689578601e4cf106f5cc82da1913d284d)) by [@leonqadirie](https://github.com/leonqadirie)
+* MissingPrimaryKey didn't detect fragments or adhere to Ash's exemptions ([#139](https://github.com/leonqadirie/ash_credo/issues/139)) ([917acf3](https://github.com/leonqadirie/ash_credo/commit/917acf32757a90fd715d3fa7cb4465b9516aba4f)) by [@leonqadirie](https://github.com/leonqadirie)
+
 ## [0.13.0](https://github.com/leonqadirie/ash_credo/compare/v0.12.1...v0.13.0) (2026-05-20)
 
 
