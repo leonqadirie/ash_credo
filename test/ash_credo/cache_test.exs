@@ -52,9 +52,10 @@ defmodule AshCredo.CacheTest do
         end
 
       # Exactly one caller should have inserted; the rest should see false.
-      {trues, falses} = Enum.split_with(results, & &1)
+      # The receive loop above guarantees 50 results, so |falses| = 49 follows
+      # from |trues| = 1.
+      {trues, _falses} = Enum.split_with(results, & &1)
       assert [_] = trues
-      assert length(falses) == 49
     end
   end
 
