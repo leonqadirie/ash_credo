@@ -414,3 +414,101 @@ defmodule AshCredoFixtures.FakeMacros do
 
   def regular(value), do: value
 end
+
+defmodule AshCredoFixtures.NoPrimaryKey do
+  @moduledoc """
+  `MissingPrimaryKey` failure-path fixture: a resource with no primary key at
+  all. Ash permits this (read-only / manual resources legitimately lack one),
+  so the module compiles and `Ash.Resource.Info.primary_key/1` returns `[]`.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  attributes do
+    attribute :title, :string, public?: true
+  end
+end
+
+defmodule AshCredoFixtures.Blog.PostTagFragment do
+  @moduledoc """
+  `MissingPrimaryKey` regression fixture for fragment-supplied primary keys
+  (issue #133). A `Spark.Dsl.Fragment` that contributes a composite primary
+  key via two `belongs_to ..., primary_key?: true` relationships. The PK is
+  invisible to AST scanning of the composing resource but present in
+  `Ash.Resource.Info.primary_key/1`.
+  """
+
+  use Spark.Dsl.Fragment, of: Ash.Resource
+
+  relationships do
+    belongs_to :post, AshCredoFixtures.Blog.Post do
+      primary_key? true
+      allow_nil? false
+    end
+
+    belongs_to :tag, AshCredoFixtures.Blog.Tag do
+      primary_key? true
+      allow_nil? false
+    end
+  end
+end
+
+defmodule AshCredoFixtures.Blog.PostTag do
+  @moduledoc """
+  `MissingPrimaryKey` happy-path fixture: a join resource whose composite
+  primary key is supplied entirely by `AshCredoFixtures.Blog.PostTagFragment`.
+  Its own body declares no primary key, so an AST-only check would flag it -
+  the compiled check must not.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false,
+    fragments: [AshCredoFixtures.Blog.PostTagFragment]
+
+  actions do
+    defaults [:read]
+    default_accept []
+  end
+end
+
+defmodule AshCredoFixtures.OptOutPrimaryKey do
+  @moduledoc """
+  `MissingPrimaryKey` happy-path fixture for the `require_primary_key? false`
+  opt-out (Ash verifier branch 3). It has a field and no primary key, so
+  `Ash.Resource.Info.primary_key/1` returns `[]`, but the explicit opt-out
+  means Ash raises nothing - the check must not flag it.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  resource do
+    require_primary_key? false
+  end
+
+  attributes do
+    attribute :title, :string, public?: true
+  end
+end
+
+defmodule AshCredoFixtures.GenericOnlyNoFields do
+  @moduledoc """
+  `MissingPrimaryKey` happy-path fixture for the generic-only/no-fields
+  exemption (Ash verifier branch 4): a resource whose only action is generic
+  and which declares no fields, so Ash does not require a primary key.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  actions do
+    action :ping do
+      run fn _input, _ -> :ok end
+    end
+  end
+end
