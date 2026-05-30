@@ -1,7 +1,7 @@
 # AshCredo
 
 [![Hex.pm](https://img.shields.io/hexpm/v/ash_credo.svg)](https://hex.pm/packages/ash_credo)
-[![HexDocs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/ash_credo)
+[![HexDocs](https://img.shields.io/badge/hex-docs-blue.svg)](https://ash-credo.hexdocs.pm)
 [![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
 
 Unofficial static code analysis checks for the [Ash Framework](https://ash-hq.org), built as a [Credo](https://github.com/rrrene/credo) plugin.
@@ -19,11 +19,11 @@ AshCredo detects common anti-patterns, security pitfalls, and missing best pract
 
 ## Installation
 
-AshCredo requires [Credo](https://hexdocs.pm/credo) to already be installed in your project.
+AshCredo requires [Credo](https://credo.hexdocs.pm) to already be installed in your project.
 
 ### With Igniter (recommended)
 
-If your project uses [Igniter](https://hexdocs.pm/igniter), a single command will add the dependency and register the plugin in your `.credo.exs`:
+If your project uses [Igniter](https://igniter.hexdocs.pm), a single command will add the dependency and register the plugin in your `.credo.exs`:
 
 ```bash
 mix igniter.install ash_credo
