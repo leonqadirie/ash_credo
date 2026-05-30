@@ -93,7 +93,7 @@ else
       Mix.shell().error("""
       The task 'ash_credo.install' requires igniter. Please install igniter and try again.
 
-      For more information, see: https://hexdocs.pm/igniter/readme.html#installation
+      For more information, see: https://igniter.hexdocs.pm/readme.html#installation
       """)
 
       exit({:shutdown, 1})
