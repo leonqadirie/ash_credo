@@ -7,17 +7,17 @@ defmodule AshCredo.Introspection.Compiled do
   `AshCredo.Introspection.AshCallScanner` (AST-level Ash call discovery). This is
   the module that reaches for the compiled artifact: it loads target
   modules on demand, reads their DSL metadata through Ash's own
-  introspection API, and caches the results per-module in `:persistent_term`
-  so repeated lookups during a single `mix credo` run are cheap.
+  introspection API, and caches the results per-module in the run-scoped
+  `AshCredo.Cache` so repeated lookups during a single `mix credo` run are
+  cheap.
 
-  The cache lives in `:persistent_term` rather than ETS because Credo
-  dispatches each check × source_file pair into its own short-lived
-  Task.Supervised process. An ETS table would be owned by whichever task
-  created it first and would vanish the moment that task exited, crashing
-  every sibling task that still held the table name. `:persistent_term` is
-  process-independent and survives arbitrary task churn. Each cached entry
-  is a brand-new key (we never overwrite), so the well-known
-  `:persistent_term` GC penalty does not apply here.
+  The cache is a named ETS table owned by a supervised GenServer (see
+  `AshCredo.Cache`). Credo dispatches each check × source_file pair into
+  its own short-lived Task.Supervised process, so the table must not be
+  owned by any of those tasks - the dedicated owner keeps it alive across
+  arbitrary task churn. `AshCredo.init/1` clears the table at run
+  boundaries, so cached metadata never goes stale across runs in a
+  long-lived VM.
 
   Checks in `AshCredo` that need authoritative metadata about a referenced
   module (its domain, its actions, its code interfaces, whether it is even
@@ -260,7 +260,7 @@ defmodule AshCredo.Introspection.Compiled do
   @doc """
   Returns the set of macro names defined by `module` (read from
   `module.__info__(:macros)`), or `{:error, :not_loadable}` if the module
-  cannot be loaded. Cached per-module in `:persistent_term`.
+  cannot be loaded. Cached per-module in the run-scoped `AshCredo.Cache`.
 
   Unlike `inspect_module/1`, this does not require the target to be an Ash
   resource. It works for any compiled Elixir module and exists so checks can
@@ -518,8 +518,9 @@ defmodule AshCredo.Introspection.Compiled do
     |> Enum.find(fn ref -> ref.resource == resource end)
   end
 
-  # Cached per-domain in `:persistent_term`. A domain's reference list is
-  # constant for the VM lifetime (set at compile time by Ash), so we read it
+  # Cached per-domain in the run-scoped `AshCredo.Cache`. A domain's
+  # reference list is constant for the VM lifetime (set at compile time by
+  # Ash), so we read it
   # from Ash once per `mix credo` run and reuse the same list for every
   # subsequent `domain_interface/3` / `domain_interfaces/2` lookup. Keeps
   # `UseCodeInterface` at O(N) across a file with N `Ash.*` calls into the
