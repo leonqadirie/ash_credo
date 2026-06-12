@@ -11,7 +11,7 @@ defmodule AshCredoTest do
   # tolerated (they simply contribute zero rows).
   @category_order ["Warning", "Refactor", "Design", "Consistency", "Readability"]
 
-  # Extracts entries like `{AshCredo.Check.Warning.NoActions, []}` from the
+  # Extracts entries like `{AshCredo.Check.Warning.EmptyDomain, []}` from the
   # plugin file's `extra` config, keeping the `[]`/`false` state so tests can
   # distinguish default-on checks from registered-but-disabled ones.
   defp plugin_entries_with_state do
@@ -40,7 +40,7 @@ defmodule AshCredoTest do
 
   # Discovers all check modules from the filesystem. Returns a sorted list of
   # `{category_module, check_module_name, file_path}` tuples - e.g.
-  # `{"Warning", "NoActions", "lib/ash_credo/check/warning/no_actions.ex"}`.
+  # `{"Warning", "EmptyDomain", "lib/ash_credo/check/warning/empty_domain.ex"}`.
   defp discover_check_modules do
     Path.wildcard("#{@check_dir}/**/*.ex")
     |> Enum.map(fn path ->
@@ -61,8 +61,8 @@ defmodule AshCredoTest do
     end
   end
 
-  # Converts a snake_case filesystem name ("no_actions") to a module short
-  # name ("NoActions"). Also used for category directory names.
+  # Converts a snake_case filesystem name ("empty_domain") to a module short
+  # name ("EmptyDomain"). Also used for category directory names.
   defp to_module_name(snake) do
     snake
     |> String.split("_")
