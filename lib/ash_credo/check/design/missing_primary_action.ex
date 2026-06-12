@@ -36,7 +36,7 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
 
   alias AshCredo.Introspection
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
-  alias AshCredo.Introspection.ResourceContext
+  alias AshCredo.Orchestration
 
   # Generic actions (`:action`) are excluded: they are never invoked implicitly,
   # so `primary?` has no behavioral effect for them.
@@ -44,40 +44,21 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
-
-    CompiledIntrospection.with_compiled_check(
-      fn ->
-        format_issue(issue_meta,
-          message:
-            "Ash is not loaded in the VM running Credo - `MissingPrimaryAction` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
-          line_no: 1
-        )
-      end,
-      fn ->
-        source_file
-        |> Introspection.resource_contexts()
-        |> Enum.flat_map(&check_resource(&1, issue_meta))
-      end
+    Orchestration.compiled_check_on_named_resources(
+      source_file,
+      params,
+      __MODULE__,
+      &check_resource/3
     )
   end
 
-  defp check_resource(%ResourceContext{absolute_segments: nil}, _issue_meta), do: []
-
-  defp check_resource(
-         %ResourceContext{module_ast: module_ast, absolute_segments: segments} = context,
-         issue_meta
-       ) do
-    resource = Module.concat(segments)
-
+  defp check_resource(resource, context, issue_meta) do
     case CompiledIntrospection.actions(resource) do
       {:ok, actions} ->
-        flag_missing_primaries(actions, module_ast, context, issue_meta)
+        flag_missing_primaries(actions, context.module_ast, context, issue_meta)
 
       {:error, :not_loadable} ->
-        CompiledIntrospection.with_unique_not_loadable(resource, fn ->
-          not_loadable_issue(resource, context, issue_meta)
-        end)
+        Orchestration.unique_not_loadable_issues(resource, context, issue_meta, __MODULE__)
 
       {:error, _} ->
         []
@@ -118,13 +99,5 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
     actions_ast = Introspection.find_dsl_section(module_ast, :actions)
 
     Introspection.section_issue_line(actions_ast, Map.get(context, :use_line), 1)
-  end
-
-  defp not_loadable_issue(resource, context, issue_meta) do
-    format_issue(issue_meta,
-      message:
-        "Could not load `#{inspect(resource)}` for `MissingPrimaryAction`. Run `mix compile` before `mix credo`, or disable this check in `.credo.exs`.",
-      line_no: Map.get(context, :use_line) || 1
-    )
   end
 end

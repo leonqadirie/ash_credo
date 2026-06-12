@@ -90,7 +90,7 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
       ]
     ]
 
-  alias AshCredo.{Cache, PathFilter}
+  alias AshCredo.{Cache, Orchestration, PathFilter}
   alias AshCredo.Introspection.{AshCallScanner, RemoteBangScanner}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
@@ -112,14 +112,7 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
       issue_meta = IssueMeta.for(source_file, params)
 
       CompiledIntrospection.with_compiled_check(
-        fn ->
-          format_issue(issue_meta,
-            message:
-              "Ash is not loaded in the VM running Credo; `RaisingCall` is a no-op. " <>
-                "Run `mix compile` with `:ash` as a dependency, or disable this check.",
-            line_no: 1
-          )
-        end,
+        fn -> Orchestration.ash_missing_issue(issue_meta, __MODULE__) end,
         fn ->
           ash_bang_issues(source_file, excluded_functions, flag_bang_only, issue_meta) ++
             code_interface_issues(source_file, excluded_functions, issue_meta)

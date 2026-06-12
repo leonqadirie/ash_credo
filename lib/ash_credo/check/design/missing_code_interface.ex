@@ -63,44 +63,27 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
 
   alias AshCredo.Introspection
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
-  alias AshCredo.Introspection.ResourceContext
+  alias AshCredo.Orchestration
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
+    excluded_actions = Params.get(params, :excluded_actions, __MODULE__)
 
-    CompiledIntrospection.with_compiled_check(
-      fn ->
-        format_issue(issue_meta,
-          message:
-            "Ash is not loaded in the VM running Credo - `MissingCodeInterface` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
-          line_no: 1
-        )
-      end,
-      fn ->
-        excluded_actions = Params.get(params, :excluded_actions, __MODULE__)
-
-        source_file
-        |> Introspection.resource_contexts()
-        |> Enum.flat_map(&check_resource(&1, issue_meta, excluded_actions))
+    Orchestration.compiled_check_on_named_resources(
+      source_file,
+      params,
+      __MODULE__,
+      fn resource, context, issue_meta ->
+        check_resource(resource, context, issue_meta, excluded_actions)
       end
     )
   end
 
-  defp check_resource(%ResourceContext{absolute_segments: nil}, _issue_meta, _excluded_actions),
-    do: []
-
-  defp check_resource(
-         %ResourceContext{absolute_segments: segments, module_ast: module_ast} = context,
-         issue_meta,
-         excluded_actions
-       ) do
-    resource = Module.concat(segments)
-
+  defp check_resource(resource, context, issue_meta, excluded_actions) do
     if CompiledIntrospection.embedded?(resource) do
       []
     else
-      inspect_resource(resource, module_ast, context, issue_meta, excluded_actions)
+      inspect_resource(resource, context.module_ast, context, issue_meta, excluded_actions)
     end
   end
 
@@ -110,9 +93,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
         flag_missing_interfaces(resource, info, module_ast, context, issue_meta, excluded_actions)
 
       {:error, :not_loadable} ->
-        CompiledIntrospection.with_unique_not_loadable(resource, fn ->
-          not_loadable_issue(resource, context, issue_meta)
-        end)
+        Orchestration.unique_not_loadable_issues(resource, context, issue_meta, __MODULE__)
 
       {:error, _} ->
         []
@@ -161,13 +142,5 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
     actions_ast = Introspection.find_dsl_section(module_ast, :actions)
 
     Introspection.section_issue_line(actions_ast, Map.get(context, :use_line), 1)
-  end
-
-  defp not_loadable_issue(resource, context, issue_meta) do
-    format_issue(issue_meta,
-      message:
-        "Could not load `#{inspect(resource)}` for `MissingCodeInterface`. Run `mix compile` before `mix credo`, or disable this check in `.credo.exs`.",
-      line_no: Map.get(context, :use_line) || 1
-    )
   end
 end

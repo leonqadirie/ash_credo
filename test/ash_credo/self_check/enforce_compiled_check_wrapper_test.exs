@@ -45,6 +45,62 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapperTest do
              run_check_with_filename(source, "lib/ash_credo/check/warning/good_check.ex")
   end
 
+  test "passes when check goes through an Orchestration compiled-check harness" do
+    for harness <- [
+          "compiled_check_on_named_resources",
+          "compiled_check_on_loadable_resources"
+        ] do
+      source = """
+      defmodule AshCredo.Check.Warning.HarnessCheck do
+        alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
+        alias AshCredo.Orchestration
+
+        def run(source_file, params) do
+          Orchestration.#{harness}(
+            source_file,
+            params,
+            __MODULE__,
+            &check_resource/3
+          )
+        end
+
+        defp check_resource(resource, _context, _issue_meta) do
+          CompiledIntrospection.actions(resource)
+        end
+      end
+      """
+
+      assert [] =
+               run_check_with_filename(source, "lib/ash_credo/check/warning/harness_check.ex"),
+             "expected Orchestration.#{harness}/4 to satisfy the wrapper requirement"
+    end
+  end
+
+  test "does not treat an Orchestration harness call from an unrelated module as success" do
+    source = """
+    defmodule AshCredo.Check.Warning.BadCheck do
+      alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
+
+      def run(source_file, params) do
+        CompiledIntrospection.actions(resource)
+
+        Example.Other.compiled_check_on_named_resources(
+          source_file,
+          params,
+          __MODULE__,
+          &check_resource/3
+        )
+      end
+    end
+    """
+
+    assert [issue] =
+             run_check_with_filename(source, "lib/ash_credo/check/warning/bad_check.ex")
+
+    assert issue.line_no == 2
+    assert issue.trigger == "AshCredo.Introspection.Compiled"
+  end
+
   test "does not treat unrelated with_compiled_check calls as success" do
     source = """
     defmodule AshCredo.Check.Warning.BadCheck do

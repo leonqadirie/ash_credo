@@ -8,7 +8,10 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapper do
       check: """
       Every check under `lib/ash_credo/check/` that aliases
       `AshCredo.Introspection.Compiled` must call `with_compiled_check/2`
-      somewhere in its body.
+      somewhere in its body - directly, or through one of the
+      `AshCredo.Orchestration` harnesses that wrap it
+      (`compiled_check_on_named_resources/4`,
+      `compiled_check_on_loadable_resources/4`).
 
       `with_compiled_check/2` detects whether Ash is loaded in the
       current VM and, when it is not, emits a single informational
@@ -16,11 +19,20 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapper do
       check will raise at runtime when a user runs `mix credo` without
       `mix compile` or without Ash installed.
 
-      If you are adding a new compiled check, wrap your introspection
-      logic like the existing compiled checks do:
+      If you are adding a new compiled check, prefer an Orchestration
+      harness:
+
+          Orchestration.compiled_check_on_named_resources(
+            source_file,
+            params,
+            __MODULE__,
+            &check_resource/3
+          )
+
+      or wrap your introspection logic directly:
 
           CompiledIntrospection.with_compiled_check(
-            fn -> missing_ash_issue(issue_meta) end,
+            fn -> Orchestration.ash_missing_issue(issue_meta, __MODULE__) end,
             fn -> ... end
           )
       """
@@ -29,6 +41,12 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapper do
   alias AshCredo.Introspection.{Aliases, LexicalScopeWalker}
 
   @compiled_segments [:AshCredo, :Introspection, :Compiled]
+  @orchestration_segments [:AshCredo, :Orchestration]
+
+  # Orchestration harnesses that call `with_compiled_check/2` internally;
+  # calling one satisfies this check. Keep in sync with
+  # `AshCredo.Orchestration`.
+  @orchestration_wrappers ~w(compiled_check_on_named_resources compiled_check_on_loadable_resources)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
@@ -86,6 +104,15 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapper do
     end
   end
 
+  defp on_enter({{:., _, [module_ast, wrapper]}, _, args}, scope, state)
+       when wrapper in @orchestration_wrappers and is_list(args) do
+    if match?([_, _, _, _], args) and orchestration_module_ref?(module_ast, scope) do
+      %{state | has_wrapper_call?: true}
+    else
+      state
+    end
+  end
+
   defp on_enter(_node, _scope, state), do: state
 
   defp maybe_record_compiled_alias_line(%{compiled_alias_line: nil} = state, line, alias_entries) do
@@ -106,6 +133,12 @@ defmodule AshCredo.SelfCheck.EnforceCompiledCheckWrapper do
   end
 
   defp compiled_module_ref?(_module_ast, _scope), do: false
+
+  defp orchestration_module_ref?({:__aliases__, _, segments}, scope) when is_list(segments) do
+    Aliases.expand_alias(segments, LexicalScopeWalker.aliases(scope)) == @orchestration_segments
+  end
+
+  defp orchestration_module_ref?(_module_ast, _scope), do: false
 
   defp check_file?(filename) when is_binary(filename) do
     filename
