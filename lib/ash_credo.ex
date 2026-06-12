@@ -60,6 +60,8 @@ defmodule AshCredo do
   }
   """
 
+  # The missing-table hint in AshCredo.Cache quotes this registration
+  # (`{AshCredo, []}` under `plugins`); keep them in sync if it changes.
   def init(exec) do
     Cache.ensure_started!()
     Cache.clear()

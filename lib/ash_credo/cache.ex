@@ -15,11 +15,23 @@ defmodule AshCredo.Cache do
   `:ash_credo` application boots. `AshCredo.init/1` additionally calls
   `ensure_started!/0` before any check runs, so the table is also available
   when `mix credo` runs without booting the `:ash_credo` application.
+
+  If the table does not exist - for example when checks are enabled directly
+  in `.credo.exs` without registering the `{AshCredo, []}` plugin, so
+  `AshCredo.init/1` never runs - every function degrades gracefully instead
+  of raising: reads behave as if nothing were cached and writes are no-ops.
+  Checks then work correctly, just without cross-call caching. The first
+  such access emits a one-time hint to stderr suggesting the plugin
+  registration.
   """
 
   use GenServer
 
   @table :ash_credo_cache
+
+  @missing_table_hint "ash_credo plugin not registered - checks run uncached; " <>
+                        "add `{AshCredo, []}` to `plugins` in .credo.exs"
+  @hint_emitted_key {__MODULE__, :missing_table_hint_emitted}
 
   @doc """
   Starts the cache GenServer. Idempotent - returns the existing pid if
@@ -56,9 +68,14 @@ defmodule AshCredo.Cache do
   """
   @spec get(term(), term()) :: term()
   def get(key, default \\ nil) do
-    case :ets.lookup(@table, key) do
-      [{^key, value}] -> value
-      [] -> default
+    if table_exists?() do
+      case :ets.lookup(@table, key) do
+        [{^key, value}] -> value
+        [] -> default
+      end
+    else
+      warn_missing_table()
+      default
     end
   end
 
@@ -68,7 +85,12 @@ defmodule AshCredo.Cache do
   """
   @spec put(term(), term()) :: :ok
   def put(key, value) do
-    :ets.insert(@table, {key, value})
+    if table_exists?() do
+      :ets.insert(@table, {key, value})
+    else
+      warn_missing_table()
+    end
+
     :ok
   end
 
@@ -77,15 +99,30 @@ defmodule AshCredo.Cache do
   Returns `true` if this call inserted (the caller is the first to see
   this key), `false` if `key` was already present. Use this when you
   need to act exactly once per key across concurrent callers.
+
+  When the table is missing, returns `true` on every call (nothing is
+  ever cached, so every caller looks like the first one).
   """
   @spec insert_new(term()) :: boolean()
   def insert_new(key) do
-    :ets.insert_new(@table, {key, true})
+    if table_exists?() do
+      :ets.insert_new(@table, {key, true})
+    else
+      warn_missing_table()
+      true
+    end
   end
 
   @doc "Returns `true` if `key` is present in the cache."
   @spec member?(term()) :: boolean()
-  def member?(key), do: :ets.member(@table, key)
+  def member?(key) do
+    if table_exists?() do
+      :ets.member(@table, key)
+    else
+      warn_missing_table()
+      false
+    end
+  end
 
   @doc """
   Deletes every entry in the cache. Idempotent and safe to call before
@@ -93,11 +130,44 @@ defmodule AshCredo.Cache do
   """
   @spec clear() :: :ok
   def clear do
-    if :ets.whereis(@table) != :undefined do
+    if table_exists?() do
       :ets.delete_all_objects(@table)
     end
 
     :ok
+  end
+
+  @doc """
+  Forgets that the missing-table hint was emitted, so the next missing-table
+  access emits it again. Test helper that keeps the flag key private to this
+  module.
+  """
+  @spec reset_missing_table_hint() :: :ok
+  def reset_missing_table_hint do
+    :persistent_term.erase(@hint_emitted_key)
+    :ok
+  end
+
+  @doc """
+  Marks the missing-table hint as already emitted, silencing it for the rest
+  of the VM's lifetime. Test helper that keeps the flag key private to this
+  module.
+  """
+  @spec mark_missing_table_hint_emitted() :: :ok
+  def mark_missing_table_hint_emitted do
+    :persistent_term.put(@hint_emitted_key, true)
+  end
+
+  defp table_exists?, do: :ets.whereis(@table) != :undefined
+
+  # One hint per VM, tracked outside the (missing) table: a no-plugin run
+  # would otherwise repeat the message once per accessor call per file.
+  # Concurrent first callers may rarely both emit; best-effort is fine here.
+  defp warn_missing_table do
+    if not :persistent_term.get(@hint_emitted_key, false) do
+      :persistent_term.put(@hint_emitted_key, true)
+      IO.puts(:stderr, @missing_table_hint)
+    end
   end
 
   # ── GenServer callbacks ──
