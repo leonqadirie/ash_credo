@@ -18,6 +18,8 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
 
     assert [issue] = run_check(WildcardAcceptOnAction, source)
     assert issue.message =~ "accept :*"
+    assert issue.line_no == 6
+    assert issue.column != nil
   end
 
   test "reports issue for accept :* on update" do
@@ -33,7 +35,9 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
     end
     """
 
-    assert [_issue] = run_check(WildcardAcceptOnAction, source)
+    assert [issue] = run_check(WildcardAcceptOnAction, source)
+    assert issue.line_no == 6
+    assert issue.column != nil
   end
 
   test "no issue for explicit accept list" do
@@ -83,6 +87,7 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
 
     assert [issue] = run_check(WildcardAcceptOnAction, source)
     assert issue.message =~ "accept :*"
+    assert issue.line_no == 5
   end
 
   test "reports issue for inline accept: :* on create with a do block" do
@@ -100,6 +105,7 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
 
     assert [issue] = run_check(WildcardAcceptOnAction, source)
     assert issue.message =~ "accept :*"
+    assert issue.line_no == 5
   end
 
   test "reports issue for default_accept :*" do
