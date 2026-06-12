@@ -147,6 +147,126 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicyTest do
     assert [] = run_check(OverlyPermissivePolicy, source)
   end
 
+  test "reports issue when policy has no condition argument" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy do
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(OverlyPermissivePolicy, source)
+    assert issue.message =~ "Unscoped policy"
+  end
+
+  test "reports issue when condition is a list containing only always()" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy [always()] do
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(OverlyPermissivePolicy, source)
+    assert issue.message =~ "Unscoped policy"
+  end
+
+  test "reports issue when bypass condition is a list containing only always()" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        bypass [always()] do
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(OverlyPermissivePolicy, source)
+    assert issue.message =~ "Bypass"
+  end
+
+  test "reports issue when body-level condition is always()" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy do
+          condition always()
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(OverlyPermissivePolicy, source)
+    assert issue.message =~ "Unscoped policy"
+  end
+
+  test "reports issue when body-level condition is expr(true)" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy do
+          condition expr(true)
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(OverlyPermissivePolicy, source)
+    assert issue.message =~ "Unscoped policy"
+  end
+
+  test "no issue when list condition mixes always() with a restrictive check" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy [actor_attribute_equals(:role, :admin), always()] do
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(OverlyPermissivePolicy, source)
+  end
+
+  test "no issue when body-level condition is restrictive" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy do
+          condition actor_attribute_equals(:role, :admin)
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(OverlyPermissivePolicy, source)
+  end
+
   test "ignores non-Ash modules" do
     source = """
     defmodule MyApp.Utils do
