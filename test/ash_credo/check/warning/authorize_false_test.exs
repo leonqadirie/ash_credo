@@ -278,6 +278,57 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     assert issue.trigger == "authorize?: false"
   end
 
+  test "no issue and no crash for a bare authorize? variable in an anonymous function" do
+    source = """
+    defmodule MyApp.Accounts do
+      def check do
+        Enum.map([true, false], fn authorize? -> authorize? end)
+      end
+    end
+    """
+
+    assert [] = run_check(AuthorizeFalse, source)
+  end
+
+  test "no issue and no crash for a bare authorize? variable in a case clause" do
+    source = """
+    defmodule MyApp.Accounts do
+      def check(value) do
+        case value do
+          authorize? -> authorize?
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(AuthorizeFalse, source)
+  end
+
+  test "no issue and no crash for a bare authorize? variable in a literal list" do
+    source = """
+    defmodule MyApp.Accounts do
+      def check(authorize?) do
+        [authorize?, :other]
+      end
+    end
+    """
+
+    assert [] = run_check(AuthorizeFalse, source)
+  end
+
+  test "reports issue for authorize?: false appended to opts via ++" do
+    source = """
+    defmodule MyApp.Accounts do
+      def list_users(opts) do
+        Ash.read!(MyApp.User, opts ++ [authorize?: false])
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.trigger == "authorize?: false"
+  end
+
   describe "excluded_paths" do
     test "skips files under test/ by default" do
       source = """
