@@ -133,6 +133,40 @@ defmodule AshCredo.Check.Warning.MissingValidationWrapperTest do
     assert [] = run_check(MissingValidationWrapper, source)
   end
 
+  test "reports issue for naked validation builtin in pipeline body" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource, domain: MyApp.Accounts
+
+      pipelines do
+        pipeline :guarded do
+          present(:email)
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(MissingValidationWrapper, source)
+    assert issue.trigger == "present"
+    assert issue.line_no == 6
+  end
+
+  test "no issue when validation builtin is wrapped inside pipeline body" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource, domain: MyApp.Accounts
+
+      pipelines do
+        pipeline :guarded do
+          validate present(:email)
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(MissingValidationWrapper, source)
+  end
+
   test "does not flag naked change builtins (MissingChangeWrapper's job)" do
     source = """
     defmodule MyApp.Post do

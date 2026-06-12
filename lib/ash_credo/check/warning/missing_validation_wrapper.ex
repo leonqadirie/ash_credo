@@ -25,11 +25,16 @@ defmodule AshCredo.Check.Warning.MissingValidationWrapper do
             validate present(:email)
           end
 
+      The same trap exists inside `pipeline` bodies (the `pipelines`
+      section), which import the validation builtins too - bare calls there
+      are flagged as well.
+
       Because some builtin names are common words (`present`, `compare`,
       `match`), a bare call to a same-named local helper inside an action
       body would be flagged too; silence such a call with
-      `# credo:disable-for-next-line`. `Warning.MissingChangeWrapper` is the
-      equivalent check for change builtins.
+      `# credo:disable-for-next-line`. `Warning.MissingChangeWrapper` and
+      `Warning.MissingPrepareWrapper` are the equivalent checks for change
+      and preparation builtins.
       """
     ]
 
@@ -70,7 +75,8 @@ defmodule AshCredo.Check.Warning.MissingValidationWrapper do
     Orchestration.naked_builtin_issues(source_file, params, __MODULE__,
       builtins: @validation_builtins,
       wrapper: "validate",
-      action_types: @action_types
+      action_types: @action_types,
+      pipeline_builtins: @validation_builtins
     )
   end
 end

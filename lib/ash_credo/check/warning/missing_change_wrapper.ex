@@ -25,8 +25,12 @@ defmodule AshCredo.Check.Warning.MissingChangeWrapper do
             change manage_relationship(:thing, :thing, type: :create)
           end
 
-      `Warning.MissingValidationWrapper` is the equivalent check for
-      validation builtins.
+      The same trap exists inside `pipeline` bodies (the `pipelines`
+      section), which import the change builtins too - bare calls there are
+      flagged as well.
+
+      `Warning.MissingValidationWrapper` and `Warning.MissingPrepareWrapper`
+      are the equivalent checks for validation and preparation builtins.
       """
     ]
 
@@ -51,16 +55,24 @@ defmodule AshCredo.Check.Warning.MissingChangeWrapper do
     debug_log
   )a
 
-  # No :read - read actions do not import Ash.Resource.Change.Builtins, so
-  # a bare change builtin there fails to compile and needs no lint.
-  @action_types ~w(create update destroy action)a
+  # No :read or :action - those import only the Preparation and Validation
+  # builtins, so a bare change builtin there fails to compile and needs no
+  # lint. The one change builtin that does compile bare in a generic action
+  # is `set_context` (via its Ash.Resource.Preparation.Builtins twin) - it
+  # belongs to MissingPrepareWrapper there, because generic actions take
+  # `prepare`, not `change`.
+  @action_types ~w(create update destroy)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
     Orchestration.naked_builtin_issues(source_file, params, __MODULE__,
       builtins: @change_builtins,
       wrapper: "change",
-      action_types: @action_types
+      action_types: @action_types,
+      # Pipeline bodies import all builtin families, including the changes;
+      # the ambiguous `set_context` is owned by this check there, since
+      # pipelines accept `change` entities.
+      pipeline_builtins: @change_builtins
     )
   end
 end
