@@ -19,6 +19,22 @@ if Code.ensure_loaded?(Igniter) do
     alias Igniter.Code.List
     alias Igniter.Code.Map
 
+    @manual_install_warning """
+    Could not automatically add the AshCredo plugin to .credo.exs - its
+    `configs:` value is not a literal list this installer can navigate.
+
+    Add the plugin to your config manually:
+
+        %{
+          configs: [
+            %{
+              name: "default",
+              plugins: [{AshCredo, []}]
+            }
+          ]
+        }
+    """
+
     @impl Igniter.Mix.Task
     def info(_argv, _composing_task) do
       %Igniter.Mix.Task.Info{
@@ -48,18 +64,26 @@ if Code.ensure_loaded?(Igniter) do
           Sourceror.to_string(new_node)
       end
 
+      # Each step returns `:error` when the config is not a literal it can
+      # navigate. Igniter's updater contract has no clause for a bare
+      # `:error`, so without the `else` that crashes the whole install;
+      # degrade to a warning with manual instructions instead.
       with {:ok, configs_zipper} <-
              Common.move_to_cursor(zipper, "%{configs: __cursor__()}"),
            {:ok, first_config} <-
-             List.move_to_list_item(configs_zipper, fn _ -> true end) do
-        Map.put_in_map(
-          first_config,
-          [:plugins],
-          plugin_list,
-          fn plugins_zipper ->
-            List.prepend_new_to_list(plugins_zipper, plugin_tuple, eq_pred)
-          end
-        )
+             List.move_to_list_item(configs_zipper, fn _ -> true end),
+           {:ok, updated_config} <-
+             Map.put_in_map(
+               first_config,
+               [:plugins],
+               plugin_list,
+               fn plugins_zipper ->
+                 List.prepend_new_to_list(plugins_zipper, plugin_tuple, eq_pred)
+               end
+             ) do
+        {:ok, updated_config}
+      else
+        _ -> {:warning, @manual_install_warning}
       end
     end
 

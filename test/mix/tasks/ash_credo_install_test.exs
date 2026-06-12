@@ -175,6 +175,40 @@ defmodule Mix.Tasks.AshCredo.InstallTest do
       """)
     end
 
+    test "warns with manual instructions when configs: is not a literal list" do
+      igniter =
+        test_project(
+          files: %{
+            ".credo.exs" => """
+            %{
+              configs: build_configs()
+            }
+            """
+          }
+        )
+        |> Igniter.compose_task("ash_credo.install")
+
+      assert_has_warning(igniter, &(&1 =~ "Add the plugin to your config manually"))
+      assert_unchanged(igniter, ".credo.exs")
+    end
+
+    test "warns with manual instructions when the first config is not a literal map" do
+      igniter =
+        test_project(
+          files: %{
+            ".credo.exs" => """
+            %{
+              configs: [default_config()]
+            }
+            """
+          }
+        )
+        |> Igniter.compose_task("ash_credo.install")
+
+      assert_has_warning(igniter, &(&1 =~ "Add the plugin to your config manually"))
+      assert_unchanged(igniter, ".credo.exs")
+    end
+
     test "works with a realistic .credo.exs from mix credo gen.config" do
       test_project(
         files: %{
