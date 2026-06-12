@@ -356,6 +356,124 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapperTest do
     end
   end
 
+  describe "global sections" do
+    test "reports naked builtins in the changes section with per-family advice" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+
+        changes do
+          set_attribute(:status, :draft)
+          set_context(%{audit: true})
+          present(:title)
+        end
+      end
+      """
+
+      issues = run_check(MissingBuiltinWrapper, source)
+      assert [_, _, _] = issues
+      assert find_by_trigger(issues, "set_attribute").message =~ "`change` wrapper"
+      assert find_by_trigger(issues, "set_context").message =~ "`change` wrapper"
+      assert find_by_trigger(issues, "present").message =~ "`validate` wrapper"
+    end
+
+    test "reports naked validation builtin in the validations section" do
+      source = """
+      defmodule MyApp.User do
+        use Ash.Resource, domain: MyApp.Accounts
+
+        validations do
+          present(:email)
+        end
+      end
+      """
+
+      assert [issue] = run_check(MissingBuiltinWrapper, source)
+      assert issue.trigger == "present"
+      assert issue.line_no == 5
+      assert issue.message =~ "`validate` wrapper"
+    end
+
+    test "reports naked builtins in the preparations section with prepare advice" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+
+        preparations do
+          build(sort: [:name])
+          set_context(%{tracing: true})
+        end
+      end
+      """
+
+      issues = run_check(MissingBuiltinWrapper, source)
+      assert [_, _] = issues
+      assert find_by_trigger(issues, "build").message =~ "`prepare` wrapper"
+      assert find_by_trigger(issues, "set_context").message =~ "`prepare` wrapper"
+    end
+
+    test "no issue for wrapped entities in global sections" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+
+        changes do
+          change set_attribute(:status, :draft)
+          validate present(:title)
+        end
+
+        validations do
+          validate present(:title), on: [:create]
+        end
+
+        preparations do
+          prepare build(sort: [:name])
+        end
+
+        calculations do
+          calculate :full_name, :string, concat([:first_name, :last_name], " ")
+        end
+      end
+      """
+
+      assert [] = run_check(MissingBuiltinWrapper, source)
+    end
+  end
+
+  describe "calculation builtins" do
+    test "reports naked concat in the calculations section with full entity advice" do
+      source = """
+      defmodule MyApp.User do
+        use Ash.Resource, domain: MyApp.Accounts
+
+        calculations do
+          concat([:first_name, :last_name], " ")
+        end
+      end
+      """
+
+      assert [issue] = run_check(MissingBuiltinWrapper, source)
+      assert issue.trigger == "concat"
+      assert issue.line_no == 5
+      assert issue.message =~ "`calculate` wrapper"
+      assert issue.message =~ "calculate :name, :type, concat(...)"
+    end
+
+    test "no issue when concat is an argument of a calculate entity" do
+      source = """
+      defmodule MyApp.User do
+        use Ash.Resource, domain: MyApp.Accounts
+
+        calculations do
+          calculate :full_name, :string, concat([:first_name, :last_name], " ")
+        end
+      end
+      """
+
+      assert [] = run_check(MissingBuiltinWrapper, source)
+    end
+  end
+
   test "no issue when no actions or pipelines section" do
     source = """
     defmodule MyApp.Post do

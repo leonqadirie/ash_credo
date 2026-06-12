@@ -5,10 +5,12 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
     tags: [:ash],
     explanations: [
       check: """
-      Builtin change, validation, and preparation functions like
-      `set_attribute`, `present`, and `build` must be wrapped in their DSL
-      keyword (`change`, `validate`, `prepare`) when used inside an action
-      body or a `pipeline` body.
+      Builtin change, validation, preparation, and calculation functions
+      like `set_attribute`, `present`, `build`, and `concat` must be
+      wrapped in their DSL entity (`change`, `validate`, `prepare`,
+      `calculate ...`) when used inside an action body, a `pipeline` body,
+      or a global section (`changes`, `validations`, `preparations`,
+      `calculations`).
 
       These builtins are plain functions imported into the DSL scope.
       Without the wrapper, the call returns a spec tuple that is silently
@@ -99,33 +101,51 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
   #     Validation builtins. The one change builtin that compiles bare in a
   #     generic action is `set_context` (via its Preparation.Builtins twin),
   #     which the preparations family owns there, because generic actions
-  #     take `prepare`, not `change`.
+  #     take `prepare`, not `change`. The `changes` global section imports
+  #     Change.Builtins (and Validation.Builtins), so the changes family
+  #     owns `set_context` there too.
   #   * validations - includes :read: read actions import
-  #     Ash.Resource.Validation.Builtins and accept `validate` entities.
+  #     Ash.Resource.Validation.Builtins and accept `validate` entities. All
+  #     three global sections import Validation.Builtins.
   #   * preparations - only :read and :action import
-  #     Ash.Resource.Preparation.Builtins.
+  #     Ash.Resource.Preparation.Builtins; among the global sections, only
+  #     `preparations` does (so `set_context` is unambiguous there).
+  #   * calculations - the `calculations` section imports
+  #     Ash.Resource.Calculation.Builtins (just `concat`); the fix is a full
+  #     `calculate` entity, reflected in the usage_prefix.
   #
-  # Pipeline bodies import all three families at once; the ambiguous
-  # `set_context` is owned by the changes family there, since pipelines
-  # accept `change` entities.
+  # Pipeline bodies import the change/validation/preparation families at
+  # once (but NOT the calculation builtins - a bare `concat` there is a
+  # compile error); the ambiguous `set_context` is owned by the changes
+  # family in pipelines, since they accept `change` entities.
   @families [
     [
       builtins: @change_builtins,
       wrapper: "change",
       action_types: ~w(create update destroy)a,
-      pipeline_builtins: @change_builtins
+      pipeline_builtins: @change_builtins,
+      global_sections: [:changes]
     ],
     [
       builtins: @validation_builtins,
       wrapper: "validate",
       action_types: ~w(create read update destroy action)a,
-      pipeline_builtins: @validation_builtins
+      pipeline_builtins: @validation_builtins,
+      global_sections: [:validations, :changes, :preparations]
     ],
     [
       builtins: @preparation_builtins,
       wrapper: "prepare",
       action_types: ~w(read action)a,
-      pipeline_builtins: ~w(build)a
+      pipeline_builtins: ~w(build)a,
+      global_sections: [:preparations]
+    ],
+    [
+      builtins: ~w(concat)a,
+      wrapper: "calculate",
+      action_types: [],
+      global_sections: [:calculations],
+      usage_prefix: "calculate :name, :type, "
     ]
   ]
 
