@@ -153,10 +153,10 @@ defmodule AshCredo.Orchestration do
   @doc """
   Flags bare calls to configured builtin functions at statement position
   inside action bodies, suggesting the given DSL `wrapper` keyword. Shared
-  core of the `MissingChangeWrapper`/`MissingValidationWrapper`/
-  `MissingPrepareWrapper` check family: Ash's builtins are plain functions
-  imported into the DSL scope that return spec tuples, so an unwrapped call
-  is silently discarded and nothing warns at compile time or runtime.
+  core of `MissingBuiltinWrapper`, which invokes it once per builtin
+  family: Ash's builtins are plain functions imported into the DSL scope
+  that return spec tuples, so an unwrapped call is silently discarded and
+  nothing warns at compile time or runtime.
 
   `check` is the emitting check module. Required `opts`:
 
