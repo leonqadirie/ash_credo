@@ -1,6 +1,41 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.15.0](https://github.com/leonqadirie/ash_credo/compare/v0.14.0...v0.15.0) (2026-06-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* AshCredo.Check.Warning.MissingChangeWrapper and the intermediary AshCredo.Check.Warning.MissingValidationWrapper and AshCredo.Check.Warning.MissingPrepareWrapper no longer exist; their coverage is provided by AshCredo.Check.Warning.MissingBuiltinWrapper (default-on, like its predecessors). Remove any entries for the old module names from your .credo.exs, or Credo will fail to load them.
+* AshCredo.Check.Warning.NoActions no longer exists. Remove any {AshCredo.Check.Warning.NoActions, ...} entry from the checks in your .credo.exs, or Credo will fail to load the module.
+
+### Features
+
+* add ActorOnCallOptions check ([#164](https://github.com/leonqadirie/ash_credo/issues/164)) ([82c815b](https://github.com/leonqadirie/ash_credo/commit/82c815b4a89e0f117b4591563a2af9e375059834)) by [@leonqadirie](https://github.com/leonqadirie)
+* add AnonymousFunctionInDsl check for fn callbacks in the DSL ([#167](https://github.com/leonqadirie/ash_credo/issues/167)) ([1d93ed6](https://github.com/leonqadirie/ash_credo/commit/1d93ed64aae9be5a0c18d95a8f7070a423098351)) by [@leonqadirie](https://github.com/leonqadirie)
+* add CompileTimeDefault check for frozen attribute/argument defaults ([#168](https://github.com/leonqadirie/ash_credo/issues/168)) ([5ff4b23](https://github.com/leonqadirie/ash_credo/commit/5ff4b23dc97d5760a1bab6100bfb0060f9fa80aa)) by [@leonqadirie](https://github.com/leonqadirie)
+* add MissingValidationWrapper check for naked validation builtins ([#163](https://github.com/leonqadirie/ash_credo/issues/163)) ([29e776e](https://github.com/leonqadirie/ash_credo/commit/29e776e62585d57bbbacde6e49f1aabc22e866a2)) by [@leonqadirie](https://github.com/leonqadirie)
+* add RedundantValidation check for present on non-nullable attributes ([#166](https://github.com/leonqadirie/ash_credo/issues/166)) ([1c8b81f](https://github.com/leonqadirie/ash_credo/commit/1c8b81f35d079670f5cfb011ae72d932a605c825)) by [@leonqadirie](https://github.com/leonqadirie)
+* cover pipeline bodies and preparations in the wrapper checks ([#165](https://github.com/leonqadirie/ash_credo/issues/165)) ([4136a5d](https://github.com/leonqadirie/ash_credo/commit/4136a5d37c641b727b6d7c6cc2f65065c6a778a6)) by [@leonqadirie](https://github.com/leonqadirie)
+* merge builtin wrapper checks ([#171](https://github.com/leonqadirie/ash_credo/issues/171)) ([f128341](https://github.com/leonqadirie/ash_credo/commit/f128341235cdd7f31c20940e1217a209fcac3db3)) by [@leonqadirie](https://github.com/leonqadirie)
+* point installer users at the opt-in checks via an Igniter notice ([#154](https://github.com/leonqadirie/ash_credo/issues/154)) ([f5b959d](https://github.com/leonqadirie/ash_credo/commit/f5b959d74cb715c024d3e0b28a7ae2e9c7900d8c)) by [@leonqadirie](https://github.com/leonqadirie)
+* remove NoActions check ([#170](https://github.com/leonqadirie/ash_credo/issues/170)) ([4e281a7](https://github.com/leonqadirie/ash_credo/commit/4e281a7c6d1b9c6aac2cd51a7688998f89680611)) by [@leonqadirie](https://github.com/leonqadirie)
+* support regex entries and more defaults in sensitive_names ([#159](https://github.com/leonqadirie/ash_credo/issues/159)) ([a90b07a](https://github.com/leonqadirie/ash_credo/commit/a90b07a5c12cab223d8252f0b8209cb4e3911cf1)) by [@leonqadirie](https://github.com/leonqadirie)
+
+
+### Bug Fixes
+
+* anchor accept :* issues at the accept line in WildcardAcceptOnAction ([#158](https://github.com/leonqadirie/ash_credo/issues/158)) ([33f4ead](https://github.com/leonqadirie/ash_credo/commit/33f4eadad6e6fcc3ffa78cc0d558581a2abe508d)) by [@leonqadirie](https://github.com/leonqadirie)
+* degrade gracefully when cache table is missing ([#148](https://github.com/leonqadirie/ash_credo/issues/148)) ([99b1c97](https://github.com/leonqadirie/ash_credo/commit/99b1c9701fe64882305c3858543c25f5fda477d9)) by [@leonqadirie](https://github.com/leonqadirie)
+* detect additional unscoped policy forms in OverlyPermissivePolicy ([#147](https://github.com/leonqadirie/ash_credo/issues/147)) ([bf5a809](https://github.com/leonqadirie/ash_credo/commit/bf5a809ea14903251ff2ca9af67d702d4cd52b88)) by [@leonqadirie](https://github.com/leonqadirie)
+* handle bare authorize? variables in AST lists in AuthorizeFalse ([#145](https://github.com/leonqadirie/ash_credo/issues/145)) ([7d598cd](https://github.com/leonqadirie/ash_credo/commit/7d598cd7bc274af1b3246f0f2cdf922251ea393d)) by [@leonqadirie](https://github.com/leonqadirie)
+* warn instead of crashing on non-literal .credo.exs in installer ([#151](https://github.com/leonqadirie/ash_credo/issues/151)) ([ce90429](https://github.com/leonqadirie/ash_credo/commit/ce9042994cbd7878075083f38865b5c785dbc74c)) by [@leonqadirie](https://github.com/leonqadirie)
+
+
+### Performance Improvements
+
+* memoize per-file AST traversals and module probes ([#149](https://github.com/leonqadirie/ash_credo/issues/149)) ([f9bd746](https://github.com/leonqadirie/ash_credo/commit/f9bd7465bd682b3d0a3b3081cd678a2ed99f1a80)) by [@leonqadirie](https://github.com/leonqadirie)
+
 ## [0.14.0](https://github.com/leonqadirie/ash_credo/compare/v0.13.0...v0.14.0) (2026-05-27)
 
 
