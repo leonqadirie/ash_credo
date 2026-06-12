@@ -149,4 +149,66 @@ defmodule AshCredo.Orchestration do
   end
 
   defp short_name(check), do: check |> Module.split() |> List.last()
+
+  @doc """
+  Flags bare calls to configured builtin functions at statement position
+  inside action bodies, suggesting the given DSL `wrapper` keyword. Shared
+  core of the `MissingChangeWrapper`/`MissingValidationWrapper` check
+  family: Ash's builtins are plain functions imported into the DSL scope
+  that return spec tuples, so an unwrapped call is silently discarded and
+  nothing warns at compile time or runtime.
+
+  `check` is the emitting check module. Required `opts`:
+
+    * `:builtins` - builtin function names to match
+    * `:wrapper` - the DSL keyword to suggest (e.g. `"change"`)
+    * `:action_types` - action entity types to scan; checks scope this to
+      the actions whose scope actually imports their builtin family, so a
+      bare call elsewhere is a compile error the compiler already catches
+  """
+  def naked_builtin_issues(%SourceFile{} = source_file, params, check, opts) do
+    builtins = opts |> Keyword.fetch!(:builtins) |> MapSet.new()
+    wrapper = Keyword.fetch!(opts, :wrapper)
+    action_types = Keyword.fetch!(opts, :action_types)
+
+    flat_map_resource_section(source_file, params, :actions, fn
+      nil, _issue_meta ->
+        []
+
+      actions_ast, issue_meta ->
+        actions_ast
+        |> Introspection.action_entities(action_types)
+        |> Enum.flat_map(&naked_builtin_calls(&1, builtins, wrapper, issue_meta, check))
+    end)
+  end
+
+  defp naked_builtin_calls(action_ast, builtins, wrapper, issue_meta, check) do
+    action_ast
+    |> Introspection.entity_body()
+    |> Enum.flat_map(fn
+      {func_name, meta, _} ->
+        if MapSet.member?(builtins, func_name) do
+          [naked_builtin_issue(func_name, wrapper, meta, issue_meta, check)]
+        else
+          []
+        end
+
+      _ ->
+        []
+    end)
+  end
+
+  defp naked_builtin_issue(func_name, wrapper, meta, issue_meta, check) do
+    Check.format_issue(
+      issue_meta,
+      [
+        message:
+          "`#{func_name}` has no effect without a `#{wrapper}` wrapper. " <>
+            "Use `#{wrapper} #{func_name}(...)` instead.",
+        trigger: "#{func_name}",
+        line_no: meta[:line]
+      ],
+      check
+    )
+  end
 end

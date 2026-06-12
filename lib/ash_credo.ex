@@ -40,6 +40,7 @@ defmodule AshCredo do
             {AshCredo.Check.Warning.MissingChangeWrapper, []},
             {AshCredo.Check.Warning.MissingDomain, false},
             {AshCredo.Check.Warning.MissingMacroDirective, []},
+            {AshCredo.Check.Warning.MissingValidationWrapper, []},
             {AshCredo.Check.Warning.NoActions, false},
             {AshCredo.Check.Warning.OverlyPermissivePolicy, false},
             {AshCredo.Check.Warning.PinnedTimeInExpression, []},
