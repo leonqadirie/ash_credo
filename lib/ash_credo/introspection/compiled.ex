@@ -60,6 +60,8 @@ defmodule AshCredo.Introspection.Compiled do
   @enclosing_domain_key_tag {__MODULE__, :enclosing_domain}
   @code_interface_bang_key_tag {__MODULE__, :code_interface_bang}
   @ash_available_key {__MODULE__, :ash_available?}
+  @domain_check_key_tag {__MODULE__, :domain?}
+  @callback_module_key_tag {__MODULE__, :ash_callback_module?}
   @ash_missing_warned_key {__MODULE__, :ash_missing_warned}
   @not_loadable_warned_key_tag {__MODULE__, :not_loadable_warned}
 
@@ -320,12 +322,15 @@ defmodule AshCredo.Introspection.Compiled do
   Returns `true` if `module` is an Ash domain loadable in this VM.
 
   Determined by the `spark_is/0` function that Spark DSL modules inject.
-  Not cached. Cheap on positive probes (already-loaded module lookup), but
-  pays a `Code.ensure_compiled/1` filesystem search on negative probes -
-  avoid calling in hot loops with mostly-non-domain inputs.
+  Cached per module, so only the first probe of a given module pays the
+  `Code.ensure_compiled/1` filesystem search on negative results.
   """
   @spec domain?(module()) :: boolean()
   def domain?(module) when is_atom(module) do
+    Cache.memoize({@domain_check_key_tag, module}, fn -> compute_domain?(module) end)
+  end
+
+  defp compute_domain?(module) do
     ash_available?() and
       match?({:module, _}, Code.ensure_compiled(module)) and
       function_exported?(module, :spark_is, 0) and
@@ -338,10 +343,17 @@ defmodule AshCredo.Introspection.Compiled do
   `Calculation`, or any of the `Manual*` action behaviours).
 
   Detected by inspecting the module's `:behaviour` attribute, populated by
-  `use Ash.Resource.Change` and siblings at compile time.
+  `use Ash.Resource.Change` and siblings at compile time. Cached per module,
+  so only the first probe pays the `Code.ensure_compiled/1` cost.
   """
   @spec ash_callback_module?(module()) :: boolean()
   def ash_callback_module?(module) when is_atom(module) do
+    Cache.memoize({@callback_module_key_tag, module}, fn ->
+      compute_ash_callback_module?(module)
+    end)
+  end
+
+  defp compute_ash_callback_module?(module) do
     with true <- ash_available?(),
          {:module, _} <- Code.ensure_compiled(module) do
       module_behaviours(module)

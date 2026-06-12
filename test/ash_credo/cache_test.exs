@@ -63,6 +63,31 @@ defmodule AshCredo.CacheTest do
     end
   end
 
+  describe "memoize/2" do
+    test "computes on the first call and serves the cached value thereafter" do
+      parent = self()
+
+      compute = fn ->
+        send(parent, :computed)
+        :value
+      end
+
+      assert Cache.memoize(:memo_key, compute) == :value
+      assert_received :computed
+
+      assert Cache.memoize(:memo_key, compute) == :value
+      refute_received :computed
+    end
+
+    test "caches falsy values instead of recomputing them" do
+      assert Cache.memoize(:memo_nil, fn -> nil end) == nil
+      assert Cache.memoize(:memo_nil, fn -> raise "must not recompute" end) == nil
+
+      assert Cache.memoize(:memo_false, fn -> false end) == false
+      assert Cache.memoize(:memo_false, fn -> raise "must not recompute" end) == false
+    end
+  end
+
   describe "clear/0" do
     test "deletes every entry" do
       Cache.put(:a, 1)
@@ -126,6 +151,20 @@ defmodule AshCredo.CacheTest do
 
     test "member?/1 returns false" do
       refute Cache.member?(:k)
+    end
+
+    test "memoize/2 computes on every call (nothing is ever cached)" do
+      parent = self()
+
+      compute = fn ->
+        send(parent, :computed)
+        :value
+      end
+
+      assert Cache.memoize(:memo_key, compute) == :value
+      assert Cache.memoize(:memo_key, compute) == :value
+      assert_received :computed
+      assert_received :computed
     end
 
     test "the first access emits a one-time stderr hint suggesting plugin registration" do

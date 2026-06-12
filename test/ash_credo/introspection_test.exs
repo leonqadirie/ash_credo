@@ -159,6 +159,22 @@ defmodule AshCredo.IntrospectionTest do
 
       assert context.absolute_segments == [:Blog, :Post]
     end
+
+    test "memoization discriminates same-filename source files by content" do
+      filename = "memoization_test.ex"
+      with_resource = source_file(@ash_resource, filename)
+      without_resource = source_file(@plain_module, filename)
+
+      assert [%{absolute_segments: [:MyApp, :Post]}] =
+               Introspection.resource_contexts(with_resource)
+
+      # Same filename, different content: must not serve the cached contexts.
+      assert Introspection.resource_contexts(without_resource) == []
+
+      # Repeated calls serve the memoized value for the matching content.
+      assert [%{absolute_segments: [:MyApp, :Post]}] =
+               Introspection.resource_contexts(with_resource)
+    end
   end
 
   describe "ash_domain?/1" do

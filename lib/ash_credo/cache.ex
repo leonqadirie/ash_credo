@@ -33,6 +33,11 @@ defmodule AshCredo.Cache do
                         "add `{AshCredo, []}` to `plugins` in .credo.exs"
   @hint_emitted_key {__MODULE__, :missing_table_hint_emitted}
 
+  # Sentinel distinguishing "no entry" from a cached `nil`/`false` in
+  # memoize/2. A computed value that literally equals this tuple would be
+  # recomputed on every call; no realistic value does.
+  @memoize_miss {__MODULE__, :memoize_miss}
+
   @doc """
   Starts the cache GenServer. Idempotent - returns the existing pid if
   already started.
@@ -92,6 +97,26 @@ defmodule AshCredo.Cache do
     end
 
     :ok
+  end
+
+  @doc """
+  Returns the cached value at `key`, computing it with `fun` and storing the
+  result on a miss. `fun` must be a pure function of `key`: concurrent first
+  callers may each compute, and the last write wins.
+
+  When the table is missing, computes on every call (nothing is ever cached).
+  """
+  @spec memoize(term(), (-> term())) :: term()
+  def memoize(key, fun) when is_function(fun, 0) do
+    case get(key, @memoize_miss) do
+      @memoize_miss ->
+        value = fun.()
+        put(key, value)
+        value
+
+      value ->
+        value
+    end
   end
 
   @doc """
