@@ -45,14 +45,23 @@ if Code.ensure_loaded?(Igniter) do
       }
     end
 
+    @opt_in_checks_notice """
+    AshCredo enables only a small set of its checks by default. The rest
+    are opt-in: see the checks table in the README for the full list and a
+    ready-to-paste "enable all checks" config:
+
+        https://ash_credo.hexdocs.pm/readme.html#checks
+    """
+
     @impl Igniter.Mix.Task
     def igniter(igniter) do
-      Igniter.create_or_update_elixir_file(
-        igniter,
+      igniter
+      |> Igniter.create_or_update_elixir_file(
         ".credo.exs",
         default_credo_config(),
         &update_credo_config/1
       )
+      |> Igniter.add_notice(@opt_in_checks_notice)
     end
 
     defp update_credo_config(zipper) do
