@@ -32,7 +32,7 @@ work, but run uncached and without any defaults.
 
 The plugin enables only a small, low-noise set of checks by default; most
 checks are opt-in. Do not guess check names. The authoritative list is the
-checks table in the README (<https://ash_credo.hexdocs.pm/readme.html#checks>,
+checks table in the README (<https://ash-credo.hexdocs.pm/readme.html#checks>,
 or `deps/ash_credo/README.md` inside a consuming project), which carries each
 check's category, default state, and configurable parameters, plus a
 ready-to-paste "enable all checks" block. Enable opt-in checks by adding them
