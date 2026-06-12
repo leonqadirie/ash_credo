@@ -153,10 +153,10 @@ defmodule AshCredo.Orchestration do
   @doc """
   Flags bare calls to configured builtin functions at statement position
   inside action bodies, suggesting the given DSL `wrapper` keyword. Shared
-  core of the `MissingChangeWrapper`/`MissingValidationWrapper` check
-  family: Ash's builtins are plain functions imported into the DSL scope
-  that return spec tuples, so an unwrapped call is silently discarded and
-  nothing warns at compile time or runtime.
+  core of the `MissingChangeWrapper`/`MissingValidationWrapper`/
+  `MissingPrepareWrapper` check family: Ash's builtins are plain functions
+  imported into the DSL scope that return spec tuples, so an unwrapped call
+  is silently discarded and nothing warns at compile time or runtime.
 
   `check` is the emitting check module. Required `opts`:
 
@@ -165,21 +165,60 @@ defmodule AshCredo.Orchestration do
     * `:action_types` - action entity types to scan; checks scope this to
       the actions whose scope actually imports their builtin family, so a
       bare call elsewhere is a compile error the compiler already catches
+
+  Optional `opts`:
+
+    * `:pipeline_builtins` - builtin names to also flag at statement
+      position inside `pipeline` bodies in the `pipelines` section
+      (defaults to `[]`). Pipeline bodies import all three builtin families
+      at once, so checks split ownership of names that exist in more than
+      one family to avoid double-flagging the same call.
   """
   def naked_builtin_issues(%SourceFile{} = source_file, params, check, opts) do
     builtins = opts |> Keyword.fetch!(:builtins) |> MapSet.new()
     wrapper = Keyword.fetch!(opts, :wrapper)
     action_types = Keyword.fetch!(opts, :action_types)
+    pipeline_builtins = opts |> Keyword.get(:pipeline_builtins, []) |> MapSet.new()
 
-    flat_map_resource_section(source_file, params, :actions, fn
-      nil, _issue_meta ->
-        []
+    flat_map_resource_context(source_file, params, fn context, issue_meta ->
+      action_issues =
+        naked_builtin_section_issues(
+          context,
+          {:actions, action_types, builtins},
+          wrapper,
+          issue_meta,
+          check
+        )
 
-      actions_ast, issue_meta ->
-        actions_ast
-        |> Introspection.action_entities(action_types)
-        |> Enum.flat_map(&naked_builtin_calls(&1, builtins, wrapper, issue_meta, check))
+      pipeline_issues =
+        naked_builtin_section_issues(
+          context,
+          {:pipelines, [:pipeline], pipeline_builtins},
+          wrapper,
+          issue_meta,
+          check
+        )
+
+      action_issues ++ pipeline_issues
     end)
+  end
+
+  defp naked_builtin_section_issues(
+         context,
+         {section_name, entity_names, builtins},
+         wrapper,
+         issue_meta,
+         check
+       ) do
+    with true <- MapSet.size(builtins) > 0,
+         section_ast when not is_nil(section_ast) <-
+           Introspection.resource_section(context, section_name) do
+      section_ast
+      |> Introspection.action_entities(entity_names)
+      |> Enum.flat_map(&naked_builtin_calls(&1, builtins, wrapper, issue_meta, check))
+    else
+      _ -> []
+    end
   end
 
   defp naked_builtin_calls(action_ast, builtins, wrapper, issue_meta, check) do

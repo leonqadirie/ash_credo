@@ -128,7 +128,7 @@ defmodule AshCredo.Check.Warning.MissingChangeWrapperTest do
     assert issue.message =~ "set_attribute"
   end
 
-  test "reports issue in generic action" do
+  test "does not scan generic actions (change builtins do not compile there)" do
     source = """
     defmodule MyApp.Post do
       use Ash.Resource, domain: MyApp.Blog
@@ -136,13 +136,13 @@ defmodule AshCredo.Check.Warning.MissingChangeWrapperTest do
       actions do
         action :promote do
           set_attribute(:featured, true)
+          set_context(%{a: 1})
         end
       end
     end
     """
 
-    assert [issue] = run_check(MissingChangeWrapper, source)
-    assert issue.message =~ "set_attribute"
+    assert [] = run_check(MissingChangeWrapper, source)
   end
 
   test "no issue for non-change calls in action body" do
@@ -179,6 +179,22 @@ defmodule AshCredo.Check.Warning.MissingChangeWrapperTest do
     assert [] = run_check(MissingChangeWrapper, source)
   end
 
+  test "does not flag naked build in pipeline body (MissingPrepareWrapper's job)" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      pipelines do
+        pipeline :sorted do
+          build(sort: [:id])
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(MissingChangeWrapper, source)
+  end
+
   test "does not flag naked validation builtins (MissingValidationWrapper's job)" do
     source = """
     defmodule MyApp.User do
@@ -187,6 +203,44 @@ defmodule AshCredo.Check.Warning.MissingChangeWrapperTest do
       actions do
         create :register do
           present(:email)
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(MissingChangeWrapper, source)
+  end
+
+  test "reports issue for naked change builtins in pipeline body" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      pipelines do
+        pipeline :defaults do
+          set_attribute(:status, :draft)
+          set_context(%{tracing: true})
+        end
+      end
+    end
+    """
+
+    issues = run_check(MissingChangeWrapper, source)
+    assert [_, _] = issues
+    triggers = Enum.map(issues, & &1.trigger)
+    assert "set_attribute" in triggers
+    assert "set_context" in triggers
+  end
+
+  test "no issue when change builtins are wrapped inside pipeline body" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      pipelines do
+        pipeline :defaults do
+          change set_attribute(:status, :draft)
+          change set_context(%{tracing: true})
         end
       end
     end
