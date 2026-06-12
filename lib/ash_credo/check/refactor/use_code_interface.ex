@@ -105,6 +105,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   alias AshCredo.Introspection.{AshCallResolver, AshCallSite}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
+  alias AshCredo.Orchestration
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
@@ -113,13 +114,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
     if config.in_domain or config.outside_domain do
       CompiledIntrospection.with_compiled_check(
-        fn ->
-          format_issue(issue_meta,
-            message:
-              "Ash is not loaded in the VM running Credo - `UseCodeInterface` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
-            line_no: 1
-          )
-        end,
+        fn -> Orchestration.ash_missing_issue(issue_meta, __MODULE__) end,
         fn ->
           source_file
           |> AshCallResolver.sites()

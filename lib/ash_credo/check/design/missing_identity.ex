@@ -36,38 +36,23 @@ defmodule AshCredo.Check.Design.MissingIdentity do
 
   alias AshCredo.Introspection
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
-  alias AshCredo.Introspection.ResourceContext
+  alias AshCredo.Orchestration
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
     candidates = MapSet.new(Params.get(params, :identity_candidates, __MODULE__))
 
-    CompiledIntrospection.with_compiled_check(
-      fn ->
-        format_issue(issue_meta,
-          message:
-            "Ash is not loaded in the VM running Credo - `MissingIdentity` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
-          line_no: 1
-        )
-      end,
-      fn ->
-        source_file
-        |> Introspection.resource_contexts()
-        |> Enum.flat_map(&check_resource(&1, candidates, issue_meta))
+    Orchestration.compiled_check_on_named_resources(
+      source_file,
+      params,
+      __MODULE__,
+      fn resource, context, issue_meta ->
+        check_resource(resource, context, candidates, issue_meta)
       end
     )
   end
 
-  defp check_resource(%ResourceContext{absolute_segments: nil}, _candidates, _issue_meta), do: []
-
-  defp check_resource(
-         %ResourceContext{absolute_segments: segments} = context,
-         candidates,
-         issue_meta
-       ) do
-    resource = Module.concat(segments)
-
+  defp check_resource(resource, context, candidates, issue_meta) do
     if CompiledIntrospection.embedded?(resource) do
       []
     else
@@ -81,9 +66,7 @@ defmodule AshCredo.Check.Design.MissingIdentity do
         flag_missing_identities(resource, info, context, candidates, issue_meta)
 
       {:error, :not_loadable} ->
-        CompiledIntrospection.with_unique_not_loadable(resource, fn ->
-          not_loadable_issue(resource, context, issue_meta)
-        end)
+        Orchestration.unique_not_loadable_issues(resource, context, issue_meta, __MODULE__)
 
       {:error, _} ->
         []
@@ -119,14 +102,6 @@ defmodule AshCredo.Check.Design.MissingIdentity do
           "Add `identity :unique_#{attribute.name}, [:#{attribute.name}]` to the resource's `identities` block.",
       trigger: "#{attribute.name}",
       line_no: line
-    )
-  end
-
-  defp not_loadable_issue(resource, context, issue_meta) do
-    format_issue(issue_meta,
-      message:
-        "Could not load `#{inspect(resource)}` for `MissingIdentity`. Run `mix compile` before `mix credo`, or disable this check in `.credo.exs`.",
-      line_no: Map.get(context, :use_line) || 1
     )
   end
 end

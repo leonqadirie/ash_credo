@@ -569,9 +569,10 @@ defmodule AshCredo.Introspection.Compiled do
   concurrent Credo tasks.
 
   `build_issue_fn` is a 0-arity function that returns a single
-  `Credo.Issue.t()` - typically a `format_issue/2` call inside the calling
-  check module (since `format_issue/2` is a macro from `use Credo.Check` and
-  can only be built from there).
+  `Credo.Issue.t()`. Checks with the standard message go through
+  `AshCredo.Orchestration.unique_not_loadable_issues/4`, which wraps this
+  function; checks with a bespoke message call this directly with their own
+  `format_issue/2`.
   """
   @spec with_unique_not_loadable(module(), (-> struct())) :: [struct()]
   def with_unique_not_loadable(module, build_issue_fn)

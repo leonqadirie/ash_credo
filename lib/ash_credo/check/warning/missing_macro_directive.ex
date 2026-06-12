@@ -140,6 +140,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
 
   alias AshCredo.Introspection.{Aliases, LexicalScopeWalker}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
+  alias AshCredo.Orchestration
 
   @directive_kinds ~w(require import)a
 
@@ -149,15 +150,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     targets = target_modules(params)
 
     CompiledIntrospection.with_compiled_check(
-      fn ->
-        format_issue(issue_meta,
-          message:
-            "Ash is not loaded in the VM running Credo - `MissingMacroDirective` " <>
-              "is a no-op. Add `:ash` as a dependency, or disable this check " <>
-              "in `.credo.exs`.",
-          line_no: 1
-        )
-      end,
+      fn -> Orchestration.ash_missing_issue(issue_meta, __MODULE__) end,
       fn -> do_run(source_file, targets, issue_meta) end
     )
   end

@@ -29,43 +29,34 @@ defmodule AshCredo.Check.Warning.NoActions do
       """
     ]
 
+  # The alias block plus the minimal run/1 harness call below is the
+  # irreducible shell of a compiled check; its twin in the other
+  # loadable-resource check trips ExDNA's clone detector at min_mass 30.
+  # credo:disable-for-next-line ExDNA.Credo
   alias AshCredo.Introspection
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
-  alias AshCredo.Introspection.ResourceContext
   alias AshCredo.Orchestration
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
-    CompiledIntrospection.with_compiled_check(
-      fn ->
-        format_issue(IssueMeta.for(source_file, params),
-          message:
-            "Ash is not loaded in the VM running Credo - `NoActions` is a no-op. Add `:ash` as a dependency, or disable this check in `.credo.exs`.",
-          line_no: 1
-        )
-      end,
-      fn ->
-        Orchestration.flat_map_loadable_resource(source_file, params, &check_loaded_resource/3)
-      end
+    Orchestration.compiled_check_on_loadable_resources(
+      source_file,
+      params,
+      __MODULE__,
+      &check_resource_actions/3
     )
   end
 
-  defp check_loaded_resource(
-         resource,
-         %ResourceContext{module_ast: module_ast} = context,
-         issue_meta
-       ) do
+  defp check_resource_actions(resource, context, issue_meta) do
     case CompiledIntrospection.actions(resource) do
       {:ok, []} ->
-        [no_actions_issue(module_ast, context, issue_meta)]
+        [no_actions_issue(context.module_ast, context, issue_meta)]
 
       {:ok, _actions} ->
         []
 
       {:error, :not_loadable} ->
-        CompiledIntrospection.with_unique_not_loadable(resource, fn ->
-          not_loadable_issue(resource, context, issue_meta)
-        end)
+        Orchestration.unique_not_loadable_issues(resource, context, issue_meta, __MODULE__)
 
       {:error, _} ->
         []
@@ -79,14 +70,6 @@ defmodule AshCredo.Check.Warning.NoActions do
       message: "Resource has a data layer but no actions defined.",
       trigger: "use Ash.Resource",
       line_no: Introspection.resource_issue_line(context, actions_ast)
-    )
-  end
-
-  defp not_loadable_issue(resource, context, issue_meta) do
-    format_issue(issue_meta,
-      message:
-        "Could not load `#{inspect(resource)}` for `NoActions`. Run `mix compile` before `mix credo`, or disable this check in `.credo.exs`.",
-      line_no: Map.get(context, :use_line) || 1
     )
   end
 end
