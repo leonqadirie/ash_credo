@@ -37,6 +37,7 @@ defmodule AshCredo do
             {AshCredo.Check.Warning.ActorOnCallOptions, false},
             {AshCredo.Check.Warning.AuthorizeFalse, false},
             {AshCredo.Check.Warning.AuthorizerWithoutPolicies, false},
+            {AshCredo.Check.Warning.CompileTimeDefault, []},
             {AshCredo.Check.Warning.EmptyDomain, false},
             {AshCredo.Check.Warning.MissingChangeWrapper, []},
             {AshCredo.Check.Warning.MissingDomain, false},
