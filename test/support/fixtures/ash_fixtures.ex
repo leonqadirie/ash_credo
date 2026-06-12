@@ -76,6 +76,7 @@ defmodule AshCredoFixtures.Blog do
     resource AshCredoFixtures.Blog.PartialTimestamps
     resource AshCredoFixtures.Blog.CustomTimestamps
     resource AshCredoFixtures.Blog.Tag
+    resource AshCredoFixtures.Blog.Contact
     resource AshCredoFixtures.Blog.GenericActions
     resource AshCredoFixtures.Blog.Empty
     resource AshCredoFixtures.Blog.WithAuthorizer
@@ -357,6 +358,43 @@ defmodule AshCredoFixtures.Blog.Tag do
   attributes do
     uuid_primary_key :id
     attribute :name, :string, public?: true
+  end
+end
+
+defmodule AshCredoFixtures.Blog.Contact do
+  @moduledoc """
+  `RedundantValidation` fixture: `:name` and `:handle` carry
+  `allow_nil? false`, `:nickname` stays nullable, and the `:import` create
+  action reopens `:name` (but not `:handle`) via `allow_nil_input` - the
+  escape hatch under which a `present` validation is NOT redundant.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  actions do
+    defaults [:read]
+
+    create :create do
+      accept [:name, :nickname]
+    end
+
+    update :rename do
+      accept [:name]
+    end
+
+    create :import do
+      accept [:name, :nickname]
+      allow_nil_input [:name]
+    end
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :name, :string, allow_nil?: false, public?: true
+    attribute :handle, :string, allow_nil?: false, default: "anon", public?: true
+    attribute :nickname, :string, public?: true
   end
 end
 
