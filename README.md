@@ -14,10 +14,8 @@ AshCredo detects common anti-patterns, security pitfalls, and missing best pract
 **Note: only the following checks are enabled by default.** All other checks are opt-in - enable them individually in your `.credo.exs` (see [Configuration](#configuration)).
 
 - `Warning.CompileTimeDefault`
-- `Warning.MissingChangeWrapper`
+- `Warning.MissingBuiltinWrapper`
 - `Warning.MissingMacroDirective`
-- `Warning.MissingPrepareWrapper`
-- `Warning.MissingValidationWrapper`
 - `Warning.PinnedTimeInExpression`
 
 ## Installation
@@ -81,11 +79,9 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `AuthorizerWithoutPolicies` | Warning | High | No | Detects resources with `Ash.Policy.Authorizer` but no policies defined. **Requires compiled project.** |
 | `CompileTimeDefault` | Warning | High | Yes | Flags `default: DateTime.utc_now()` / `Ash.UUID.generate()` (missing `&.../0` capture) on attributes and arguments - the call runs once at compile time, so every record gets the same frozen value |
 | `EmptyDomain` | Warning | Normal | No | Flags domains with no resources registered |
-| `MissingChangeWrapper` | Warning | High | Yes | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions and pipelines - the bare call compiles but is silently discarded |
+| `MissingBuiltinWrapper` | Warning | High | Yes | Flags builtin change/validation/preparation/calculation functions (`set_attribute`, `present`, `build`, `concat`, ...) used without their `change`/`validate`/`prepare`/`calculate` wrapper in action bodies, pipelines, and global sections - the bare call compiles but is silently discarded |
 | `MissingDomain` | Warning | Normal | No | Ensures non-embedded resources set the `domain:` option |
 | `MissingMacroDirective` | Warning | High | Yes | Flags qualified calls to `Ash.Query`/`Ash.Expr` macros (`filter`, `expr`, ...) when the enclosing module does not have a matching module-level `require`/`import`. Catches the runtime `UndefinedFunctionError` that slips past the compiler when the macro argument is a bare runtime value. **Requires compiled project** and **configurable**. |
-| `MissingPrepareWrapper` | Warning | High | Yes | Flags builtin preparation functions (`build`, `set_context`) used without `prepare` wrapper in read/generic actions and pipelines - the bare call compiles but the preparation never runs |
-| `MissingValidationWrapper` | Warning | High | Yes | Flags builtin validation functions (`present`, `attribute_equals`, ...) used without `validate` wrapper in actions and pipelines - the bare call compiles but the validation never runs |
 | `OverlyPermissivePolicy` | Warning | High | No | Flags unscoped `authorize_if always()` policies |
 | `PinnedTimeInExpression` | Warning | High | Yes | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
 | `RedundantValidation` | Warning | Normal | No | Flags `validate present(...)` on attributes that already have `allow_nil? false` - the constraint guarantees presence, making the validation redundant (skips `allow_nil_input` escape hatches). **Requires compiled project.** |

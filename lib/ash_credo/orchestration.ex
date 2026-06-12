@@ -153,10 +153,10 @@ defmodule AshCredo.Orchestration do
   @doc """
   Flags bare calls to configured builtin functions at statement position
   inside action bodies, suggesting the given DSL `wrapper` keyword. Shared
-  core of the `MissingChangeWrapper`/`MissingValidationWrapper`/
-  `MissingPrepareWrapper` check family: Ash's builtins are plain functions
-  imported into the DSL scope that return spec tuples, so an unwrapped call
-  is silently discarded and nothing warns at compile time or runtime.
+  core of `MissingBuiltinWrapper`, which invokes it once per builtin
+  family: Ash's builtins are plain functions imported into the DSL scope
+  that return spec tuples, so an unwrapped call is silently discarded and
+  nothing warns at compile time or runtime.
 
   `check` is the emitting check module. Required `opts`:
 
@@ -173,19 +173,27 @@ defmodule AshCredo.Orchestration do
       (defaults to `[]`). Pipeline bodies import all three builtin families
       at once, so checks split ownership of names that exist in more than
       one family to avoid double-flagging the same call.
+    * `:global_sections` - top-level DSL sections (e.g. `:validations`)
+      whose direct entries are scanned for bare builtin calls (defaults to
+      `[]`). Checks scope each family to the sections that import it.
+    * `:usage_prefix` - what to put before `builtin(...)` in the advice
+      (defaults to `"<wrapper> "`). Lets entity-shaped wrappers like
+      `calculate` show their full form.
   """
   def naked_builtin_issues(%SourceFile{} = source_file, params, check, opts) do
     builtins = opts |> Keyword.fetch!(:builtins) |> MapSet.new()
     wrapper = Keyword.fetch!(opts, :wrapper)
     action_types = Keyword.fetch!(opts, :action_types)
     pipeline_builtins = opts |> Keyword.get(:pipeline_builtins, []) |> MapSet.new()
+    global_sections = Keyword.get(opts, :global_sections, [])
+    advice = {wrapper, Keyword.get(opts, :usage_prefix, "#{wrapper} ")}
 
     flat_map_resource_context(source_file, params, fn context, issue_meta ->
       action_issues =
         naked_builtin_section_issues(
           context,
           {:actions, action_types, builtins},
-          wrapper,
+          advice,
           issue_meta,
           check
         )
@@ -194,19 +202,32 @@ defmodule AshCredo.Orchestration do
         naked_builtin_section_issues(
           context,
           {:pipelines, [:pipeline], pipeline_builtins},
-          wrapper,
+          advice,
           issue_meta,
           check
         )
 
-      action_issues ++ pipeline_issues
+      global_issues =
+        Enum.flat_map(
+          global_sections,
+          &naked_global_section_issues(context, &1, builtins, advice, issue_meta, check)
+        )
+
+      action_issues ++ pipeline_issues ++ global_issues
     end)
+  end
+
+  defp naked_global_section_issues(context, section_name, builtins, advice, issue_meta, check) do
+    case Introspection.resource_section(context, section_name) do
+      nil -> []
+      section_ast -> naked_builtin_calls(section_ast, builtins, advice, issue_meta, check)
+    end
   end
 
   defp naked_builtin_section_issues(
          context,
          {section_name, entity_names, builtins},
-         wrapper,
+         advice,
          issue_meta,
          check
        ) do
@@ -215,19 +236,21 @@ defmodule AshCredo.Orchestration do
            Introspection.resource_section(context, section_name) do
       section_ast
       |> Introspection.action_entities(entity_names)
-      |> Enum.flat_map(&naked_builtin_calls(&1, builtins, wrapper, issue_meta, check))
+      |> Enum.flat_map(&naked_builtin_calls(&1, builtins, advice, issue_meta, check))
     else
       _ -> []
     end
   end
 
-  defp naked_builtin_calls(action_ast, builtins, wrapper, issue_meta, check) do
-    action_ast
+  # Works on any AST node with a do-block whose direct entries are
+  # statements: action entities, pipeline entities, and global sections.
+  defp naked_builtin_calls(ast, builtins, advice, issue_meta, check) do
+    ast
     |> Introspection.entity_body()
     |> Enum.flat_map(fn
       {func_name, meta, _} ->
         if MapSet.member?(builtins, func_name) do
-          [naked_builtin_issue(func_name, wrapper, meta, issue_meta, check)]
+          [naked_builtin_issue(func_name, advice, meta, issue_meta, check)]
         else
           []
         end
@@ -237,13 +260,13 @@ defmodule AshCredo.Orchestration do
     end)
   end
 
-  defp naked_builtin_issue(func_name, wrapper, meta, issue_meta, check) do
+  defp naked_builtin_issue(func_name, {wrapper, usage_prefix}, meta, issue_meta, check) do
     Check.format_issue(
       issue_meta,
       [
         message:
           "`#{func_name}` has no effect without a `#{wrapper}` wrapper. " <>
-            "Use `#{wrapper} #{func_name}(...)` instead.",
+            "Use `#{usage_prefix}#{func_name}(...)` instead.",
         trigger: "#{func_name}",
         line_no: meta[:line]
       ],
