@@ -11,8 +11,9 @@ defmodule AshCredo.SelfCheck.EnforceCompiledIntrospectionBoundary do
       `Ash.Resource.Info`, `Ash.Domain.Info`, `Ash.Policy.Info`,
       `Ash.Type.NewType`, or similar Ash introspection modules directly.
 
-      The wrapper caches results in `:persistent_term` so that repeated
-      lookups across Credo's per-file task pool are cheap, and it normalises
+      The wrapper caches results in the run-scoped `AshCredo.Cache` so that
+      repeated lookups across Credo's per-file task pool are cheap, and it
+      normalises
       the error modes (`:ash_missing`, `:not_loadable`, `:not_a_resource`)
       into a single interface that every check can rely on.
 
