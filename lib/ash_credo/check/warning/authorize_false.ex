@@ -138,7 +138,10 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
   defp has_authorize_false?(args) do
     Enum.any?(args, fn
       {:authorize?, false} -> true
-      kwl when is_list(kwl) -> Keyword.get(kwl, :authorize?) == false
+      # Bare `authorize?` variables have a 3-tuple AST ({:authorize?, meta, nil})
+      # that Keyword.get's :lists.keyfind would match, so only accept literal
+      # 2-tuples here.
+      kwl when is_list(kwl) -> Enum.any?(kwl, &match?({:authorize?, false}, &1))
       _ -> false
     end)
   end
