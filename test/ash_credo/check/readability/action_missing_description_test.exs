@@ -72,6 +72,56 @@ defmodule AshCredo.Check.Readability.ActionMissingDescriptionTest do
     assert [] = run_check(ActionMissingDescription, source)
   end
 
+  test "no issue for actions declared via defaults" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        defaults [:read, :destroy, create: :*, update: :*]
+      end
+    end
+    """
+
+    assert [] = run_check(ActionMissingDescription, source)
+  end
+
+  test "reports generic action without description, anchored at its line" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        action :send_newsletter, :ok do
+          run MyApp.SendNewsletter
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActionMissingDescription, source)
+    assert issue.trigger == "send_newsletter"
+    assert issue.line_no == 5
+    assert issue.message =~ "send_newsletter"
+  end
+
+  test "no issue for generic action with description" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        action :send_newsletter, :ok do
+          description "Sends the weekly newsletter."
+          run MyApp.SendNewsletter
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(ActionMissingDescription, source)
+  end
+
   test "ignores non-Ash modules" do
     source = """
     defmodule MyApp.Utils do
