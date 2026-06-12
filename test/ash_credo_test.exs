@@ -11,14 +11,21 @@ defmodule AshCredoTest do
   # tolerated (they simply contribute zero rows).
   @category_order ["Warning", "Refactor", "Design", "Consistency", "Readability"]
 
-  # Checks that are enabled by default in `lib/ash_credo.ex` (registered with
-  # `[]` instead of `false`). These are intentionally omitted from the
-  # "enable all checks" README block.
-  @default_on_checks [
-    {"Warning", "MissingChangeWrapper"},
-    {"Warning", "MissingMacroDirective"},
-    {"Warning", "PinnedTimeInExpression"}
-  ]
+  # Extracts entries like `{AshCredo.Check.Warning.NoActions, []}` from the
+  # plugin file's `extra` config, keeping the `[]`/`false` state so tests can
+  # distinguish default-on checks from registered-but-disabled ones.
+  defp plugin_entries_with_state do
+    Regex.scan(~r/\{AshCredo\.Check\.(\w+)\.(\w+),\s*(\[\]|false)\}/, File.read!(@plugin_file))
+    |> Enum.map(fn [_full, category, name, state] -> {category, name, state} end)
+  end
+
+  # Checks that are enabled by default - derived from `lib/ash_credo.ex`
+  # (entries registered with `[]` instead of `false`), so flipping a default
+  # there fails the README tests until the docs follow. These are
+  # intentionally omitted from the "enable all checks" README block.
+  defp default_on_checks do
+    for {cat, name, "[]"} <- plugin_entries_with_state(), do: {cat, name}
+  end
 
   # A check requires a compiled project iff it aliases
   # `AshCredo.Introspection.Compiled` at module level. Anchored to line start
@@ -65,12 +72,9 @@ defmodule AshCredoTest do
   describe "check registry consistency" do
     test "all checks in #{@plugin_file} match filesystem and are sorted within categories" do
       expected = for {cat, name, _path} <- discover_check_modules(), do: {cat, name}
-      plugin_content = File.read!(@plugin_file)
 
-      # Extract entries like {AshCredo.Check.Warning.NoActions, []}
       plugin_entries =
-        Regex.scan(~r/\{AshCredo\.Check\.(\w+)\.(\w+),\s*(?:\[\]|false)\}/, plugin_content)
-        |> Enum.map(fn [_full, category, name] -> {category, name} end)
+        for {cat, name, _state} <- plugin_entries_with_state(), do: {cat, name}
 
       assert_set_equality(
         expected,
@@ -110,9 +114,11 @@ defmodule AshCredoTest do
     end
 
     test "\"enable all checks\" block in #{@readme_file} matches filesystem and is sorted within categories" do
+      default_on = default_on_checks()
+
       expected =
         for {cat, name, _path} <- discover_check_modules(),
-            {cat, name} not in @default_on_checks do
+            {cat, name} not in default_on do
           {cat, name}
         end
 
@@ -145,8 +151,8 @@ defmodule AshCredoTest do
           ~s(AshCredo.Check.#{cat}.#{name} exists on disk but is missing from the "enable all checks" block in #{@readme_file})
         end,
         fn {cat, name} = entry ->
-          if entry in @default_on_checks do
-            ~s(AshCredo.Check.#{cat}.#{name} is default-on and should not appear in the "enable all checks" block in #{@readme_file})
+          if entry in default_on do
+            ~s(AshCredo.Check.#{cat}.#{name} is default-on in #{@plugin_file} and should not appear in the "enable all checks" block in #{@readme_file})
           else
             ~s(AshCredo.Check.#{cat}.#{name} is listed in the "enable all checks" block in #{@readme_file} but has no file in #{@check_dir}/)
           end
@@ -159,7 +165,7 @@ defmodule AshCredoTest do
       )
     end
 
-    test "default-on bullet list in #{@readme_file} matches @default_on_checks" do
+    test "default-on bullet list in #{@readme_file} matches the default-on checks in #{@plugin_file}" do
       readme_content = File.read!(@readme_file)
 
       bullet_block =
@@ -180,13 +186,13 @@ defmodule AshCredoTest do
         |> Enum.map(fn [_full, category, name] -> {category, name} end)
 
       assert_set_equality(
-        @default_on_checks,
+        default_on_checks(),
         bullet_entries,
         fn {cat, name} ->
-          ~s(AshCredo.Check.#{cat}.#{name} is in @default_on_checks but missing from the "enabled by default" bullet list in #{@readme_file})
+          ~s(AshCredo.Check.#{cat}.#{name} is default-on - registered with `[]` - in #{@plugin_file} but missing from the "enabled by default" bullet list in #{@readme_file})
         end,
         fn {cat, name} ->
-          ~s(`#{cat}.#{name}` is listed in the "enabled by default" bullet list in #{@readme_file} but not in @default_on_checks)
+          ~s(`#{cat}.#{name}` is listed in the "enabled by default" bullet list in #{@readme_file} but is not default-on in #{@plugin_file})
         end
       )
 
