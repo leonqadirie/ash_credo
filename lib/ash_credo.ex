@@ -2,8 +2,15 @@ defmodule AshCredo do
   @moduledoc """
   Credo checks for Ash Framework.
 
-  Provides pre-built checks that detect common Ash anti-patterns
-  by pattern matching on unexpanded source AST.
+  Provides pre-built checks that detect common Ash anti-patterns.
+  Some checks analyse unexpanded source AST; others introspect the
+  compiled modules to see the fully-resolved DSL state, including
+  anything Spark transformers and extensions contribute.
+
+  Checks that introspect compiled modules require the project to be
+  compiled before running `mix credo` (for example via a Mix alias
+  like `lint: ["compile", "credo --strict"]`); otherwise they emit a
+  configuration diagnostic and become a no-op.
 
   ## Plugin Usage
 
