@@ -92,6 +92,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `SensitiveFieldInAccept` | Warning | High | No | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
 | `UnknownAction` | Warning | High | No | Flags `Ash.*` calls referencing actions that do not exist on the resolved resource, with a fuzzy `Did you mean` hint. **Requires compiled project.** |
 | `WildcardAcceptOnAction` | Warning | High | No | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
+| `AnonymousFunctionInDsl` | Refactor | Normal | No | Flags `fn`/`&` captures passed to `change`/`validate`/`prepare`/`calculate` - anonymous functions can never be atomic (changes/validations) or supply an expression (calculations); extract them into callback modules |
 | `DirectiveInFunctionBody` | Refactor | Normal | No | Flags `require`/`import`/`alias` of configured modules (default `Ash.Query`, `Ash.Expr`) declared inside function bodies instead of at module level |
 | `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |
 | `RaisingCall` | Refactor | Low | No | Flags Ash bang calls - top-level `Ash.read!`/`Ash.create!`/`Ash.Filter.parse!` plus code-interface bangs like `MyApp.Blog.create_post!`. Orphan bangs (those without a non-bang counterpart, e.g. `Ash.stream!`, `Ash.Seed.seed!`) are detected dynamically and skipped. Test directories excluded by default. **Requires compiled project.** |
@@ -183,6 +184,7 @@ checks: %{
     {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
     {AshCredo.Check.Warning.UnknownAction, []},
     {AshCredo.Check.Warning.WildcardAcceptOnAction, []},
+    {AshCredo.Check.Refactor.AnonymousFunctionInDsl, []},
     {AshCredo.Check.Refactor.DirectiveInFunctionBody, []},
     {AshCredo.Check.Refactor.LargeResource, []},
     {AshCredo.Check.Refactor.RaisingCall, []},

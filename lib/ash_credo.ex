@@ -52,6 +52,7 @@ defmodule AshCredo do
             {AshCredo.Check.Warning.UnknownAction, false},
             {AshCredo.Check.Warning.WildcardAcceptOnAction, false},
             # Refactor
+            {AshCredo.Check.Refactor.AnonymousFunctionInDsl, false},
             {AshCredo.Check.Refactor.DirectiveInFunctionBody, false},
             {AshCredo.Check.Refactor.LargeResource, false},
             {AshCredo.Check.Refactor.RaisingCall, false},
