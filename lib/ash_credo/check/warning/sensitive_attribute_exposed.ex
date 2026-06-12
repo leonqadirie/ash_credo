@@ -5,7 +5,7 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
     tags: [:ash, :security],
     param_defaults: [
       sensitive_names:
-        ~w(password hashed_password password_hash token secret api_key private_key ssn)a
+        ~w(password hashed_password password_hash password_digest token access_token secret client_secret totp_secret api_key private_key ssn)a
     ],
     explanations: [
       check: """
@@ -13,9 +13,14 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
       This prevents them from being leaked in logs, error messages, and inspections.
 
           attribute :password_hash, :string, sensitive?: true
+
+      The `sensitive_names` param accepts atoms (exact name match) and regexes
+      (matched against the attribute name), e.g. `[:ssn, ~r/_token$/]`.
       """,
       params: [
-        sensitive_names: "Attribute names considered sensitive."
+        sensitive_names:
+          "Attribute names considered sensitive. Atom entries match exactly; " <>
+            "`Regex` entries (e.g. `~r/_token$/`) match against the attribute name."
       ]
     ]
 
@@ -52,8 +57,11 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
   end
 
   defp sensitive_name?({:attribute, _meta, [name | _]}, sensitive_names) when is_atom(name) do
-    name in sensitive_names
+    Enum.any?(sensitive_names, &name_matches?(name, &1))
   end
 
   defp sensitive_name?(_, _), do: false
+
+  defp name_matches?(name, %Regex{} = regex), do: Regex.match?(regex, Atom.to_string(name))
+  defp name_matches?(name, sensitive_name), do: name == sensitive_name
 end
