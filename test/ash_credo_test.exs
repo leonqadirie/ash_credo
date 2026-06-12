@@ -355,6 +355,13 @@ defmodule AshCredoTest do
       end
     end
 
+    test "usage-rules.md exists and ships in the hex package" do
+      assert File.exists?("usage-rules.md")
+
+      assert "usage-rules.md" in Mix.Project.config()[:package][:files],
+             "usage-rules.md must be listed in package[:files] in mix.exs so it ships on Hex"
+    end
+
     test "every check has a corresponding test file" do
       expected =
         for {cat, name, _path} <- discover_check_modules(), do: {cat, name}
