@@ -62,7 +62,7 @@ defmodule AshCredo.MixProject do
   defp package do
     [
       licenses: ["MIT"],
-      files: ~w(lib .formatter.exs mix.exs README* LICENSE* CHANGELOG*),
+      files: ~w(lib .formatter.exs mix.exs README* LICENSE* CHANGELOG* usage-rules.md),
       exclude_patterns: [~r/\.expert/],
       links: %{"GitHub" => "https://github.com/leonqadirie/ash_credo"}
     ]
