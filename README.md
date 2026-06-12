@@ -15,6 +15,7 @@ AshCredo detects common anti-patterns, security pitfalls, and missing best pract
 
 - `Warning.MissingChangeWrapper`
 - `Warning.MissingMacroDirective`
+- `Warning.MissingValidationWrapper`
 - `Warning.PinnedTimeInExpression`
 
 ## Installation
@@ -76,9 +77,10 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `AuthorizeFalse` | Warning | High | No | Flags literal `authorize?: false` in Ash calls, action DSL, and (by default) any other call site |
 | `AuthorizerWithoutPolicies` | Warning | High | No | Detects resources with `Ash.Policy.Authorizer` but no policies defined. **Requires compiled project.** |
 | `EmptyDomain` | Warning | Normal | No | Flags domains with no resources registered |
-| `MissingChangeWrapper` | Warning | High | Yes | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions |
+| `MissingChangeWrapper` | Warning | High | Yes | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions - the bare call compiles but is silently discarded |
 | `MissingDomain` | Warning | Normal | No | Ensures non-embedded resources set the `domain:` option |
 | `MissingMacroDirective` | Warning | High | Yes | Flags qualified calls to `Ash.Query`/`Ash.Expr` macros (`filter`, `expr`, ...) when the enclosing module does not have a matching module-level `require`/`import`. Catches the runtime `UndefinedFunctionError` that slips past the compiler when the macro argument is a bare runtime value. **Requires compiled project** and **configurable**. |
+| `MissingValidationWrapper` | Warning | High | Yes | Flags builtin validation functions (`present`, `attribute_equals`, ...) used without `validate` wrapper in actions - the bare call compiles but the validation never runs |
 | `NoActions` | Warning | Normal | No | Flags resources with data layers but no actions defined. **Requires compiled project.** |
 | `OverlyPermissivePolicy` | Warning | High | No | Flags unscoped `authorize_if always()` policies |
 | `PinnedTimeInExpression` | Warning | High | Yes | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |

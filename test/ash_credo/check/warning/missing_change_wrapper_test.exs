@@ -163,6 +163,38 @@ defmodule AshCredo.Check.Warning.MissingChangeWrapperTest do
     assert [] = run_check(MissingChangeWrapper, source)
   end
 
+  test "does not scan read actions (change builtins do not compile there)" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        read :search do
+          set_attribute(:foo, 1)
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(MissingChangeWrapper, source)
+  end
+
+  test "does not flag naked validation builtins (MissingValidationWrapper's job)" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource, domain: MyApp.Accounts
+
+      actions do
+        create :register do
+          present(:email)
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(MissingChangeWrapper, source)
+  end
+
   test "no issue when no actions section" do
     source = """
     defmodule MyApp.Post do

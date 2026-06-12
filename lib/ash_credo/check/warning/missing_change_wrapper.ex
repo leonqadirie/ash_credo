@@ -8,8 +8,10 @@ defmodule AshCredo.Check.Warning.MissingChangeWrapper do
       Builtin change functions like `manage_relationship`, `set_attribute`, and
       `relate_actor` must be wrapped in `change` when used inside an action body.
 
-      Without the wrapper, the function call returns a change reference tuple that
-      is silently discarded - the change never runs and no error is raised.
+      These builtins are plain functions imported into the DSL scope. Without
+      the wrapper, the call returns a change spec tuple that is silently
+      discarded - the change never runs and no error or warning is raised at
+      compile time or runtime.
 
           # Bad - compiles but silently does nothing
           create :some_action do
@@ -22,15 +24,15 @@ defmodule AshCredo.Check.Warning.MissingChangeWrapper do
             argument :thing, :map
             change manage_relationship(:thing, :thing, type: :create)
           end
+
+      `Warning.MissingValidationWrapper` is the equivalent check for
+      validation builtins.
       """
     ]
 
-  alias AshCredo.Introspection
   alias AshCredo.Orchestration
 
-  @action_types ~w(create update destroy action)a
-
-  @naked_change_fns ~w(
+  @change_builtins ~w(
     manage_relationship
     relate_actor
     set_attribute
@@ -49,33 +51,16 @@ defmodule AshCredo.Check.Warning.MissingChangeWrapper do
     debug_log
   )a
 
+  # No :read - read actions do not import Ash.Resource.Change.Builtins, so
+  # a bare change builtin there fails to compile and needs no lint.
+  @action_types ~w(create update destroy action)a
+
   @impl true
-  def run(%SourceFile{} = source_file, params),
-    do: Orchestration.flat_map_resource_section(source_file, params, :actions, &check_actions/2)
-
-  defp check_actions(nil, _issue_meta), do: []
-
-  defp check_actions(actions_ast, issue_meta) do
-    actions_ast
-    |> Introspection.action_entities(@action_types)
-    |> Enum.flat_map(&find_naked_changes(&1, issue_meta))
+  def run(%SourceFile{} = source_file, params) do
+    Orchestration.naked_builtin_issues(source_file, params, __MODULE__,
+      builtins: @change_builtins,
+      wrapper: "change",
+      action_types: @action_types
+    )
   end
-
-  defp find_naked_changes(action_ast, issue_meta) do
-    action_ast
-    |> Introspection.entity_body()
-    |> Enum.filter(&naked_change?/1)
-    |> Enum.map(fn {func_name, meta, _} ->
-      format_issue(issue_meta,
-        message:
-          "`#{func_name}` has no effect without a `change` wrapper. " <>
-            "Use `change #{func_name}(...)` instead.",
-        trigger: "#{func_name}",
-        line_no: meta[:line]
-      )
-    end)
-  end
-
-  defp naked_change?({func_name, _, _}) when func_name in @naked_change_fns, do: true
-  defp naked_change?(_), do: false
 end
