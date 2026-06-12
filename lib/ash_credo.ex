@@ -44,7 +44,6 @@ defmodule AshCredo do
             {AshCredo.Check.Warning.MissingMacroDirective, []},
             {AshCredo.Check.Warning.MissingPrepareWrapper, []},
             {AshCredo.Check.Warning.MissingValidationWrapper, []},
-            {AshCredo.Check.Warning.NoActions, false},
             {AshCredo.Check.Warning.OverlyPermissivePolicy, false},
             {AshCredo.Check.Warning.PinnedTimeInExpression, []},
             {AshCredo.Check.Warning.RedundantValidation, false},

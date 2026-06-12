@@ -86,7 +86,6 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `MissingMacroDirective` | Warning | High | Yes | Flags qualified calls to `Ash.Query`/`Ash.Expr` macros (`filter`, `expr`, ...) when the enclosing module does not have a matching module-level `require`/`import`. Catches the runtime `UndefinedFunctionError` that slips past the compiler when the macro argument is a bare runtime value. **Requires compiled project** and **configurable**. |
 | `MissingPrepareWrapper` | Warning | High | Yes | Flags builtin preparation functions (`build`, `set_context`) used without `prepare` wrapper in read/generic actions and pipelines - the bare call compiles but the preparation never runs |
 | `MissingValidationWrapper` | Warning | High | Yes | Flags builtin validation functions (`present`, `attribute_equals`, ...) used without `validate` wrapper in actions and pipelines - the bare call compiles but the validation never runs |
-| `NoActions` | Warning | Normal | No | Flags resources with data layers but no actions defined. **Requires compiled project.** |
 | `OverlyPermissivePolicy` | Warning | High | No | Flags unscoped `authorize_if always()` policies |
 | `PinnedTimeInExpression` | Warning | High | Yes | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
 | `RedundantValidation` | Warning | Normal | No | Flags `validate present(...)` on attributes that already have `allow_nil? false` - the constraint guarantees presence, making the validation redundant (skips `allow_nil_input` escape hatches). **Requires compiled project.** |
@@ -113,7 +112,6 @@ They see the fully-resolved resource state - including anything Spark transforme
 
 - `Warning.AuthorizerWithoutPolicies`
 - `Warning.MissingMacroDirective`
-- `Warning.NoActions`
 - `Warning.RedundantValidation`
 - `Warning.UnknownAction`
 - `Refactor.RaisingCall`
@@ -179,7 +177,6 @@ checks: %{
     {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
     {AshCredo.Check.Warning.EmptyDomain, []},
     {AshCredo.Check.Warning.MissingDomain, []},
-    {AshCredo.Check.Warning.NoActions, []},
     {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
     {AshCredo.Check.Warning.RedundantValidation, []},
     {AshCredo.Check.Warning.SensitiveAttributeExposed, []},

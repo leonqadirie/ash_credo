@@ -78,7 +78,6 @@ defmodule AshCredoFixtures.Blog do
     resource AshCredoFixtures.Blog.Tag
     resource AshCredoFixtures.Blog.Contact
     resource AshCredoFixtures.Blog.GenericActions
-    resource AshCredoFixtures.Blog.Empty
     resource AshCredoFixtures.Blog.WithAuthorizer
     resource AshCredoFixtures.Blog.WithCalcInterface
   end
@@ -264,21 +263,6 @@ defmodule AshCredoFixtures.Blog.CustomTimestamps do
     attribute :title, :string, public?: true
     create_timestamp :inserted_at, type: AshCredoFixtures.CustomTimestampType
     update_timestamp :updated_at, type: AshCredoFixtures.CustomTimestampType
-  end
-end
-
-defmodule AshCredoFixtures.Blog.Empty do
-  @moduledoc """
-  `NoActions` failure-path fixture: has a (default) data layer but no `actions`
-  block at all. Compiles fine - Ash does not require actions.
-  """
-
-  use Ash.Resource,
-    domain: AshCredoFixtures.Blog,
-    validate_domain_inclusion?: false
-
-  attributes do
-    uuid_primary_key :id
   end
 end
 

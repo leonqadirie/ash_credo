@@ -26,10 +26,6 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
       """
     ]
 
-  # The alias block plus the minimal run/1 harness call below is the
-  # irreducible shell of a compiled check; its twin in the other
-  # loadable-resource check trips ExDNA's clone detector at min_mass 30.
-  # credo:disable-for-next-line ExDNA.Credo
   alias AshCredo.Introspection
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias AshCredo.Orchestration
