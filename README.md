@@ -87,6 +87,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `NoActions` | Warning | Normal | No | Flags resources with data layers but no actions defined. **Requires compiled project.** |
 | `OverlyPermissivePolicy` | Warning | High | No | Flags unscoped `authorize_if always()` policies |
 | `PinnedTimeInExpression` | Warning | High | Yes | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
+| `RedundantValidation` | Warning | Normal | No | Flags `validate present(...)` on attributes that already have `allow_nil? false` - the constraint guarantees presence, making the validation redundant (skips `allow_nil_input` escape hatches). **Requires compiled project.** |
 | `SensitiveAttributeExposed` | Warning | High | No | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
 | `SensitiveFieldInAccept` | Warning | High | No | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
 | `UnknownAction` | Warning | High | No | Flags `Ash.*` calls referencing actions that do not exist on the resolved resource, with a fuzzy `Did you mean` hint. **Requires compiled project.** |
@@ -110,6 +111,7 @@ They see the fully-resolved resource state - including anything Spark transforme
 - `Warning.AuthorizerWithoutPolicies`
 - `Warning.MissingMacroDirective`
 - `Warning.NoActions`
+- `Warning.RedundantValidation`
 - `Warning.UnknownAction`
 - `Refactor.RaisingCall`
 - `Refactor.UseCodeInterface`
@@ -176,6 +178,7 @@ checks: %{
     {AshCredo.Check.Warning.MissingDomain, []},
     {AshCredo.Check.Warning.NoActions, []},
     {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
+    {AshCredo.Check.Warning.RedundantValidation, []},
     {AshCredo.Check.Warning.SensitiveAttributeExposed, []},
     {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
     {AshCredo.Check.Warning.UnknownAction, []},

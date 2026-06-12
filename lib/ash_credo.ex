@@ -46,6 +46,7 @@ defmodule AshCredo do
             {AshCredo.Check.Warning.NoActions, false},
             {AshCredo.Check.Warning.OverlyPermissivePolicy, false},
             {AshCredo.Check.Warning.PinnedTimeInExpression, []},
+            {AshCredo.Check.Warning.RedundantValidation, false},
             {AshCredo.Check.Warning.SensitiveAttributeExposed, false},
             {AshCredo.Check.Warning.SensitiveFieldInAccept, false},
             {AshCredo.Check.Warning.UnknownAction, false},
