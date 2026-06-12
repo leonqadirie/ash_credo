@@ -22,6 +22,33 @@ defmodule Mix.Tasks.AshCredo.InstallTest do
     end
   end
 
+  describe "opt-in checks notice" do
+    test "points at the README checks table on fresh install" do
+      test_project()
+      |> Igniter.compose_task("ash_credo.install")
+      |> assert_has_notice(&(&1 =~ "https://ash_credo.hexdocs.pm/readme.html#checks"))
+    end
+
+    test "is also emitted when .credo.exs already exists" do
+      test_project(
+        files: %{
+          ".credo.exs" => """
+          %{
+            configs: [
+              %{
+                name: "default",
+                plugins: []
+              }
+            ]
+          }
+          """
+        }
+      )
+      |> Igniter.compose_task("ash_credo.install")
+      |> assert_has_notice(&(&1 =~ "opt-in"))
+    end
+  end
+
   describe "with existing .credo.exs" do
     test "adds AshCredo to existing plugins list" do
       test_project(
