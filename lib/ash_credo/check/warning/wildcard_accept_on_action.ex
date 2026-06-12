@@ -32,23 +32,24 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
       default_accept_issues(actions_ast, issue_meta)
   end
 
-  defp has_wildcard_accept?(entity_ast) do
-    entity_ast
-    |> Introspection.option_values(:accept)
-    |> Enum.any?(&wildcard_accept_value?/1)
-  end
-
   defp explicit_action_issues(actions_ast, issue_meta) do
+    source_file = IssueMeta.source_file(issue_meta)
+
     actions_ast
     |> Introspection.action_entities(@writable_action_types)
-    |> Enum.filter(&has_wildcard_accept?/1)
-    |> Enum.map(fn {type, meta, _} = entity ->
-      format_issue(issue_meta,
-        message:
-          "Action `#{Introspection.entity_name(entity) || type}` uses `accept :*`. Explicitly list accepted attributes.",
-        trigger: "accept :*",
-        line_no: meta[:line]
-      )
+    |> Enum.flat_map(fn {type, _meta, _} = entity ->
+      entity
+      |> Introspection.option_occurrences(:accept)
+      |> Enum.filter(fn {value, _line_no} -> wildcard_accept_value?(value) end)
+      |> Enum.map(fn {_value, line_no} ->
+        format_issue(issue_meta,
+          message:
+            "Action `#{Introspection.entity_name(entity) || type}` uses `accept :*`. Explicitly list accepted attributes.",
+          trigger: "accept :*",
+          line_no: line_no,
+          column: SourceFile.column(source_file, line_no, "accept")
+        )
+      end)
     end)
   end
 
