@@ -34,6 +34,7 @@ defmodule AshCredo do
         checks: %{
           extra: [
             # Warning
+            {AshCredo.Check.Warning.ActorOnCallOptions, false},
             {AshCredo.Check.Warning.AuthorizeFalse, false},
             {AshCredo.Check.Warning.AuthorizerWithoutPolicies, false},
             {AshCredo.Check.Warning.EmptyDomain, false},

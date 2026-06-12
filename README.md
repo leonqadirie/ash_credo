@@ -74,6 +74,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 
 | Check | Category | Priority | Default | Description |
 |---|---|---|---|---|
+| `ActorOnCallOptions` | Warning | High | No | Flags `actor:`/`tenant:` passed in the options of `Ash.read!`/`Ash.create!`/... when the subject visibly went through a `for_*` builder - per Ash's authorization usage rules they belong on the query/changeset/input |
 | `AuthorizeFalse` | Warning | High | No | Flags literal `authorize?: false` in Ash calls, action DSL, and (by default) any other call site |
 | `AuthorizerWithoutPolicies` | Warning | High | No | Detects resources with `Ash.Policy.Authorizer` but no policies defined. **Requires compiled project.** |
 | `EmptyDomain` | Warning | Normal | No | Flags domains with no resources registered |
@@ -166,6 +167,7 @@ To enable **all** checks at once (the default-on checks listed above do not need
 ```elixir
 checks: %{
   extra: [
+    {AshCredo.Check.Warning.ActorOnCallOptions, []},
     {AshCredo.Check.Warning.AuthorizeFalse, []},
     {AshCredo.Check.Warning.AuthorizerWithoutPolicies, []},
     {AshCredo.Check.Warning.EmptyDomain, []},
