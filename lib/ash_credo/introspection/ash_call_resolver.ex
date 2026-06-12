@@ -37,9 +37,13 @@ defmodule AshCredo.Introspection.AshCallResolver do
       that do not exist on the resolved resource.
   """
 
+  alias AshCredo.Cache
+  alias AshCredo.Introspection
   alias AshCredo.Introspection.{Aliases, AshCallScanner, AshCallSite}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias Credo.Code.Name
+
+  @sites_key_tag {__MODULE__, :sites}
 
   # Pattern A: resource at arg 0, action in keyword opts (:action key).
   @action_in_opts ~w(read read! get get! stream!)a
@@ -79,9 +83,21 @@ defmodule AshCredo.Introspection.AshCallResolver do
   @doc """
   Walks `source_file` and returns the list of resolved Ash call sites in
   source order.
+
+  Memoized in the run-scoped cache keyed on filename plus source hash, so
+  the scan-and-resolve pass runs once per file per Credo run instead of
+  once per consuming check. Safe to cache despite embedding compiled
+  resolution results: the compiled world is fixed within a run, and the
+  cache is cleared at run boundaries.
   """
   @spec sites(Credo.SourceFile.t()) :: [AshCallSite.t()]
   def sites(source_file) do
+    key = {@sites_key_tag, source_file.filename, Introspection.source_hash(source_file)}
+
+    Cache.memoize(key, fn -> compute_sites(source_file) end)
+  end
+
+  defp compute_sites(source_file) do
     source_file
     |> AshCallScanner.calls_with_context()
     |> Enum.flat_map(&resolve_site/1)

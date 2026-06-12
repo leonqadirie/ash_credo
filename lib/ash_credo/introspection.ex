@@ -21,6 +21,8 @@ defmodule AshCredo.Introspection do
   module directly so dependencies stay honest.
   """
 
+  alias AshCredo.Cache
+
   alias AshCredo.Introspection.{
     Aliases,
     Block,
@@ -33,6 +35,8 @@ defmodule AshCredo.Introspection do
 
   @action_entities ~w(create read update destroy action)a
 
+  @resource_contexts_key_tag {__MODULE__, :resource_contexts}
+
   @doc "Returns all modules in the source file that directly `use Ash.Resource`."
   def resource_modules(source_file), do: modules_using(source_file, [:Ash, :Resource])
 
@@ -42,13 +46,31 @@ defmodule AshCredo.Introspection do
   enclosing path of the resource's `defmodule` name (e.g. `[:MyApp, :Blog, :Post]`
   for a nested `defmodule Post` inside `defmodule MyApp.Blog`). This lets
   compiled-introspection checks resolve the resource to its runtime module atom.
+
+  Memoized in the run-scoped cache keyed on filename plus source hash, so the
+  underlying scope-tracking traversal runs once per file per Credo run instead
+  of once per enabled check.
   """
   def resource_contexts(source_file) do
+    key = {@resource_contexts_key_tag, source_file.filename, source_hash(source_file)}
+
+    Cache.memoize(key, fn -> compute_resource_contexts(source_file) end)
+  end
+
+  defp compute_resource_contexts(source_file) do
     source_file
     |> all_modules_with_path()
     |> Enum.filter(fn {ast, _segs} -> module_uses?(ast, [:Ash, :Resource]) end)
     |> Enum.map(fn {ast, segs} -> resource_context_with_segments(ast, segs) end)
   end
+
+  @doc """
+  Hashes a source file's content for use in content-addressed cache keys.
+  Filename alone is not a safe key: distinct `SourceFile`s regularly share a
+  filename with different content (most prominently in this project's own
+  test suite).
+  """
+  def source_hash(source_file), do: :erlang.md5(SourceFile.source(source_file))
 
   @doc """
   Walks every `defmodule` in a source file and returns
