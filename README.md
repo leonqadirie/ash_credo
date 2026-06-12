@@ -13,6 +13,7 @@ AshCredo detects common anti-patterns, security pitfalls, and missing best pract
 
 **Note: only the following checks are enabled by default.** All other checks are opt-in - enable them individually in your `.credo.exs` (see [Configuration](#configuration)).
 
+- `Warning.CompileTimeDefault`
 - `Warning.MissingChangeWrapper`
 - `Warning.MissingMacroDirective`
 - `Warning.MissingPrepareWrapper`
@@ -78,6 +79,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `ActorOnCallOptions` | Warning | High | No | Flags `actor:`/`tenant:` passed in the options of `Ash.read!`/`Ash.create!`/... when the subject visibly went through a `for_*` builder - per Ash's authorization usage rules they belong on the query/changeset/input |
 | `AuthorizeFalse` | Warning | High | No | Flags literal `authorize?: false` in Ash calls, action DSL, and (by default) any other call site |
 | `AuthorizerWithoutPolicies` | Warning | High | No | Detects resources with `Ash.Policy.Authorizer` but no policies defined. **Requires compiled project.** |
+| `CompileTimeDefault` | Warning | High | Yes | Flags `default: DateTime.utc_now()` / `Ash.UUID.generate()` (missing `&.../0` capture) on attributes and arguments - the call runs once at compile time, so every record gets the same frozen value |
 | `EmptyDomain` | Warning | Normal | No | Flags domains with no resources registered |
 | `MissingChangeWrapper` | Warning | High | Yes | Flags builtin change functions (`manage_relationship`, `set_attribute`, ...) used without `change` wrapper in actions and pipelines - the bare call compiles but is silently discarded |
 | `MissingDomain` | Warning | Normal | No | Ensures non-embedded resources set the `domain:` option |
