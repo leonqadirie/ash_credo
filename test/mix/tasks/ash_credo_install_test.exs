@@ -26,7 +26,7 @@ defmodule Mix.Tasks.AshCredo.InstallTest do
     test "points at the README checks table on fresh install" do
       test_project()
       |> Igniter.compose_task("ash_credo.install")
-      |> assert_has_notice(&(&1 =~ "https://ash_credo.hexdocs.pm/readme.html#checks"))
+      |> assert_has_notice(&(&1 =~ "https://ash-credo.hexdocs.pm/readme.html#checks"))
     end
 
     test "is also emitted when .credo.exs already exists" do

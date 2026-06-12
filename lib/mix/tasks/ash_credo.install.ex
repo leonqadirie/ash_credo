@@ -50,7 +50,7 @@ if Code.ensure_loaded?(Igniter) do
     are opt-in: see the checks table in the README for the full list and a
     ready-to-paste "enable all checks" config:
 
-        https://ash_credo.hexdocs.pm/readme.html#checks
+        https://ash-credo.hexdocs.pm/readme.html#checks
     """
 
     @impl Igniter.Mix.Task
