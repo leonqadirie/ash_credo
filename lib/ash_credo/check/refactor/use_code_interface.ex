@@ -217,7 +217,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   end
 
   defp interface_action?(iface, action_name) do
-    (Map.get(iface, :action) || Map.get(iface, :name)) == action_name
+    (iface.action || iface.name) == action_name
   end
 
   defp interface_matches_site?(iface, %{call_kind: :get_one, lookup_keys: keys}, info) do
@@ -246,20 +246,15 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   defp interface_lookup_keys(iface, info) do
     cond do
-      Map.get(iface, :get_by) ->
-        List.wrap(Map.get(iface, :get_by))
-
-      Map.get(iface, :get_by_identity) ->
-        identity_keys(info, Map.get(iface, :get_by_identity))
-
-      true ->
-        nil
+      iface.get_by -> List.wrap(iface.get_by)
+      iface.get_by_identity -> identity_keys(info, iface.get_by_identity)
+      true -> nil
     end
   end
 
   defp identity_keys(%{identities: identities}, identity_name) when is_list(identities) do
     Enum.find_value(identities, fn identity ->
-      if Map.get(identity, :name) == identity_name, do: Map.get(identity, :keys)
+      if identity.name == identity_name, do: identity.keys
     end)
   end
 
@@ -270,9 +265,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   end
 
   defp get_interface?(iface) do
-    Map.get(iface, :get?) == true or
-      not is_nil(Map.get(iface, :get_by)) or
-      not is_nil(Map.get(iface, :get_by_identity))
+    iface.get? == true or not is_nil(iface.get_by) or not is_nil(iface.get_by_identity)
   end
 
   defp caller_atom(%{enclosing_module_segments: segs}) when is_list(segs) and segs != [] do

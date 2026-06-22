@@ -53,16 +53,11 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
   end
 
   defp check_resource(resource, context, issue_meta) do
-    case CompiledIntrospection.actions(resource) do
-      {:ok, actions} ->
-        flag_missing_primaries(actions, context.module_ast, context, issue_meta)
-
-      {:error, :not_loadable} ->
-        Orchestration.unique_not_loadable_issues(resource, context, issue_meta, __MODULE__)
-
-      {:error, _} ->
-        []
-    end
+    resource
+    |> CompiledIntrospection.actions()
+    |> Orchestration.with_resource_info(resource, context, issue_meta, __MODULE__, fn actions ->
+      flag_missing_primaries(actions, context.module_ast, context, issue_meta)
+    end)
   end
 
   defp flag_missing_primaries(actions, module_ast, context, issue_meta) do
@@ -98,6 +93,6 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
   defp actions_section_line(module_ast, context) do
     actions_ast = Introspection.find_dsl_section(module_ast, :actions)
 
-    Introspection.section_issue_line(actions_ast, Map.get(context, :use_line), 1)
+    Introspection.section_issue_line(actions_ast, context.use_line, 1)
   end
 end

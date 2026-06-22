@@ -53,24 +53,12 @@ defmodule AshCredo.Check.Design.MissingIdentity do
   end
 
   defp check_resource(resource, context, candidates, issue_meta) do
-    if CompiledIntrospection.embedded?(resource) do
-      []
-    else
-      inspect_resource(resource, context, candidates, issue_meta)
-    end
-  end
-
-  defp inspect_resource(resource, context, candidates, issue_meta) do
-    case CompiledIntrospection.inspect_module(resource) do
-      {:ok, info} ->
-        flag_missing_identities(resource, info, context, candidates, issue_meta)
-
-      {:error, :not_loadable} ->
-        Orchestration.unique_not_loadable_issues(resource, context, issue_meta, __MODULE__)
-
-      {:error, _} ->
-        []
-    end
+    resource
+    |> CompiledIntrospection.inspect_module()
+    |> Orchestration.with_resource_info(resource, context, issue_meta, __MODULE__, fn
+      %{embedded?: true} -> []
+      info -> flag_missing_identities(resource, info, context, candidates, issue_meta)
+    end)
   end
 
   defp flag_missing_identities(

@@ -58,9 +58,7 @@ defmodule AshCredo.Check.Warning.RedundantValidation do
       source_file,
       params,
       __MODULE__,
-      fn resource, context, issue_meta ->
-        check_resource(resource, context, issue_meta)
-      end
+      &check_resource/3
     )
   end
 
@@ -175,16 +173,12 @@ defmodule AshCredo.Check.Warning.RedundantValidation do
   defp entry_on(_entry), do: nil
 
   defp resolve_candidates(resource, context, candidates, issue_meta) do
-    case CompiledIntrospection.inspect_module(resource) do
-      {:ok, %{attributes: attributes, actions: actions}} ->
+    resource
+    |> CompiledIntrospection.inspect_module()
+    |> Orchestration.with_resource_info(resource, context, issue_meta, __MODULE__, fn
+      %{attributes: attributes, actions: actions} ->
         flag_redundant(resource, candidates, attributes, actions, issue_meta)
-
-      {:error, :not_loadable} ->
-        Orchestration.unique_not_loadable_issues(resource, context, issue_meta, __MODULE__)
-
-      {:error, _} ->
-        []
-    end
+    end)
   end
 
   defp flag_redundant(resource, candidates, attributes, actions, issue_meta) do
