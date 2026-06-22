@@ -273,7 +273,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
     context = ast_context(ctx.call_info)
 
     with {:ok, resource_ast} <- arg_at(args, resource_idx),
-         {:ok, segs} <- resolve_positional_segments(resource_ast, context, ctx.trace_record?),
+         {:ok, segs} <- resource_segments(resource_ast, context, ctx),
          {:ok, action} <- arg_at(args, action_idx),
          true <- is_atom(action) do
       [build_site(segs, action, ctx)]
@@ -382,14 +382,18 @@ defmodule AshCredo.Introspection.AshCallResolver do
 
   defp literal_segments(_, _), do: :error
 
-  defp resolve_positional_segments(ast, context, true) do
+  # Builders that carry the record/changeset as arg0 may receive it via a
+  # pipeline or binding, so trace the origin back to a literal; plain
+  # positional calls name the resource directly.
+  defp resource_segments(ast, context, %{trace_record?: true}) do
     case literal_segments(ast, context) do
       {:ok, segs} -> {:ok, segs}
       :error -> trace_origin_to_literal(ast, context)
     end
   end
 
-  defp resolve_positional_segments(ast, context, false), do: literal_segments(ast, context)
+  defp resource_segments(ast, context, %{trace_record?: false}),
+    do: literal_segments(ast, context)
 
   defp trace_origin_to_literal(ast, context), do: trace_origin(ast, context, MapSet.new())
 
