@@ -41,20 +41,21 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
   end
 
   defp check_resource_timestamps(resource, context, issue_meta) do
-    case CompiledIntrospection.attributes(resource) do
-      {:ok, attributes} ->
+    resource
+    |> CompiledIntrospection.attributes()
+    |> Orchestration.with_resource_info(
+      resource,
+      context,
+      issue_meta,
+      __MODULE__,
+      fn attributes ->
         if has_timestamps?(attributes) do
           []
         else
           [missing_timestamps_issue(context.module_ast, context, issue_meta)]
         end
-
-      {:error, :not_loadable} ->
-        Orchestration.unique_not_loadable_issues(resource, context, issue_meta, __MODULE__)
-
-      {:error, _} ->
-        []
-    end
+      end
+    )
   end
 
   # A resource has timestamps when it contains TWO DISTINCT datetime

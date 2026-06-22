@@ -272,17 +272,7 @@ defmodule AshCredo.Introspection.Compiled do
   """
   @spec macros(module()) :: {:ok, MapSet.t(atom())} | {:error, :not_loadable}
   def macros(module) when is_atom(module) do
-    key = {@macros_key_tag, module}
-
-    case Cache.get(key, :miss) do
-      :miss ->
-        result = do_macros(module)
-        Cache.put(key, result)
-        result
-
-      cached ->
-        cached
-    end
+    Cache.memoize({@macros_key_tag, module}, fn -> do_macros(module) end)
   end
 
   defp do_macros(module) do
@@ -409,17 +399,9 @@ defmodule AshCredo.Introspection.Compiled do
           {:ok, %{scope: :resource | :domain, interface: struct(), resource: module() | nil}}
           | {:error, :not_code_interface | error()}
   def code_interface_bang(module, fun) when is_atom(module) and is_atom(fun) do
-    key = {@code_interface_bang_key_tag, module, fun}
-
-    case Cache.get(key, :miss) do
-      :miss ->
-        result = do_code_interface_bang(module, fun)
-        Cache.put(key, result)
-        result
-
-      cached ->
-        cached
-    end
+    Cache.memoize({@code_interface_bang_key_tag, module, fun}, fn ->
+      do_code_interface_bang(module, fun)
+    end)
   end
 
   defp do_code_interface_bang(module, fun) do
@@ -526,17 +508,9 @@ defmodule AshCredo.Introspection.Compiled do
   # `UseCodeInterface` at O(N) across a file with N `Ash.*` calls into the
   # same domain instead of O(N*M).
   defp cached_domain_references(domain) do
-    key = {@domain_refs_key_tag, domain}
-
-    case Cache.get(key, :miss) do
-      :miss ->
-        refs = Ash.Domain.Info.resource_references(domain)
-        Cache.put(key, refs)
-        refs
-
-      cached ->
-        cached
-    end
+    Cache.memoize({@domain_refs_key_tag, domain}, fn ->
+      Ash.Domain.Info.resource_references(domain)
+    end)
   end
 
   @doc """
@@ -631,15 +605,7 @@ defmodule AshCredo.Introspection.Compiled do
   """
   @spec enclosing_domain(module()) :: module() | nil
   def enclosing_domain(module) when is_atom(module) do
-    case Cache.get({@enclosing_domain_key_tag, module}, :miss) do
-      :miss ->
-        result = compute_enclosing_domain(module)
-        Cache.put({@enclosing_domain_key_tag, module}, result)
-        result
-
-      cached ->
-        cached
-    end
+    Cache.memoize({@enclosing_domain_key_tag, module}, fn -> compute_enclosing_domain(module) end)
   end
 
   defp compute_enclosing_domain(module) do

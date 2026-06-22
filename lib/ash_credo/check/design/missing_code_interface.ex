@@ -80,24 +80,22 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
   end
 
   defp check_resource(resource, context, issue_meta, excluded_actions) do
-    if CompiledIntrospection.embedded?(resource) do
-      []
-    else
-      inspect_resource(resource, context.module_ast, context, issue_meta, excluded_actions)
-    end
-  end
-
-  defp inspect_resource(resource, module_ast, context, issue_meta, excluded_actions) do
-    case CompiledIntrospection.inspect_module(resource) do
-      {:ok, info} ->
-        flag_missing_interfaces(resource, info, module_ast, context, issue_meta, excluded_actions)
-
-      {:error, :not_loadable} ->
-        Orchestration.unique_not_loadable_issues(resource, context, issue_meta, __MODULE__)
-
-      {:error, _} ->
+    resource
+    |> CompiledIntrospection.inspect_module()
+    |> Orchestration.with_resource_info(resource, context, issue_meta, __MODULE__, fn
+      %{embedded?: true} ->
         []
-    end
+
+      info ->
+        flag_missing_interfaces(
+          resource,
+          info,
+          context.module_ast,
+          context,
+          issue_meta,
+          excluded_actions
+        )
+    end)
   end
 
   defp flag_missing_interfaces(

@@ -148,6 +148,25 @@ defmodule AshCredo.Orchestration do
     end)
   end
 
+  @doc """
+  Dispatches the result of a `Compiled.inspect_module/1`-style introspection
+  lookup (`inspect_module/1` itself or any accessor built on it, such as
+  `attributes/1` or `actions/1`). Invokes `on_ok.(info)` for `{:ok, info}`,
+  emits the deduplicated "could not load" diagnostic for
+  `{:error, :not_loadable}`, and contributes no issues for any other error.
+
+  Every compiled resource check funnels its lookup result through here, so the
+  not-loadable handling lives in one place.
+  """
+  def with_resource_info(result, resource, context, issue_meta, check, on_ok)
+      when is_function(on_ok, 1) do
+    case result do
+      {:ok, info} -> on_ok.(info)
+      {:error, :not_loadable} -> unique_not_loadable_issues(resource, context, issue_meta, check)
+      {:error, _} -> []
+    end
+  end
+
   defp short_name(check), do: check |> Module.split() |> List.last()
 
   @doc """
