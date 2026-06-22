@@ -58,9 +58,7 @@ defmodule AshCredo.Check.Warning.RedundantValidation do
       source_file,
       params,
       __MODULE__,
-      fn resource, context, issue_meta ->
-        check_resource(resource, context, issue_meta)
-      end
+      &check_resource/3
     )
   end
 

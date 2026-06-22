@@ -275,12 +275,13 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
   # segment is an atom (rejecting interpolated/quoted aliases like
   # `unquote(mod)` or `__MODULE__` mid-segment), otherwise `:error`.
   defp atomic_module(segs) do
-    segs
-    |> Enum.reduce_while([], fn
-      seg, acc when is_atom(seg) -> {:cont, [seg | acc]}
-      _seg, _acc -> {:halt, :error}
-    end)
-    |> case do
+    reduced =
+      Enum.reduce_while(segs, [], fn
+        seg, acc when is_atom(seg) -> {:cont, [seg | acc]}
+        _seg, _acc -> {:halt, :error}
+      end)
+
+    case reduced do
       :error -> :error
       reversed -> {:ok, reversed |> Enum.reverse() |> Module.concat()}
     end

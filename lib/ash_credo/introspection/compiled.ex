@@ -524,12 +524,14 @@ defmodule AshCredo.Introspection.Compiled do
       when is_list(known_actions) and is_atom(target_name) do
     target_str = Atom.to_string(target_name)
 
-    known_actions
-    |> Enum.map(fn action ->
-      {action.name, String.jaro_distance(target_str, Atom.to_string(action.name))}
-    end)
-    |> Enum.filter(fn {_, score} -> score >= 0.75 end)
-    |> case do
+    scored =
+      known_actions
+      |> Enum.map(fn action ->
+        {action.name, String.jaro_distance(target_str, Atom.to_string(action.name))}
+      end)
+      |> Enum.filter(fn {_, score} -> score >= 0.75 end)
+
+    case scored do
       [] -> nil
       scored -> scored |> Enum.max_by(&elem(&1, 1)) |> elem(0)
     end
