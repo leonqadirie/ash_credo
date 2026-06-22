@@ -1,5 +1,5 @@
 defmodule AshCredo.Check.Design.MissingPrimaryAction do
-  use Credo.Check,
+  use AshCredo.CompiledCheck,
     base_priority: :normal,
     category: :design,
     tags: [:ash],
@@ -42,14 +42,9 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
   # so `primary?` has no behavioral effect for them.
   @action_types ~w(create read update destroy)a
 
-  @impl true
-  def run(%SourceFile{} = source_file, params) do
-    Orchestration.compiled_check_on_named_resources(
-      source_file,
-      params,
-      __MODULE__,
-      &check_resource/3
-    )
+  @impl AshCredo.CompiledCheck
+  def run_compiled(source_file, params) do
+    Orchestration.flat_map_named_resource(source_file, params, &check_resource/3)
   end
 
   defp check_resource(resource, context, issue_meta) do

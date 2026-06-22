@@ -79,36 +79,6 @@ defmodule AshCredo.Orchestration do
   end
 
   @doc """
-  Full compiled-check harness over named resources: wraps
-  `Compiled.with_compiled_check/2` around `flat_map_named_resource/3`,
-  emitting the standard Ash-missing diagnostic for `check` when Ash is
-  unavailable. Recognized by `SelfCheck.EnforceCompiledCheckWrapper` as
-  satisfying the wrapper requirement.
-  """
-  def compiled_check_on_named_resources(%SourceFile{} = source_file, params, check, fun)
-      when is_function(fun, 3) do
-    CompiledIntrospection.with_compiled_check(
-      fn -> ash_missing_issue(IssueMeta.for(source_file, params), check) end,
-      fn -> flat_map_named_resource(source_file, params, fun) end
-    )
-  end
-
-  @doc """
-  Full compiled-check harness over loadable resources: like
-  `compiled_check_on_named_resources/4` but iterating via
-  `flat_map_loadable_resource/3` (literal name plus non-embedded data
-  layer). Recognized by `SelfCheck.EnforceCompiledCheckWrapper` as
-  satisfying the wrapper requirement.
-  """
-  def compiled_check_on_loadable_resources(%SourceFile{} = source_file, params, check, fun)
-      when is_function(fun, 3) do
-    CompiledIntrospection.with_compiled_check(
-      fn -> ash_missing_issue(IssueMeta.for(source_file, params), check) end,
-      fn -> flat_map_loadable_resource(source_file, params, fun) end
-    )
-  end
-
-  @doc """
   Builds the standard "Ash is not loaded" diagnostic that compiled checks
   emit from `Compiled.with_compiled_check/2`'s missing branch. `check` is
   the emitting check module; its short name appears in the message and its

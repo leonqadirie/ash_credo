@@ -16,6 +16,15 @@
       color: true,
       checks: %{
         extra: [
+          # Compiled checks use the `AshCredo.CompiledCheck` base instead of
+          # `Credo.Check` directly; exempt them from the @moduledoc tag rule
+          # the same way Credo exempts `use Credo.Check` modules. (Overriding
+          # this param replaces Credo's default list, which also carried
+          # Ecto.Schema / Phoenix.LiveView / ~r/\.Web$/ - none of which exist
+          # in this project, so they are dropped.)
+          {Credo.Check.Readability.ModuleDoc,
+           ignore_modules_using: [Credo.Check, AshCredo.CompiledCheck]},
+
           # ExSlop - Warning Checks
           {ExSlop.Check.Warning.BlanketRescue, []},
           {ExSlop.Check.Warning.RescueWithoutReraise, []},
@@ -61,11 +70,7 @@
           {ExSlop.Check.Readability.ObviousComment, [additional_keywords: []]},
           {ExSlop.Check.Readability.StepComment, []},
           {ExSlop.Check.Readability.NarratorComment, []},
-          {ExSlop.Check.Readability.UnaliasedModuleUse, []},
-
-          # Internal - enforce architectural invariants
-          {AshCredo.SelfCheck.EnforceCompiledIntrospectionBoundary, []},
-          {AshCredo.SelfCheck.EnforceCompiledCheckWrapper, []}
+          {ExSlop.Check.Readability.UnaliasedModuleUse, []}
         ]
       }
     }

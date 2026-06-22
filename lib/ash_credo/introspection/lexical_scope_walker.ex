@@ -6,8 +6,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
 
   Before this module existed, every traversal that needed lexical alias
   context (`AshCredo.Introspection.AshCallScanner`, `AshCredo.Introspection`,
-  `AshCredo.Check.Warning.MissingMacroDirective`,
-  `AshCredo.SelfCheck.EnforceCompiledCheckWrapper`) re-implemented identical
+  `AshCredo.Check.Warning.MissingMacroDirective`) re-implemented identical
   push/pop helpers around `LexicalAliases`, identical `@scope_keys`/`->`
   enter/leave clauses, and identical `quote_depth` inc/dec/clamp logic. Each
   diverged in subtle ways: which `lexical_scope_nodes` to push frames for,

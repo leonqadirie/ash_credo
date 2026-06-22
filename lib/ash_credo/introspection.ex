@@ -14,11 +14,42 @@ defmodule AshCredo.Introspection do
     * `Block` - do-block and module-body AST access
     * `LexicalScopeWalker` / `LexicalAliases` - scope-aware traversal
     * `ResourceContext` / `UseMetadata` - shared data structs
-    * `Compiled` - compile-time/runtime metadata, and the sole gateway for it,
-      enforced by `AshCredo.SelfCheck.EnforceCompiledIntrospectionBoundary`
+    * `Compiled` - compile-time/runtime metadata, and the sole gateway for it.
+      The boundary (only `Compiled` may call Ash's runtime introspection
+      modules) is enforced structurally by the `calls.forbidden` policy in
+      `.reach.exs`.
 
   Do not add thin pass-through wrappers here for those modules; call the owning
   module directly so dependencies stay honest.
+
+  ## Why two introspection worlds
+
+  Checks draw on two complementary sources, and both are load-bearing:
+
+    * **Source AST** (this module and its `*Scanner`/`*Walker` siblings) works
+      without compiling the host project and carries source positions, which
+      diagnostics anchor to. It is the only way to find *call sites* -
+      `Ash.read!(...)` scattered across a codebase - because compiled
+      introspection knows resource definitions, not where they are called.
+    * **`Compiled`** reads the fully-resolved DSL state of loaded modules,
+      including attributes/actions/policies that Spark transformers and
+      extensions contribute and that the source AST never sees.
+
+  The source-AST alias and scope machinery (`LexicalScopeWalker`,
+  `LexicalAliases`, `Aliases`) is bespoke out of necessity, not for lack of a
+  library. `Credo.Code.Module.aliases/1` collects alias *names* flat across a
+  module: it drops `as:` renames and is not lexical-scope-aware, so it cannot
+  resolve `Q.filter` (from `alias Ash.Query, as: Q`) at a given call site,
+  honour a function-scoped alias that must not leak to sibling functions, or
+  track `require` frames - all of which the checks depend on and test. A real
+  `Macro.Env` would resolve these, but it is a compile-time artifact that
+  cannot be recovered for arbitrary source at lint time, so the resolution is
+  done here.
+
+  Each file is parsed once (Credo caches `SourceFile.ast/1`) and each derived
+  view is memoized on `{filename, source_hash/1}` - `resource_contexts/1` here,
+  `AshCallResolver.sites/1` next door - so the several specialised walkers each
+  run once per file, not once per consuming check.
   """
 
   alias AshCredo.Cache
