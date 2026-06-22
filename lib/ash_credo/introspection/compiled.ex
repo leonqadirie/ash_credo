@@ -223,12 +223,26 @@ defmodule AshCredo.Introspection.Compiled do
   """
   @spec domain_resources(module()) :: {:ok, [module()]} | {:error, error()}
   def domain_resources(module) when is_atom(module) do
-    cond do
-      not ash_available?() -> {:error, :ash_missing}
-      not match?({:module, _}, Code.ensure_compiled(module)) -> {:error, :not_loadable}
-      not domain?(module) -> {:error, :not_a_domain}
-      true -> {:ok, Ash.Domain.Info.resources(module)}
+    with :ok <- ensure_ash_available(),
+         :ok <- ensure_loadable(module),
+         :ok <- ensure_domain(module) do
+      {:ok, Ash.Domain.Info.resources(module)}
     end
+  end
+
+  defp ensure_ash_available do
+    if ash_available?(), do: :ok, else: {:error, :ash_missing}
+  end
+
+  defp ensure_loadable(module) do
+    case Code.ensure_compiled(module) do
+      {:module, _} -> :ok
+      _ -> {:error, :not_loadable}
+    end
+  end
+
+  defp ensure_domain(module) do
+    if domain?(module), do: :ok, else: {:error, :not_a_domain}
   end
 
   @doc """
@@ -525,7 +539,7 @@ defmodule AshCredo.Introspection.Compiled do
 
     case scored do
       [] -> nil
-      scored -> scored |> Enum.max_by(&elem(&1, 1)) |> elem(0)
+      candidates -> candidates |> Enum.max_by(&elem(&1, 1)) |> elem(0)
     end
   end
 
@@ -688,5 +702,4 @@ defmodule AshCredo.Introspection.Compiled do
     # module, or `UndefinedFunctionError` if it was purged.
     _ in [ArgumentError, UndefinedFunctionError] -> []
   end
-
 end
