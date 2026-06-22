@@ -520,30 +520,6 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Given a list of action structs and a target action name, returns the name of
-  the action whose name is most similar to `target_name` (jaro distance ≥ 0.75),
-  or `nil` if no close match exists. Used to suggest typo fixes in issue
-  messages.
-  """
-  @spec suggest_action_name([struct()], atom()) :: atom() | nil
-  def suggest_action_name(known_actions, target_name)
-      when is_list(known_actions) and is_atom(target_name) do
-    target_str = Atom.to_string(target_name)
-
-    scored =
-      known_actions
-      |> Enum.map(fn action ->
-        {action.name, String.jaro_distance(target_str, Atom.to_string(action.name))}
-      end)
-      |> Enum.filter(fn {_, score} -> score >= 0.75 end)
-
-    case scored do
-      [] -> nil
-      candidates -> candidates |> Enum.max_by(&elem(&1, 1)) |> elem(0)
-    end
-  end
-
-  @doc """
   Builds a `:not_loadable` diagnostic for `module` only the first time it is
   seen this run. Subsequent calls for the same module return `[]`, so an
   unloadable resource produces at most ONE diagnostic across all

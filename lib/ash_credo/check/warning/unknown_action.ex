@@ -70,7 +70,7 @@ defmodule AshCredo.Check.Warning.UnknownAction do
 
   defp unknown_action_issue(resource, known_actions, site, issue_meta) do
     qualified = AshCallResolver.qualified_call(site)
-    suggestion = CompiledIntrospection.suggest_action_name(known_actions, site.action_name)
+    suggestion = suggest_action_name(known_actions, site.action_name)
 
     hint =
       case suggestion do
@@ -84,5 +84,26 @@ defmodule AshCredo.Check.Warning.UnknownAction do
       trigger: qualified,
       line_no: site.call_meta[:line]
     )
+  end
+
+  # Returns the known action name most similar to `target_name` (jaro distance
+  # >= 0.75), or nil if no close match exists. Pure string similarity over the
+  # already-resolved action list - no Ash runtime introspection, so it lives
+  # with its sole caller rather than in the Compiled gateway.
+  defp suggest_action_name(known_actions, target_name)
+       when is_list(known_actions) and is_atom(target_name) do
+    target_str = Atom.to_string(target_name)
+
+    scored =
+      known_actions
+      |> Enum.map(fn action ->
+        {action.name, String.jaro_distance(target_str, Atom.to_string(action.name))}
+      end)
+      |> Enum.filter(fn {_, score} -> score >= 0.75 end)
+
+    case scored do
+      [] -> nil
+      candidates -> candidates |> Enum.max_by(&elem(&1, 1)) |> elem(0)
+    end
   end
 end
