@@ -289,15 +289,9 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
   #     nonexistent module). Caller skips silently rather than emitting a
   #     suggestion that names a function we can't confirm exists.
   defp non_bang_counterpart(module, bang_name) do
-    case Cache.get({@counterpart_key_tag, module, bang_name}, :miss) do
-      :miss ->
-        result = compute_counterpart(module, bang_name)
-        Cache.put({@counterpart_key_tag, module, bang_name}, result)
-        result
-
-      cached ->
-        cached
-    end
+    Cache.memoize({@counterpart_key_tag, module, bang_name}, fn ->
+      compute_counterpart(module, bang_name)
+    end)
   end
 
   defp compute_counterpart(module, bang_name) do

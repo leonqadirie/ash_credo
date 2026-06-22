@@ -127,15 +127,7 @@ defmodule AshCredo.Introspection.Compiled do
   @spec inspect_module(module()) :: {:ok, info_map()} | {:error, error()}
   def inspect_module(module) when is_atom(module) do
     if ash_available?() do
-      case cache_fetch(module) do
-        {:ok, cached} ->
-          cached
-
-        :miss ->
-          result = do_inspect(module)
-          cache_put(module, result)
-          result
-      end
+      Cache.memoize({@cache_key_tag, module}, fn -> do_inspect(module) end)
     else
       {:error, :ash_missing}
     end
@@ -697,15 +689,4 @@ defmodule AshCredo.Introspection.Compiled do
     _ in [ArgumentError, UndefinedFunctionError] -> []
   end
 
-  defp cache_fetch(module) do
-    case Cache.get({@cache_key_tag, module}, :miss) do
-      :miss -> :miss
-      cached -> {:ok, cached}
-    end
-  end
-
-  defp cache_put(module, result) do
-    Cache.put({@cache_key_tag, module}, result)
-    result
-  end
 end
