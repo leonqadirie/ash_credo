@@ -367,6 +367,13 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     end
   end
 
+  # Each frame carries the cumulative set of requires visible at its depth: a
+  # pushed frame inherits its parent's set (Elixir nested scopes inherit
+  # `require`/`import`), so `current_required/1` is an O(1) head read instead
+  # of unioning the whole stack on every visited node.
+  defp push_require_frame(%{require_frames: [current | _]} = state),
+    do: update_in(state.require_frames, &[current | &1])
+
   defp push_require_frame(state), do: update_in(state.require_frames, &[MapSet.new() | &1])
 
   defp pop_require_frame(%{require_frames: [_ | rest]} = state),
@@ -387,8 +394,8 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     end
   end
 
-  defp current_required(%{require_frames: frames}),
-    do: Enum.reduce(frames, MapSet.new(), &MapSet.union/2)
+  defp current_required(%{require_frames: [current | _]}), do: current
+  defp current_required(_), do: MapSet.new()
 
   defp build_issue(site, issue_meta) do
     mod_str = inspect(site.module)
