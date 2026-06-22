@@ -14,8 +14,10 @@ defmodule AshCredo.Introspection do
     * `Block` - do-block and module-body AST access
     * `LexicalScopeWalker` / `LexicalAliases` - scope-aware traversal
     * `ResourceContext` / `UseMetadata` - shared data structs
-    * `Compiled` - compile-time/runtime metadata, and the sole gateway for it,
-      enforced by `AshCredo.SelfCheck.EnforceCompiledIntrospectionBoundary`
+    * `Compiled` - compile-time/runtime metadata, and the sole gateway for it.
+      The boundary (only `Compiled` may call Ash's runtime introspection
+      modules) is enforced structurally by the `calls.forbidden` policy in
+      `.reach.exs`.
 
   Do not add thin pass-through wrappers here for those modules; call the owning
   module directly so dependencies stay honest.

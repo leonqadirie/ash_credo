@@ -63,8 +63,10 @@
           {ExSlop.Check.Readability.NarratorComment, []},
           {ExSlop.Check.Readability.UnaliasedModuleUse, []},
 
-          # Internal - enforce architectural invariants
-          {AshCredo.SelfCheck.EnforceCompiledIntrospectionBoundary, []},
+          # Internal - enforce architectural invariants. The compiled
+          # introspection boundary (only AshCredo.Introspection.Compiled may
+          # call Ash's runtime introspection modules) is enforced structurally
+          # via the `calls.forbidden` policy in .reach.exs, run by `mix lint`.
           {AshCredo.SelfCheck.EnforceCompiledCheckWrapper, []}
         ]
       }

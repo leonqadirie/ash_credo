@@ -9,6 +9,27 @@
     self_check: "AshCredo.SelfCheck.*",
     mix_tasks: "Mix.Tasks.*"
   ],
+  calls: [
+    # Structural enforcement of the introspection boundary: all Ash runtime
+    # introspection must go through AshCredo.Introspection.Compiled, the single
+    # gateway. Any other AshCredo module calling these Ash modules directly is a
+    # forbidden call. Resolved against Reach's call graph, so alias-expanded
+    # calls (e.g. `alias Ash.Resource.Info, as: ResourceInfo`) are caught too.
+    forbidden: [
+      {"AshCredo.*",
+       [
+         "Ash.Resource.Info.*",
+         "Ash.Domain.Info.*",
+         "Ash.Policy.Info.*",
+         "Ash.DataLayer.Ets.Info.*",
+         "Ash.DataLayer.Mnesia.Info.*",
+         "Ash.Notifier.PubSub.Info.*",
+         "Ash.TypedStruct.Info.*",
+         "Ash.Type.NewType.*",
+         "Ash.Type.*"
+       ], except: ["AshCredo.Introspection.Compiled"]}
+    ]
+  ],
   deps: [
     forbidden: [
       # cache is foundational; nothing in our code may be reached from it
