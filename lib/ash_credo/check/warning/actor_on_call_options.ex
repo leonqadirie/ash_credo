@@ -96,14 +96,11 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
        when is_atom(name) and (is_atom(ctx) or is_nil(ctx)) do
     key = {name, ctx}
 
-    if MapSet.member?(seen, key) do
-      false
-    else
+    not MapSet.member?(seen, key) and
       case Map.get(call_info.bindings, key) do
         nil -> false
         bound -> builder_subject?(bound, call_info, MapSet.put(seen, key))
       end
-    end
   end
 
   defp builder_subject?(ast, call_info, _seen), do: builder_call?(ast, call_info)
