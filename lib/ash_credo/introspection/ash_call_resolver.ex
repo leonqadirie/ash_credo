@@ -137,26 +137,30 @@ defmodule AshCredo.Introspection.AshCallResolver do
       call_kind: call_kind(expanded_module, fun_name)
     }
 
-    cond do
-      expanded_module == [:Ash] and fun_name in @action_in_opts ->
-        extract_action_in_opts(args, ctx)
+    dispatch_site(expanded_module, fun_name, args, ctx)
+  end
 
-      expanded_module == [:Ash] and fun_name in @bulk_create_funs ->
-        extract_positional(args, 1, 2, ctx)
+  defp dispatch_site([:Ash], fun_name, args, ctx) when fun_name in @action_in_opts,
+    do: extract_action_in_opts(args, ctx)
 
-      expanded_module == [:Ash] and fun_name in @bulk_query_funs ->
-        extract_bulk_query(args, ctx)
+  defp dispatch_site([:Ash], fun_name, args, ctx) when fun_name in @bulk_create_funs,
+    do: extract_positional(args, 1, 2, ctx)
 
-      MapSet.member?(@positional_0_1_funs, {expanded_module, fun_name}) ->
-        extract_positional(args, 0, 1, %{
-          ctx
-          | builder_prefix: builder_prefix(expanded_module),
-            call_kind: :builder,
-            trace_record?: MapSet.member?(@record_first_builders, {expanded_module, fun_name})
-        })
+  defp dispatch_site([:Ash], fun_name, args, ctx) when fun_name in @bulk_query_funs,
+    do: extract_bulk_query(args, ctx)
 
-      true ->
-        []
+  # `@positional_0_1_funs`/`@record_first_builders` are MapSets, so this case
+  # cannot be a function-head guard - it falls through to the catch-all.
+  defp dispatch_site(module, fun_name, args, ctx) do
+    if MapSet.member?(@positional_0_1_funs, {module, fun_name}) do
+      extract_positional(args, 0, 1, %{
+        ctx
+        | builder_prefix: builder_prefix(module),
+          call_kind: :builder,
+          trace_record?: MapSet.member?(@record_first_builders, {module, fun_name})
+      })
+    else
+      []
     end
   end
 
