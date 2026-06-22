@@ -206,14 +206,19 @@ defmodule AshCredo.Introspection.AshCallResolver do
   end
 
   defp build_site_with(ctx, action_name, resolution) do
-    struct!(
-      AshCallSite,
-      Map.merge(ctx, %{
+    # `:trace_record?` is resolver-local scratch (drives resource_segments/3
+    # dispatch); it is not part of the AshCallSite contract, so drop it before
+    # building the struct.
+    fields =
+      ctx
+      |> Map.delete(:trace_record?)
+      |> Map.merge(%{
         resolution: resolution,
         action_name: action_name,
         lookup_keys: lookup_keys(ctx, resolution)
       })
-    )
+
+    struct!(AshCallSite, fields)
   end
 
   defp primary_read_action_name(actions) when is_list(actions) do
