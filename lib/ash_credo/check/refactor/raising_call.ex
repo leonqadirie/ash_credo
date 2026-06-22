@@ -1,5 +1,5 @@
 defmodule AshCredo.Check.Refactor.RaisingCall do
-  use Credo.Check,
+  use AshCredo.CompiledCheck,
     base_priority: :low,
     category: :refactor,
     tags: [:ash],
@@ -90,35 +90,30 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
       ]
     ]
 
-  alias AshCredo.{Cache, Orchestration, PathFilter}
+  alias AshCredo.{Cache, PathFilter}
   alias AshCredo.Introspection.{AshCallScanner, RemoteBangScanner}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   @counterpart_key_tag {__MODULE__, :counterpart}
 
-  @impl true
-  def run(%SourceFile{} = source_file, params) do
+  @impl AshCredo.CompiledCheck
+  def active?(source_file, params) do
     excluded_paths = Params.get(params, :excluded_paths, __MODULE__)
+    not PathFilter.excluded?(source_file.filename, excluded_paths)
+  end
 
-    if PathFilter.excluded?(source_file.filename, excluded_paths) do
-      []
-    else
-      excluded_functions =
-        params
-        |> Params.get(:excluded_functions, __MODULE__)
-        |> MapSet.new()
+  @impl AshCredo.CompiledCheck
+  def run_compiled(source_file, params) do
+    excluded_functions =
+      params
+      |> Params.get(:excluded_functions, __MODULE__)
+      |> MapSet.new()
 
-      flag_bang_only = Params.get(params, :flag_bang_only_apis, __MODULE__)
-      issue_meta = IssueMeta.for(source_file, params)
+    flag_bang_only = Params.get(params, :flag_bang_only_apis, __MODULE__)
+    issue_meta = IssueMeta.for(source_file, params)
 
-      CompiledIntrospection.with_compiled_check(
-        fn -> Orchestration.ash_missing_issue(issue_meta, __MODULE__) end,
-        fn ->
-          ash_bang_issues(source_file, excluded_functions, flag_bang_only, issue_meta) ++
-            code_interface_issues(source_file, excluded_functions, issue_meta)
-        end
-      )
-    end
+    ash_bang_issues(source_file, excluded_functions, flag_bang_only, issue_meta) ++
+      code_interface_issues(source_file, excluded_functions, issue_meta)
   end
 
   defp ash_bang_issues(source_file, excluded_functions, flag_bang_only, issue_meta) do

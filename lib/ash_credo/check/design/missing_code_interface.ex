@@ -1,5 +1,5 @@
 defmodule AshCredo.Check.Design.MissingCodeInterface do
-  use Credo.Check,
+  use AshCredo.CompiledCheck,
     base_priority: :low,
     category: :design,
     tags: [:ash],
@@ -65,18 +65,13 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias AshCredo.Orchestration
 
-  @impl true
-  def run(%SourceFile{} = source_file, params) do
+  @impl AshCredo.CompiledCheck
+  def run_compiled(source_file, params) do
     excluded_actions = Params.get(params, :excluded_actions, __MODULE__)
 
-    Orchestration.compiled_check_on_named_resources(
-      source_file,
-      params,
-      __MODULE__,
-      fn resource, context, issue_meta ->
-        check_resource(resource, context, issue_meta, excluded_actions)
-      end
-    )
+    Orchestration.flat_map_named_resource(source_file, params, fn resource, context, issue_meta ->
+      check_resource(resource, context, issue_meta, excluded_actions)
+    end)
   end
 
   defp check_resource(resource, context, issue_meta, excluded_actions) do

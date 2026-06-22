@@ -1,5 +1,5 @@
 defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
-  use Credo.Check,
+  use AshCredo.CompiledCheck,
     base_priority: :high,
     category: :warning,
     tags: [:ash, :security],
@@ -36,14 +36,9 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias AshCredo.Orchestration
 
-  @impl true
-  def run(%SourceFile{} = source_file, params) do
-    Orchestration.compiled_check_on_named_resources(
-      source_file,
-      params,
-      __MODULE__,
-      &check_resource/3
-    )
+  @impl AshCredo.CompiledCheck
+  def run_compiled(source_file, params) do
+    Orchestration.flat_map_named_resource(source_file, params, &check_resource/3)
   end
 
   defp check_resource(resource, context, issue_meta) do

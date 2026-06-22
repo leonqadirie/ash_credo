@@ -1,5 +1,5 @@
 defmodule AshCredo.Check.Warning.MissingMacroDirective do
-  use Credo.Check,
+  use AshCredo.CompiledCheck,
     base_priority: :high,
     category: :warning,
     tags: [:ash],
@@ -140,19 +140,15 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
 
   alias AshCredo.Introspection.{Aliases, LexicalScopeWalker}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
-  alias AshCredo.Orchestration
 
   @directive_kinds ~w(require import)a
 
-  @impl true
-  def run(%SourceFile{} = source_file, params) do
+  @impl AshCredo.CompiledCheck
+  def run_compiled(source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
     targets = target_modules(params)
 
-    CompiledIntrospection.with_compiled_check(
-      fn -> Orchestration.ash_missing_issue(issue_meta, __MODULE__) end,
-      fn -> do_run(source_file, targets, issue_meta) end
-    )
+    do_run(source_file, targets, issue_meta)
   end
 
   defp target_modules(params) do

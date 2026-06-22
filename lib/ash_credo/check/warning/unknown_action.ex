@@ -1,5 +1,5 @@
 defmodule AshCredo.Check.Warning.UnknownAction do
-  use Credo.Check,
+  use AshCredo.CompiledCheck,
     base_priority: :high,
     category: :warning,
     tags: [:ash],
@@ -37,20 +37,14 @@ defmodule AshCredo.Check.Warning.UnknownAction do
 
   alias AshCredo.Introspection.{AshCallResolver, AshCallSite}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
-  alias AshCredo.Orchestration
 
-  @impl true
-  def run(%SourceFile{} = source_file, params) do
+  @impl AshCredo.CompiledCheck
+  def run_compiled(source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
 
-    CompiledIntrospection.with_compiled_check(
-      fn -> Orchestration.ash_missing_issue(issue_meta, __MODULE__) end,
-      fn ->
-        source_file
-        |> AshCallResolver.sites()
-        |> Enum.flat_map(&check_site(&1, issue_meta))
-      end
-    )
+    source_file
+    |> AshCallResolver.sites()
+    |> Enum.flat_map(&check_site(&1, issue_meta))
   end
 
   defp check_site(%AshCallSite{resolution: {:ok, resource, info}} = site, issue_meta) do

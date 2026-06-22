@@ -1,5 +1,5 @@
 defmodule AshCredo.Check.Design.MissingTimestamps do
-  use Credo.Check,
+  use AshCredo.CompiledCheck,
     base_priority: :normal,
     category: :design,
     tags: [:ash],
@@ -30,14 +30,9 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias AshCredo.Orchestration
 
-  @impl true
-  def run(%SourceFile{} = source_file, params) do
-    Orchestration.compiled_check_on_loadable_resources(
-      source_file,
-      params,
-      __MODULE__,
-      &check_resource_timestamps/3
-    )
+  @impl AshCredo.CompiledCheck
+  def run_compiled(source_file, params) do
+    Orchestration.flat_map_loadable_resource(source_file, params, &check_resource_timestamps/3)
   end
 
   defp check_resource_timestamps(resource, context, issue_meta) do

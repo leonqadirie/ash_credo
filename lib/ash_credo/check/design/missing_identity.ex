@@ -1,5 +1,5 @@
 defmodule AshCredo.Check.Design.MissingIdentity do
-  use Credo.Check,
+  use AshCredo.CompiledCheck,
     base_priority: :normal,
     category: :design,
     tags: [:ash],
@@ -38,18 +38,13 @@ defmodule AshCredo.Check.Design.MissingIdentity do
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias AshCredo.Orchestration
 
-  @impl true
-  def run(%SourceFile{} = source_file, params) do
+  @impl AshCredo.CompiledCheck
+  def run_compiled(source_file, params) do
     candidates = MapSet.new(Params.get(params, :identity_candidates, __MODULE__))
 
-    Orchestration.compiled_check_on_named_resources(
-      source_file,
-      params,
-      __MODULE__,
-      fn resource, context, issue_meta ->
-        check_resource(resource, context, candidates, issue_meta)
-      end
-    )
+    Orchestration.flat_map_named_resource(source_file, params, fn resource, context, issue_meta ->
+      check_resource(resource, context, candidates, issue_meta)
+    end)
   end
 
   defp check_resource(resource, context, candidates, issue_meta) do

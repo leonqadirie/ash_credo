@@ -1,5 +1,5 @@
 defmodule AshCredo.Check.Refactor.UseCodeInterface do
-  use Credo.Check,
+  use AshCredo.CompiledCheck,
     base_priority: :normal,
     category: :refactor,
     tags: [:ash],
@@ -105,25 +105,21 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   alias AshCredo.Introspection.{AshCallResolver, AshCallSite}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
-  alias AshCredo.Orchestration
 
-  @impl true
-  def run(%SourceFile{} = source_file, params) do
+  @impl AshCredo.CompiledCheck
+  def active?(_source_file, params) do
+    config = load_config(params)
+    config.in_domain or config.outside_domain
+  end
+
+  @impl AshCredo.CompiledCheck
+  def run_compiled(source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
     config = load_config(params)
 
-    if config.in_domain or config.outside_domain do
-      CompiledIntrospection.with_compiled_check(
-        fn -> Orchestration.ash_missing_issue(issue_meta, __MODULE__) end,
-        fn ->
-          source_file
-          |> AshCallResolver.sites()
-          |> Enum.flat_map(&check_site(&1, issue_meta, config))
-        end
-      )
-    else
-      []
-    end
+    source_file
+    |> AshCallResolver.sites()
+    |> Enum.flat_map(&check_site(&1, issue_meta, config))
   end
 
   defp load_config(params) do
