@@ -108,8 +108,8 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   @impl AshCredo.CompiledCheck
   def active?(_source_file, params) do
-    config = load_config(params)
-    config.in_domain or config.outside_domain
+    Params.get(params, :enforce_code_interface_in_domain, __MODULE__) or
+      Params.get(params, :enforce_code_interface_outside_domain, __MODULE__)
   end
 
   @impl AshCredo.CompiledCheck
