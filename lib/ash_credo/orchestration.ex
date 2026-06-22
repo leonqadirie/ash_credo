@@ -141,7 +141,7 @@ defmodule AshCredo.Orchestration do
           message:
             "Could not load `#{inspect(resource)}` for `#{short_name(check)}`. " <>
               "Run `mix compile` before `mix credo`, or disable this check in `.credo.exs`.",
-          line_no: Map.get(context, :use_line) || 1
+          line_no: context.use_line || 1
         ],
         check
       )

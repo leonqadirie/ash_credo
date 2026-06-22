@@ -139,6 +139,6 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
   defp actions_section_line(module_ast, context) do
     actions_ast = Introspection.find_dsl_section(module_ast, :actions)
 
-    Introspection.section_issue_line(actions_ast, Map.get(context, :use_line), 1)
+    Introspection.section_issue_line(actions_ast, context.use_line, 1)
   end
 end

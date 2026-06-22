@@ -80,18 +80,26 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
     has_create? and has_update?
   end
 
-  defp create_timestamp_attribute?(attribute) do
-    Map.get(attribute, :writable?) == false and
-      is_function(Map.get(attribute, :default)) and
-      not is_function(Map.get(attribute, :update_default)) and
-      datetime_attribute_type?(Map.get(attribute, :type))
+  defp create_timestamp_attribute?(%{
+         writable?: false,
+         default: default,
+         update_default: update_default,
+         type: type
+       }) do
+    is_function(default) and not is_function(update_default) and datetime_attribute_type?(type)
   end
 
-  defp update_timestamp_attribute?(attribute) do
-    Map.get(attribute, :writable?) == false and
-      is_function(Map.get(attribute, :update_default)) and
-      datetime_attribute_type?(Map.get(attribute, :type))
+  defp create_timestamp_attribute?(_attribute), do: false
+
+  defp update_timestamp_attribute?(%{
+         writable?: false,
+         update_default: update_default,
+         type: type
+       }) do
+    is_function(update_default) and datetime_attribute_type?(type)
   end
+
+  defp update_timestamp_attribute?(_attribute), do: false
 
   # Restrict timestamp detection to datetime-typed attributes so that
   # PK attributes produced by e.g. `uuid_primary_key :id` - which are

@@ -79,7 +79,7 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
       message:
         "Resource has Ash.Policy.Authorizer but no policies defined. All actions will be denied.",
       trigger: "Ash.Policy.Authorizer",
-      line_no: Map.get(context, :use_line) || 1
+      line_no: context.use_line || 1
     )
   end
 end

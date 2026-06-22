@@ -139,23 +139,19 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
       when is_atom(fun_name) and is_list(meta) ->
         module = Module.concat(expanded_module)
 
-        cond do
-          not bang?(fun_name) ->
-            []
-
-          MapSet.member?(excluded_functions, {module, fun_name}) ->
-            []
-
-          true ->
-            ash_call_issues(
-              non_bang_counterpart(module, fun_name),
-              module_ast,
-              expanded_module,
-              fun_name,
-              meta,
-              flag_bang_only,
-              issue_meta
-            )
+        with true <- bang?(fun_name),
+             false <- MapSet.member?(excluded_functions, {module, fun_name}) do
+          ash_call_issues(
+            non_bang_counterpart(module, fun_name),
+            module_ast,
+            expanded_module,
+            fun_name,
+            meta,
+            flag_bang_only,
+            issue_meta
+          )
+        else
+          _ -> []
         end
 
       _ ->

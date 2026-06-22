@@ -102,16 +102,9 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
   defp action_authorize_false_lines(nil), do: []
 
   defp action_authorize_false_lines(actions_ast) do
-    actions_ast
-    |> Introspection.action_entities()
-    |> Enum.flat_map(fn action ->
-      action
-      |> Introspection.option_occurrences(:authorize?)
-      |> Enum.flat_map(fn
-        {false, line} -> [line]
-        _ -> []
-      end)
-    end)
+    for action <- Introspection.action_entities(actions_ast),
+        {false, line} <- Introspection.option_occurrences(action, :authorize?),
+        do: line
   end
 
   defp all_authorize_false_lines(source_file) do

@@ -20,23 +20,20 @@ defmodule AshCredo.Check.Warning.MissingDomain do
   def run(%SourceFile{} = source_file, params),
     do: Orchestration.flat_map_resource_context(source_file, params, &missing_domain_issues/2)
 
-  defp missing_domain_issues(%ResourceContext{use_opts: opts} = context, issue_meta) do
-    case opts do
-      opts when is_list(opts) ->
-        if Keyword.has_key?(opts, :domain) or Introspection.embedded_resource?(context) do
-          []
-        else
-          [
-            format_issue(issue_meta,
-              message: "Resource is missing a `domain:` option in `use Ash.Resource`.",
-              trigger: "use Ash.Resource",
-              line_no: Introspection.resource_issue_line(context)
-            )
-          ]
-        end
-
-      _ ->
-        []
+  defp missing_domain_issues(%ResourceContext{use_opts: opts} = context, issue_meta)
+       when is_list(opts) do
+    if Keyword.has_key?(opts, :domain) or Introspection.embedded_resource?(context) do
+      []
+    else
+      [
+        format_issue(issue_meta,
+          message: "Resource is missing a `domain:` option in `use Ash.Resource`.",
+          trigger: "use Ash.Resource",
+          line_no: Introspection.resource_issue_line(context)
+        )
+      ]
     end
   end
+
+  defp missing_domain_issues(_context, _issue_meta), do: []
 end
