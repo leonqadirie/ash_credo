@@ -24,9 +24,6 @@ defmodule AshCredo.Introspection.AshCallSite do
       resolution.
     * `:builder_prefix` - `:changeset_to | :query_to | :input_to | nil` for
       the corresponding `for_*` builder shape, otherwise `nil`.
-    * `:trace_record?` - resolver scratch: whether the first arg should be
-      traced through bindings/pipes back to a literal resource. Internal to
-      the resolver but kept on the site so the trace path is reentrant.
     * `:call_kind` - high-level call shape used to pick the right interface
       suggestion (`:read_many`, `:get_one`, `:stream_many`, `:builder`,
       `:bulk`, or `nil`).
@@ -44,7 +41,6 @@ defmodule AshCredo.Introspection.AshCallSite do
     :call_meta,
     :call_info,
     :builder_prefix,
-    :trace_record?,
     :call_kind,
     :lookup_keys
   ]
@@ -57,7 +53,6 @@ defmodule AshCredo.Introspection.AshCallSite do
     :call_meta,
     :call_info,
     :builder_prefix,
-    :trace_record?,
     :call_kind,
     :lookup_keys
   ]
@@ -77,7 +72,6 @@ defmodule AshCredo.Introspection.AshCallSite do
           call_meta: keyword(),
           call_info: map(),
           builder_prefix: :changeset_to | :query_to | :input_to | nil,
-          trace_record?: boolean(),
           call_kind: :read_many | :get_one | :stream_many | :builder | :bulk | nil,
           lookup_keys: [atom()] | nil
         }

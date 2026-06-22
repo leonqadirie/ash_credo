@@ -137,26 +137,30 @@ defmodule AshCredo.Introspection.AshCallResolver do
       call_kind: call_kind(expanded_module, fun_name)
     }
 
-    cond do
-      expanded_module == [:Ash] and fun_name in @action_in_opts ->
-        extract_action_in_opts(args, ctx)
+    dispatch_site(expanded_module, fun_name, args, ctx)
+  end
 
-      expanded_module == [:Ash] and fun_name in @bulk_create_funs ->
-        extract_positional(args, 1, 2, ctx)
+  defp dispatch_site([:Ash], fun_name, args, ctx) when fun_name in @action_in_opts,
+    do: extract_action_in_opts(args, ctx)
 
-      expanded_module == [:Ash] and fun_name in @bulk_query_funs ->
-        extract_bulk_query(args, ctx)
+  defp dispatch_site([:Ash], fun_name, args, ctx) when fun_name in @bulk_create_funs,
+    do: extract_positional(args, 1, 2, ctx)
 
-      MapSet.member?(@positional_0_1_funs, {expanded_module, fun_name}) ->
-        extract_positional(args, 0, 1, %{
-          ctx
-          | builder_prefix: builder_prefix(expanded_module),
-            call_kind: :builder,
-            trace_record?: MapSet.member?(@record_first_builders, {expanded_module, fun_name})
-        })
+  defp dispatch_site([:Ash], fun_name, args, ctx) when fun_name in @bulk_query_funs,
+    do: extract_bulk_query(args, ctx)
 
-      true ->
-        []
+  # `@positional_0_1_funs`/`@record_first_builders` are MapSets, so this case
+  # cannot be a function-head guard - it falls through to the catch-all.
+  defp dispatch_site(module, fun_name, args, ctx) do
+    if MapSet.member?(@positional_0_1_funs, {module, fun_name}) do
+      extract_positional(args, 0, 1, %{
+        ctx
+        | builder_prefix: builder_prefix(module),
+          call_kind: :builder,
+          trace_record?: MapSet.member?(@record_first_builders, {module, fun_name})
+      })
+    else
+      []
     end
   end
 
@@ -202,14 +206,19 @@ defmodule AshCredo.Introspection.AshCallResolver do
   end
 
   defp build_site_with(ctx, action_name, resolution) do
-    struct!(
-      AshCallSite,
-      Map.merge(ctx, %{
+    # `:trace_record?` is resolver-local scratch (drives resource_segments/3
+    # dispatch); it is not part of the AshCallSite contract, so drop it before
+    # building the struct.
+    fields =
+      ctx
+      |> Map.delete(:trace_record?)
+      |> Map.merge(%{
         resolution: resolution,
         action_name: action_name,
         lookup_keys: lookup_keys(ctx, resolution)
       })
-    )
+
+    struct!(AshCallSite, fields)
   end
 
   defp primary_read_action_name(actions) when is_list(actions) do
@@ -269,7 +278,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
     context = ast_context(ctx.call_info)
 
     with {:ok, resource_ast} <- arg_at(args, resource_idx),
-         {:ok, segs} <- resolve_positional_segments(resource_ast, context, ctx.trace_record?),
+         {:ok, segs} <- resource_segments(resource_ast, context, ctx),
          {:ok, action} <- arg_at(args, action_idx),
          true <- is_atom(action) do
       [build_site(segs, action, ctx)]
@@ -378,14 +387,18 @@ defmodule AshCredo.Introspection.AshCallResolver do
 
   defp literal_segments(_, _), do: :error
 
-  defp resolve_positional_segments(ast, context, true) do
+  # Builders that carry the record/changeset as arg0 may receive it via a
+  # pipeline or binding, so trace the origin back to a literal; plain
+  # positional calls name the resource directly.
+  defp resource_segments(ast, context, %{trace_record?: true}) do
     case literal_segments(ast, context) do
       {:ok, segs} -> {:ok, segs}
       :error -> trace_origin_to_literal(ast, context)
     end
   end
 
-  defp resolve_positional_segments(ast, context, false), do: literal_segments(ast, context)
+  defp resource_segments(ast, context, %{trace_record?: false}),
+    do: literal_segments(ast, context)
 
   defp trace_origin_to_literal(ast, context), do: trace_origin(ast, context, MapSet.new())
 

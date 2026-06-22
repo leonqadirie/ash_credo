@@ -127,15 +127,7 @@ defmodule AshCredo.Introspection.Compiled do
   @spec inspect_module(module()) :: {:ok, info_map()} | {:error, error()}
   def inspect_module(module) when is_atom(module) do
     if ash_available?() do
-      case cache_fetch(module) do
-        {:ok, cached} ->
-          cached
-
-        :miss ->
-          result = do_inspect(module)
-          cache_put(module, result)
-          result
-      end
+      Cache.memoize({@cache_key_tag, module}, fn -> do_inspect(module) end)
     else
       {:error, :ash_missing}
     end
@@ -231,12 +223,26 @@ defmodule AshCredo.Introspection.Compiled do
   """
   @spec domain_resources(module()) :: {:ok, [module()]} | {:error, error()}
   def domain_resources(module) when is_atom(module) do
-    cond do
-      not ash_available?() -> {:error, :ash_missing}
-      not match?({:module, _}, Code.ensure_compiled(module)) -> {:error, :not_loadable}
-      not domain?(module) -> {:error, :not_a_domain}
-      true -> {:ok, Ash.Domain.Info.resources(module)}
+    with :ok <- ensure_ash_available(),
+         :ok <- ensure_loadable(module),
+         :ok <- ensure_domain(module) do
+      {:ok, Ash.Domain.Info.resources(module)}
     end
+  end
+
+  defp ensure_ash_available do
+    if ash_available?(), do: :ok, else: {:error, :ash_missing}
+  end
+
+  defp ensure_loadable(module) do
+    case Code.ensure_compiled(module) do
+      {:module, _} -> :ok
+      _ -> {:error, :not_loadable}
+    end
+  end
+
+  defp ensure_domain(module) do
+    if domain?(module), do: :ok, else: {:error, :not_a_domain}
   end
 
   @doc """
@@ -514,30 +520,6 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Given a list of action structs and a target action name, returns the name of
-  the action whose name is most similar to `target_name` (jaro distance ≥ 0.75),
-  or `nil` if no close match exists. Used to suggest typo fixes in issue
-  messages.
-  """
-  @spec suggest_action_name([struct()], atom()) :: atom() | nil
-  def suggest_action_name(known_actions, target_name)
-      when is_list(known_actions) and is_atom(target_name) do
-    target_str = Atom.to_string(target_name)
-
-    scored =
-      known_actions
-      |> Enum.map(fn action ->
-        {action.name, String.jaro_distance(target_str, Atom.to_string(action.name))}
-      end)
-      |> Enum.filter(fn {_, score} -> score >= 0.75 end)
-
-    case scored do
-      [] -> nil
-      scored -> scored |> Enum.max_by(&elem(&1, 1)) |> elem(0)
-    end
-  end
-
-  @doc """
   Builds a `:not_loadable` diagnostic for `module` only the first time it is
   seen this run. Subsequent calls for the same module return `[]`, so an
   unloadable resource produces at most ONE diagnostic across all
@@ -695,17 +677,5 @@ defmodule AshCredo.Introspection.Compiled do
     # `policies/1` raises `ArgumentError` when `module` is not a Spark DSL
     # module, or `UndefinedFunctionError` if it was purged.
     _ in [ArgumentError, UndefinedFunctionError] -> []
-  end
-
-  defp cache_fetch(module) do
-    case Cache.get({@cache_key_tag, module}, :miss) do
-      :miss -> :miss
-      cached -> {:ok, cached}
-    end
-  end
-
-  defp cache_put(module, result) do
-    Cache.put({@cache_key_tag, module}, result)
-    result
   end
 end

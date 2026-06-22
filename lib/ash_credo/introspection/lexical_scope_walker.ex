@@ -343,7 +343,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   end
 
   defp push_module_stack(%Scope{module_stack: stack, alias_frames: frames} = scope, defmodule_ast) do
-    literal = defmodule_literal_segments(defmodule_ast)
+    literal = LexicalAliases.defmodule_literal_segments(defmodule_ast)
 
     parent_absolute =
       case stack do
@@ -359,9 +359,4 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
     do: %{scope | module_stack: rest}
 
   defp pop_module_stack(scope), do: scope
-
-  defp defmodule_literal_segments({:defmodule, _, [{:__aliases__, _, segs}, _]})
-       when is_list(segs), do: segs
-
-  defp defmodule_literal_segments(_), do: nil
 end
