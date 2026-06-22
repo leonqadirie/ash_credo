@@ -52,6 +52,15 @@ defmodule AshCredo.Introspection.LexicalAliases do
   end
 
   @doc """
+  Extracts the literal alias segments from a `defmodule` AST node, or `nil`
+  when the module name is not a literal alias (e.g. `Module.concat(...)`).
+  """
+  def defmodule_literal_segments({:defmodule, _, [{:__aliases__, _, segs}, _]})
+      when is_list(segs), do: segs
+
+  def defmodule_literal_segments(_), do: nil
+
+  @doc """
   Resolves a literal `defmodule` name into absolute module segments.
 
   When `parent_absolute` is empty, the module is top-level and visible aliases

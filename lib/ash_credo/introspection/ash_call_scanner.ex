@@ -164,7 +164,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
   end
 
   defp push_module_stack(state, ast) do
-    literal = defmodule_literal_segments(ast)
+    literal = LexicalAliases.defmodule_literal_segments(ast)
 
     parent_absolute =
       case state.module_stack do
@@ -183,11 +183,6 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   defp current_module_segments(%{module_stack: [top | _]}), do: top
   defp current_module_segments(%{module_stack: []}), do: nil
-
-  defp defmodule_literal_segments({:defmodule, _, [{:__aliases__, _, segs}, _]})
-       when is_list(segs), do: segs
-
-  defp defmodule_literal_segments(_), do: nil
 
   defp maybe_enter_lexical_scope(%{track_context?: false} = state, _node_name), do: state
 
