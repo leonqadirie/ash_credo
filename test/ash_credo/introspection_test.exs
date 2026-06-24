@@ -1167,4 +1167,55 @@ defmodule AshCredo.IntrospectionTest do
       assert Introspection.embedded_resource?(context)
     end
   end
+
+  describe "fallback clauses and module-AST arities" do
+    test "ash_resource?/1 and ash_domain?/1 accept a bare module AST" do
+      resource = module_ast("defmodule P do\n  use Ash.Resource\nend")
+      domain = module_ast("defmodule D do\n  use Ash.Domain\nend")
+
+      assert Introspection.ash_resource?(resource)
+      refute Introspection.ash_domain?(resource)
+      assert Introspection.ash_domain?(domain)
+      refute Introspection.ash_resource?(domain)
+    end
+
+    test "use_opts/2 extracts options from a bare module AST" do
+      ast = module_ast("defmodule P do\n  use Ash.Resource, domain: MyApp.Blog\nend")
+      opts = Introspection.use_opts(ast, [:Ash, :Resource])
+
+      assert Keyword.has_key?(opts, :domain)
+    end
+
+    test "resource_data_layer/1 returns nil when the source has no `use`" do
+      sf = source_file("defmodule Plain do\n  def hi, do: :ok\nend")
+
+      assert Introspection.resource_data_layer(sf) == nil
+      refute Introspection.embedded_resource?(sf)
+      refute Introspection.has_data_layer?(sf)
+    end
+
+    test "module_line_count/1 returns nil for a non-defmodule input" do
+      assert Introspection.module_line_count(:not_a_module) == nil
+    end
+
+    test "resource_section/2 returns nil for a non-context input" do
+      assert Introspection.resource_section(:not_a_context, :attributes) == nil
+    end
+
+    test "entity_opts/1 returns [] for a non-entity input" do
+      assert Introspection.entity_opts(:not_a_tuple) == []
+    end
+
+    test "option_occurrences/2 returns [] for a non-entity input" do
+      assert Introspection.option_occurrences(:not_a_tuple, :anything) == []
+    end
+
+    test "option_values/2 reads a multi-argument option from an entity's do block" do
+      ast = module_ast("entity do\n  opt 1, 2\nend")
+
+      assert Introspection.option_values(ast, :opt) == [[1, 2]]
+    end
+  end
+
+  defp module_ast(src), do: Code.string_to_quoted!(src)
 end

@@ -18,6 +18,8 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicyTest do
 
     assert [issue] = run_check(OverlyPermissivePolicy, source)
     assert issue.message =~ "Unscoped policy"
+    assert issue.trigger == "authorize_if always()"
+    assert issue.line_no == 5
   end
 
   test "reports issue when policy uses expr(true) as guard" do
@@ -68,6 +70,8 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicyTest do
 
     assert [issue] = run_check(OverlyPermissivePolicy, source)
     assert issue.message =~ "Bypass"
+    assert issue.trigger == "authorize_if always()"
+    assert issue.line_no == 5
   end
 
   test "reports issue for policy inside policy_group" do
@@ -87,6 +91,9 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicyTest do
 
     assert [issue] = run_check(OverlyPermissivePolicy, source)
     assert issue.message =~ "Unscoped policy"
+    assert issue.trigger == "authorize_if always()"
+    # The nested policy sits one line below the enclosing policy_group.
+    assert issue.line_no == 6
   end
 
   test "no issue for scoped bypass" do
@@ -162,6 +169,8 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicyTest do
 
     assert [issue] = run_check(OverlyPermissivePolicy, source)
     assert issue.message =~ "Unscoped policy"
+    assert issue.trigger == "authorize_if always()"
+    assert issue.line_no == 5
   end
 
   test "reports issue when condition is a list containing only always()" do
@@ -179,6 +188,8 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicyTest do
 
     assert [issue] = run_check(OverlyPermissivePolicy, source)
     assert issue.message =~ "Unscoped policy"
+    assert issue.trigger == "authorize_if always()"
+    assert issue.line_no == 5
   end
 
   test "reports issue when bypass condition is a list containing only always()" do

@@ -12,6 +12,8 @@ defmodule AshCredo.Check.Warning.MissingDomainTest do
 
     assert [issue] = run_check(MissingDomain, source)
     assert issue.message =~ "domain:"
+    assert issue.trigger == "use Ash.Resource"
+    assert issue.line_no == 2
   end
 
   test "no issue when domain is present" do
@@ -48,6 +50,7 @@ defmodule AshCredo.Check.Warning.MissingDomainTest do
     assert [issue] = run_check(MissingDomain, source)
     assert issue.message =~ "domain:"
     assert issue.line_no == 6
+    assert issue.trigger == "use Ash.Resource"
   end
 
   test "ignores non-Ash modules" do

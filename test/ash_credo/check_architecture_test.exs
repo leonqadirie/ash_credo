@@ -18,6 +18,11 @@ defmodule AshCredo.CheckArchitectureTest do
   @check_glob "lib/ash_credo/check/**/*.ex"
   @compiled_segments [:AshCredo, :Introspection, :Compiled]
 
+  # The category/priority vocabularies Credo recognises. A typo here
+  # (`category: :warnings`) otherwise only surfaces as a Credo crash at runtime.
+  @categories ~w(consistency design readability refactor warning)a
+  @priorities ~w(higher high normal low lower)a
+
   # `{module, references_compiled?}` for every check module on disk. Driven by
   # the filesystem rather than `:application.get_key/2`, whose module list lags
   # a freshly added file, so a new check is covered the moment its file exists.
@@ -95,6 +100,27 @@ defmodule AshCredo.CheckArchitectureTest do
     assert untagged == [],
            "These AshCredo checks are missing the :ash tag (needed for " <>
              "`mix credo --only ash`): #{inspect(untagged)}"
+  end
+
+  test "every check declares a known category" do
+    offenders =
+      for {module, _} <- check_files(),
+          module.category() not in @categories,
+          do: {module, module.category()}
+
+    assert offenders == [],
+           "These checks declare an unknown category (Credo will not group " <>
+             "them and may crash): #{inspect(offenders)}"
+  end
+
+  test "every check declares a known base_priority" do
+    offenders =
+      for {module, _} <- check_files(),
+          module.base_priority() not in @priorities,
+          do: {module, module.base_priority()}
+
+    assert offenders == [],
+           "These checks declare an unknown base_priority: #{inspect(offenders)}"
   end
 
   describe "references_compiled?/1 resolves every alias form" do
