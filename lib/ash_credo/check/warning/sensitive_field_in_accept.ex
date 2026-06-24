@@ -4,7 +4,8 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
     category: :warning,
     tags: [:ash, :security],
     param_defaults: [
-      dangerous_fields: ~w(is_admin admin permissions api_key secret_key)a
+      dangerous_fields: ~w(is_admin admin permissions api_key secret_key)a,
+      excluded_paths: [~r"/test/", "test"]
     ],
     explanations: [
       check: """
@@ -17,22 +18,40 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
 
             change set_attribute(:role, :user)
           end
+
+      Test directories are excluded by default, since test factories and seeds
+      often accept these fields on purpose. Override `excluded_paths` to scope
+      the check differently.
       """,
       params: [
         dangerous_fields:
           "Field names that should not appear in accept lists. Atom entries " <>
             "match exactly; `Regex` entries (e.g. `~r/_token$/`) match against " <>
-            "the field name."
+            "the field name.",
+        excluded_paths:
+          "List of paths or regexes to exclude from this check. " <>
+            "Defaults to test directories, since accepting these fields is " <>
+            "often intentional in test setup."
       ]
     ]
 
-  alias AshCredo.Introspection
+  alias AshCredo.{Introspection, PathFilter}
   alias AshCredo.Introspection.ResourceContext
 
   @writable_action_types ~w(create update)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
+    excluded_paths = Params.get(params, :excluded_paths, __MODULE__)
+
+    if PathFilter.excluded?(source_file.filename, excluded_paths) do
+      []
+    else
+      find_issues(source_file, params)
+    end
+  end
+
+  defp find_issues(%SourceFile{} = source_file, params) do
     dangerous = Params.get(params, :dangerous_fields, __MODULE__)
     issue_meta = IssueMeta.for(source_file, params)
 

@@ -168,4 +168,45 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAcceptTest do
 
     assert [] = run_check(SensitiveFieldInAccept, source)
   end
+
+  test "skips files under test directories by default" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource, domain: MyApp.Accounts
+
+      actions do
+        create :register do
+          accept [:name, :is_admin]
+        end
+      end
+    end
+    """
+
+    assert [] =
+             run_check(SensitiveFieldInAccept, source,
+               __filename__: "test/support/user_factory.ex"
+             )
+  end
+
+  test "excluded_paths can be overridden to also scan test files" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource, domain: MyApp.Accounts
+
+      actions do
+        create :register do
+          accept [:name, :is_admin]
+        end
+      end
+    end
+    """
+
+    assert [issue] =
+             run_check(SensitiveFieldInAccept, source,
+               __filename__: "test/support/user_factory.ex",
+               excluded_paths: []
+             )
+
+    assert issue.message =~ "is_admin"
+  end
 end
