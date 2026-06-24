@@ -23,9 +23,10 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
       literally in the `attributes` block. It cannot see attributes
       contributed by Spark transformers or extensions - for example
       `AshAuthentication`'s `:hashed_password` - and so will not flag them
-      even when they are unmarked. It likewise only matches the `attribute`
-      entity: foreign keys and timestamps declared via `belongs_to`,
-      `create_timestamp`, or `update_timestamp` are not inspected.
+      even when they are unmarked. It also only inspects the `attribute`
+      entity: `belongs_to` foreign keys cannot be marked `sensitive?`
+      directly (declare the column as an explicit `attribute` if you need
+      that), and timestamps are not sensitive data, so neither is flagged.
       """,
       params: [
         sensitive_names:
