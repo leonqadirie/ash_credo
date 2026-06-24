@@ -10,6 +10,8 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPoliciesTest do
   #     but defines NO policies block. Failure-path fixture.
   #   * `AshCredoFixtures.Blog.Post`            - has no authorizer at all.
   #     Happy-path fixture (check should silently skip).
+  #   * `AshCredoFixtures.Blog.WithAuthorizerAndPolicies` - declares the
+  #     authorizer AND a non-empty `policies` block. Happy-path fixture.
 
   setup do
     CompiledIntrospection.clear_cache()
@@ -31,6 +33,16 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPoliciesTest do
   test "no issue when no authorizer is declared" do
     source = """
     defmodule AshCredoFixtures.Blog.Post do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+    end
+    """
+
+    assert [] = run_check(AuthorizerWithoutPolicies, source)
+  end
+
+  test "no issue when the authorizer is declared and policies exist" do
+    source = """
+    defmodule AshCredoFixtures.Blog.WithAuthorizerAndPolicies do
       use Ash.Resource, domain: AshCredoFixtures.Blog
     end
     """
