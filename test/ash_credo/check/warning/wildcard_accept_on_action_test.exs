@@ -150,4 +150,45 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
 
     assert [] = run_check(WildcardAcceptOnAction, source)
   end
+
+  test "skips files under test directories by default" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        create :create do
+          accept :*
+        end
+      end
+    end
+    """
+
+    assert [] =
+             run_check(WildcardAcceptOnAction, source,
+               __filename__: "test/support/post_factory.ex"
+             )
+  end
+
+  test "excluded_paths can be overridden to also scan test files" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        create :create do
+          accept :*
+        end
+      end
+    end
+    """
+
+    assert [issue] =
+             run_check(WildcardAcceptOnAction, source,
+               __filename__: "test/support/post_factory.ex",
+               excluded_paths: []
+             )
+
+    assert issue.message =~ "accept :*"
+  end
 end

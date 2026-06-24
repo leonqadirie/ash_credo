@@ -3,6 +3,9 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
     base_priority: :high,
     category: :warning,
     tags: [:ash, :security],
+    param_defaults: [
+      excluded_paths: [~r"/test/", "test"]
+    ],
     explanations: [
       check: """
       Using `accept :*` on create or update actions accepts all public
@@ -12,17 +15,34 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
           create :create do
             accept [:title, :body]
           end
-      """
+
+      Test directories are excluded by default, since test factories and seeds
+      often use `accept :*` on purpose. Override `excluded_paths` to scope the
+      check differently.
+      """,
+      params: [
+        excluded_paths:
+          "List of paths or regexes to exclude from this check. " <>
+            "Defaults to test directories, since `accept :*` is often " <>
+            "intentional in test setup."
+      ]
     ]
 
-  alias AshCredo.Introspection
+  alias AshCredo.{Introspection, PathFilter}
   alias AshCredo.Orchestration
 
   @writable_action_types ~w(create update)a
 
   @impl true
-  def run(%SourceFile{} = source_file, params),
-    do: Orchestration.flat_map_resource_section(source_file, params, :actions, &check_actions/2)
+  def run(%SourceFile{} = source_file, params) do
+    excluded_paths = Params.get(params, :excluded_paths, __MODULE__)
+
+    if PathFilter.excluded?(source_file.filename, excluded_paths) do
+      []
+    else
+      Orchestration.flat_map_resource_section(source_file, params, :actions, &check_actions/2)
+    end
+  end
 
   defp check_actions(nil, _issue_meta), do: []
 
