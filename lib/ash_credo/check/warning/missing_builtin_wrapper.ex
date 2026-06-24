@@ -37,9 +37,11 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
       and a preparation builtin: in pipelines it gets `change`, in read and
       generic actions `prepare`.
 
-      Because some builtin names are common words (`present`, `compare`,
-      `match`, `build`), a bare call to a same-named local helper inside an
-      action body would be flagged too; silence such a call with
+      The builtin names are read from Ash's `*.Builtins` modules at analysis
+      time, so builtins added in newer Ash versions are covered automatically.
+      Because some of them are common words (`present`, `compare`, `match`,
+      `build`, `load`, `select`), a bare call to a same-named local helper
+      inside an action body would be flagged too; silence such a call with
       `# credo:disable-for-next-line`.
       """
     ]
@@ -47,56 +49,11 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
   alias AshCredo.Introspection
   alias AshCredo.Orchestration
 
-  @change_builtins ~w(
-    manage_relationship
-    relate_actor
-    set_attribute
-    set_new_attribute
-    set_context
-    atomic_set
-    atomic_update
-    increment
-    cascade_destroy
-    cascade_update
-    optimistic_lock
-    prevent_change
-    ensure_selected
-    get_and_lock
-    get_and_lock_for_update
-    debug_log
-  )a
-
-  @validation_builtins ~w(
-    absent
-    action_is
-    any
-    argument_does_not_equal
-    argument_equals
-    argument_in
-    attribute_does_not_equal
-    attribute_equals
-    attribute_in
-    attributes_absent
-    attributes_present
-    byte_size
-    changing
-    compare
-    confirm
-    data_one_of
-    match
-    negate
-    numericality
-    one_of
-    pre_flight_authorization
-    present
-    string_length
-  )a
-
-  @preparation_builtins ~w(build set_context)a
-
-  # One entry per builtin family; each is scoped to the scopes that actually
-  # import it, so a bare call anywhere else is a compile error the compiler
-  # already catches:
+  # One entry per builtin family. The builtin NAMES are read at run time from
+  # `:builtins_module` via `__info__(:functions)`, so builtins added in newer
+  # Ash versions are covered without editing this file. Everything else is the
+  # hand-tuned scoping that decides where a family is flagged and which family
+  # owns names shared by more than one (`set_context`):
   #
   #   * changes - no :read or :action: those import only the Preparation and
   #     Validation builtins. The one change builtin that compiles bare in a
@@ -115,47 +72,82 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
   #     Ash.Resource.Calculation.Builtins (just `concat`); the fix is a full
   #     `calculate` entity, reflected in the usage_prefix.
   #
-  # Pipeline bodies import the change/validation/preparation families at
-  # once (but NOT the calculation builtins - a bare `concat` there is a
-  # compile error); the ambiguous `set_context` is owned by the changes
-  # family in pipelines, since they accept `change` entities.
+  # `:pipeline` controls flagging inside `pipeline` bodies, which import the
+  # change/validation/preparation families at once (but NOT the calculation
+  # builtins - a bare `concat` there is a compile error). The ambiguous
+  # `set_context` is owned by the changes family in pipelines (since they
+  # accept `change` entities), so the preparations family excludes it.
   @families [
-    [
-      builtins: @change_builtins,
+    %{
+      builtins_module: Ash.Resource.Change.Builtins,
       wrapper: "change",
       action_types: ~w(create update destroy)a,
-      pipeline_builtins: @change_builtins,
+      pipeline: :all,
       global_sections: [:changes]
-    ],
-    [
-      builtins: @validation_builtins,
+    },
+    %{
+      builtins_module: Ash.Resource.Validation.Builtins,
       wrapper: "validate",
       action_types: ~w(create read update destroy action)a,
-      pipeline_builtins: @validation_builtins,
+      pipeline: :all,
       global_sections: [:validations, :changes, :preparations]
-    ],
-    [
-      builtins: @preparation_builtins,
+    },
+    %{
+      builtins_module: Ash.Resource.Preparation.Builtins,
       wrapper: "prepare",
       action_types: ~w(read action)a,
-      pipeline_builtins: ~w(build)a,
+      pipeline: {:except, ~w(set_context)a},
       global_sections: [:preparations]
-    ],
-    [
-      builtins: ~w(concat)a,
+    },
+    %{
+      builtins_module: Ash.Resource.Calculation.Builtins,
       wrapper: "calculate",
       action_types: [],
+      pipeline: :none,
       global_sections: [:calculations],
       usage_prefix: "calculate :name, :type, "
-    ]
+    }
   ]
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
     Enum.flat_map(@families, fn family ->
-      naked_builtin_issues(source_file, params, family)
+      naked_builtin_issues(source_file, params, family_opts(family))
     end)
   end
+
+  # Resolve the family's builtin names from Ash and assemble the keyword opts
+  # `naked_builtin_issues/3` expects.
+  defp family_opts(family) do
+    builtins = resolve_builtins(family.builtins_module)
+
+    [
+      builtins: builtins,
+      wrapper: family.wrapper,
+      action_types: family.action_types,
+      pipeline_builtins: pipeline_builtins(family.pipeline, builtins),
+      global_sections: family.global_sections
+    ] ++ usage_prefix_opt(family)
+  end
+
+  # Read builtin function names live from the family's Ash module so new
+  # builtins are picked up automatically. When the module is not loadable
+  # (Ash absent from the VM running Credo) the family simply does not flag -
+  # without Ash there is nothing Ash-specific to check.
+  defp resolve_builtins(module) do
+    if Code.ensure_loaded?(module) do
+      module.__info__(:functions) |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+    else
+      []
+    end
+  end
+
+  defp pipeline_builtins(:all, builtins), do: builtins
+  defp pipeline_builtins(:none, _builtins), do: []
+  defp pipeline_builtins({:except, excluded}, builtins), do: builtins -- excluded
+
+  defp usage_prefix_opt(%{usage_prefix: prefix}), do: [usage_prefix: prefix]
+  defp usage_prefix_opt(_family), do: []
 
   # Flags bare calls to configured builtin functions at statement position
   # inside action bodies, `pipeline` bodies, and global sections, suggesting

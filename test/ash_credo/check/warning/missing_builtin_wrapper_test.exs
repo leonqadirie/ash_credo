@@ -110,6 +110,24 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapperTest do
       assert [] = run_check(MissingBuiltinWrapper, source)
     end
 
+    test "flags change builtins resolved live from Ash, not just a static list" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+
+        actions do
+          update :touch do
+            load(:comments)
+          end
+        end
+      end
+      """
+
+      assert [issue] = run_check(MissingBuiltinWrapper, source)
+      assert issue.trigger == "load"
+      assert issue.message =~ "`change` wrapper"
+    end
+
     test "no issue for non-builtin calls in action body" do
       source = """
       defmodule MyApp.Post do
