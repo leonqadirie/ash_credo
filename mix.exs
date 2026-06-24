@@ -56,7 +56,8 @@ defmodule AshCredo.MixProject do
       {:igniter, "~> 0.8", optional: true, runtime: false},
       {:quokka, "~> 2.13", only: [:dev, :test], runtime: false},
       {:reach, "~> 2.7", only: [:dev, :test], runtime: false},
-      {:simple_sat, "~> 0.1", only: [:dev, :test], runtime: false}
+      {:simple_sat, "~> 0.1", only: [:dev, :test], runtime: false},
+      {:stream_data, "~> 1.3", only: [:dev, :test], runtime: false}
     ]
   end
 
