@@ -191,4 +191,18 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
 
     assert issue.message =~ "accept :*"
   end
+
+  test "a resource with no actions section yields no issues" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      attributes do
+        uuid_primary_key :id
+      end
+    end
+    """
+
+    assert [] = run_check(WildcardAcceptOnAction, source)
+  end
 end

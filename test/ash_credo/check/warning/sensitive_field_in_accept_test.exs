@@ -209,4 +209,66 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAcceptTest do
 
     assert issue.message =~ "is_admin"
   end
+
+  describe "malformed or non-literal DSL shapes are skipped, not crashed" do
+    test "a resource with no actions section yields no issues" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+
+        attributes do
+          uuid_primary_key :id
+        end
+      end
+      """
+
+      assert [] = run_check(SensitiveFieldInAccept, source)
+    end
+
+    test "a non-list `accept` value (e.g. `accept :all`) is ignored" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+
+        actions do
+          create :create do
+            accept :all
+          end
+        end
+      end
+      """
+
+      assert [] = run_check(SensitiveFieldInAccept, source)
+    end
+
+    test "a non-list `default_accept` value is ignored" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+
+        actions do
+          default_accept :all
+        end
+      end
+      """
+
+      assert [] = run_check(SensitiveFieldInAccept, source)
+    end
+
+    test "a regex pattern does not match a non-atom field entry" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+
+        actions do
+          create :create do
+            accept ["api_key"]
+          end
+        end
+      end
+      """
+
+      assert [] = run_check(SensitiveFieldInAccept, source, dangerous_fields: [~r/api_key/])
+    end
+  end
 end

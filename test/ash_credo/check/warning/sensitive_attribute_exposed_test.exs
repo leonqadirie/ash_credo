@@ -173,4 +173,35 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposedTest do
 
     assert [] = run_check(SensitiveAttributeExposed, source)
   end
+
+  describe "malformed or non-literal DSL shapes are skipped, not crashed" do
+    test "a resource with no attributes section yields no issues" do
+      source = """
+      defmodule MyApp.User do
+        use Ash.Resource, domain: MyApp.Accounts
+
+        actions do
+          defaults [:read]
+        end
+      end
+      """
+
+      assert [] = run_check(SensitiveAttributeExposed, source)
+    end
+
+    test "an attribute with a non-atom name is ignored" do
+      source = """
+      defmodule MyApp.User do
+        use Ash.Resource, domain: MyApp.Accounts
+
+        attributes do
+          uuid_primary_key :id
+          attribute "password", :string
+        end
+      end
+      """
+
+      assert [] = run_check(SensitiveAttributeExposed, source)
+    end
+  end
 end
