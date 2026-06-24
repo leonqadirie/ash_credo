@@ -19,7 +19,10 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
           end
       """,
       params: [
-        dangerous_fields: "Field names that should not appear in accept lists."
+        dangerous_fields:
+          "Field names that should not appear in accept lists. Atom entries " <>
+            "match exactly; `Regex` entries (e.g. `~r/_token$/`) match against " <>
+            "the field name."
       ]
     ]
 
@@ -70,7 +73,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
 
   defp dangerous_accept_issues(fields, line_no, dangerous, issue_meta, prefix) do
     fields
-    |> Enum.filter(&(&1 in dangerous))
+    |> Enum.filter(&dangerous_field?(&1, dangerous))
     |> Enum.map(fn field ->
       format_issue(issue_meta,
         message:
@@ -93,7 +96,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
     |> Enum.flat_map(fn
       {type, default_fields} when type in @writable_action_types and is_list(default_fields) ->
         default_fields
-        |> Enum.filter(&(&1 in dangerous))
+        |> Enum.filter(&dangerous_field?(&1, dangerous))
         |> Enum.map(fn field ->
           format_issue(issue_meta,
             message:
@@ -125,4 +128,14 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
         []
     end)
   end
+
+  defp dangerous_field?(field, dangerous) do
+    Enum.any?(dangerous, &field_matches?(field, &1))
+  end
+
+  defp field_matches?(field, %Regex{} = regex) when is_atom(field),
+    do: Regex.match?(regex, Atom.to_string(field))
+
+  defp field_matches?(_field, %Regex{}), do: false
+  defp field_matches?(field, name), do: field == name
 end
