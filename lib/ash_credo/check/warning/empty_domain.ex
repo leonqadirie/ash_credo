@@ -11,6 +11,14 @@ defmodule AshCredo.Check.Warning.EmptyDomain do
             resource MyApp.Post
             resource MyApp.Comment
           end
+
+      ## Limitations
+
+      This check scans the source AST, so it only sees resources registered
+      literally in the `resources` block. Resources contributed by Spark
+      transformers, extensions, or `Spark.Dsl.Fragment` modules are
+      invisible to it, so a domain whose resources come from such a source
+      may be flagged as empty even though it is not.
       """
     ]
 

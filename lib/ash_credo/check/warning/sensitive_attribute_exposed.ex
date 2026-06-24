@@ -16,6 +16,16 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
 
       The `sensitive_names` param accepts atoms (exact name match) and regexes
       (matched against the attribute name), e.g. `[:ssn, ~r/_token$/]`.
+
+      ## Limitations
+
+      This check scans the source AST, so it only sees attributes written
+      literally in the `attributes` block. It cannot see attributes
+      contributed by Spark transformers or extensions - for example
+      `AshAuthentication`'s `:hashed_password` - and so will not flag them
+      even when they are unmarked. It likewise only matches the `attribute`
+      entity: foreign keys and timestamps declared via `belongs_to`,
+      `create_timestamp`, or `update_timestamp` are not inspected.
       """,
       params: [
         sensitive_names:

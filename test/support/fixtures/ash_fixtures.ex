@@ -79,6 +79,7 @@ defmodule AshCredoFixtures.Blog do
     resource AshCredoFixtures.Blog.Contact
     resource AshCredoFixtures.Blog.GenericActions
     resource AshCredoFixtures.Blog.WithAuthorizer
+    resource AshCredoFixtures.Blog.WithAuthorizerAndPolicies
     resource AshCredoFixtures.Blog.WithCalcInterface
   end
 end
@@ -277,6 +278,34 @@ defmodule AshCredoFixtures.Blog.WithAuthorizer do
     domain: AshCredoFixtures.Blog,
     validate_domain_inclusion?: false,
     authorizers: [Ash.Policy.Authorizer]
+
+  actions do
+    defaults [:read]
+    default_accept []
+  end
+
+  attributes do
+    uuid_primary_key :id
+  end
+end
+
+defmodule AshCredoFixtures.Blog.WithAuthorizerAndPolicies do
+  @moduledoc """
+  `AuthorizerWithoutPolicies` happy-path fixture: declares
+  `Ash.Policy.Authorizer` AND defines a non-empty `policies` block, so the
+  check must stay silent.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false,
+    authorizers: [Ash.Policy.Authorizer]
+
+  policies do
+    policy always() do
+      authorize_if always()
+    end
+  end
 
   actions do
     defaults [:read]

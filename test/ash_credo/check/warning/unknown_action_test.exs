@@ -60,8 +60,7 @@ defmodule AshCredo.Check.Warning.UnknownActionTest do
       assert [] = run_check(UnknownAction, source)
     end
 
-    test "fires across all dispatch patterns the helper covers" do
-      # Pattern D builder + non-existent action.
+    test "fires for an Ash.Query.for_read builder (pattern D)" do
       source = """
       defmodule AshCredoFixtures.Blog do
         def query do
@@ -74,6 +73,33 @@ defmodule AshCredo.Check.Warning.UnknownActionTest do
       assert issue.message =~ "Unknown action"
       assert issue.message =~ ":nope"
       assert issue.trigger == "Ash.Query.for_read"
+    end
+
+    test "fires for an Ash.Changeset.for_create builder (pattern D)" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def build do
+          Ash.Changeset.for_create(AshCredoFixtures.Blog.Post, :nope)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UnknownAction, source)
+      assert issue.message =~ "Unknown action"
+      assert issue.message =~ ":nope"
+      assert issue.trigger == "Ash.Changeset.for_create"
+    end
+
+    test "is silent for a resource-first builder naming a real action" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def build do
+          Ash.Changeset.for_create(AshCredoFixtures.Blog.Post, :create)
+        end
+      end
+      """
+
+      assert [] = run_check(UnknownAction, source)
     end
 
     test "is silent for plain Elixir modules and non-Ash calls" do
