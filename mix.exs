@@ -13,6 +13,7 @@ defmodule AshCredo.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
+      hex: [cooldown: "7d"],
       elixirc_paths: elixirc_paths(Mix.env()),
       test_ignore_filters: [~r{^test/integration/fixtures/}],
       test_coverage: [ignore_modules: [~r/AshCredoFixtures\./, AshCredo.CheckCase]],
