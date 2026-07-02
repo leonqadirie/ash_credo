@@ -376,10 +376,15 @@ end
 
 defmodule AshCredoFixtures.Blog.Contact do
   @moduledoc """
-  `RedundantValidation` fixture: `:name` and `:handle` carry
+  `RedundantValidation` fixture: `:name`, `:handle`, and `:slug` carry
   `allow_nil? false`, `:nickname` stays nullable, and the `:import` create
   action reopens `:name` (but not `:handle`) via `allow_nil_input` - the
   escape hatch under which a `present` validation is NOT redundant.
+  The `:reslug` update action defines an `argument :slug` shadowing the
+  attribute - there `present` validates the argument in the atomic path,
+  the other escape hatch under which the validation is NOT redundant.
+  The `:import_slugged` create action defines the same argument - creates
+  never run atomically, so the escape must NOT apply there.
   """
 
   use Ash.Resource,
@@ -401,6 +406,16 @@ defmodule AshCredoFixtures.Blog.Contact do
       accept [:name, :nickname]
       allow_nil_input [:name]
     end
+
+    update :reslug do
+      argument :slug, :string
+      accept []
+    end
+
+    create :import_slugged do
+      argument :slug, :string
+      accept []
+    end
   end
 
   attributes do
@@ -408,6 +423,7 @@ defmodule AshCredoFixtures.Blog.Contact do
     attribute :name, :string, allow_nil?: false, public?: true
     attribute :handle, :string, allow_nil?: false, default: "anon", public?: true
     attribute :nickname, :string, public?: true
+    attribute :slug, :string, allow_nil?: false, default: "slug", public?: true
   end
 end
 
