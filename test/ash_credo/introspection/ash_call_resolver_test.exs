@@ -136,5 +136,37 @@ defmodule AshCredo.Introspection.AshCallResolverTest do
 
       assert [] = sites(source)
     end
+
+    test "resolves through alias __MODULE__.X without crashing" do
+      # Regression: the alias target carries the raw __MODULE__ AST tuple,
+      # which used to reach Module.concat/1 and raise FunctionClauseError.
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        alias __MODULE__.Post
+
+        def f, do: Ash.read!(Post, action: :read)
+      end
+      """
+
+      assert [site] = sites(source)
+      assert match?({:ok, AshCredoFixtures.Blog.Post, _}, site.resolution)
+    end
+
+    test "resolves through multi-alias __MODULE__.{X} without crashing" do
+      # The grouped __MODULE__ prefix yields a real alias entry (see
+      # Aliases.alias_entries/1), so this resolves via resolve_module_self;
+      # the implicit nested-module fallback would coincidentally find the
+      # same module here, but the alias path is what this exercises.
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        alias __MODULE__.{Post}
+
+        def f, do: Ash.Changeset.for_create(Post, :create)
+      end
+      """
+
+      assert [site] = sites(source)
+      assert match?({:ok, AshCredoFixtures.Blog.Post, _}, site.resolution)
+    end
   end
 end

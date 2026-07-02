@@ -50,6 +50,30 @@ defmodule AshCredo.Introspection.AliasesTest do
     end
   end
 
+  describe "resolve_module_self/2" do
+    test "substitutes __MODULE__ with the enclosing segments" do
+      segments = [{:__MODULE__, [line: 2], nil}, :Post]
+
+      assert Aliases.resolve_module_self(segments, [:MyApp, :Blog]) ==
+               {:ok, [:MyApp, :Blog, :Post]}
+    end
+
+    test "passes through all-atom segments" do
+      assert Aliases.resolve_module_self([:MyApp, :Post], [:MyApp]) == {:ok, [:MyApp, :Post]}
+    end
+
+    test "errors when __MODULE__ has no enclosing module to resolve against" do
+      segments = [{:__MODULE__, [line: 2], nil}, :Post]
+      assert Aliases.resolve_module_self(segments, nil) == :error
+      assert Aliases.resolve_module_self(segments, []) == :error
+    end
+
+    test "errors when non-atom segments remain after substitution" do
+      segments = [{:unquote, [line: 2], [:x]}, :Post]
+      assert Aliases.resolve_module_self(segments, [:MyApp]) == :error
+    end
+  end
+
   describe "resolved_module_ref/3" do
     test "returns non-ref, non-segment input unchanged" do
       assert Aliases.resolved_module_ref(123, %{aliases: []}) == 123
@@ -91,6 +115,15 @@ defmodule AshCredo.Introspection.AliasesTest do
 
       assert Aliases.alias_entries(ast) ==
                [{[:Query], [:Ash, :Query]}, {[:Changeset], [:Ash, :Changeset]}]
+    end
+
+    test "expands a grouped alias with a __MODULE__ prefix" do
+      ast = Code.string_to_quoted!("alias __MODULE__.{Post, Comment}")
+
+      assert [
+               {[:Post], [{:__MODULE__, _, _}, :Post]},
+               {[:Comment], [{:__MODULE__, _, _}, :Comment]}
+             ] = Aliases.alias_entries(ast)
     end
 
     test "expands a grouped alias carrying trailing opts" do
