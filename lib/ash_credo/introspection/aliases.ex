@@ -3,7 +3,11 @@ defmodule AshCredo.Introspection.Aliases do
 
   alias AshCredo.Introspection.Block
 
-  @doc "Returns top-level alias mappings in a module body, optionally filtered by `:before_line`."
+  @doc """
+  Returns top-level alias mappings in a module body, optionally filtered by
+  `:before_line`. Covers `alias` directives and `require ..., as:` (which
+  sets up the same alias).
+  """
   def module_aliases(module_ast, opts \\ [])
 
   def module_aliases({:defmodule, _, _} = module_ast, opts) do
@@ -12,9 +16,9 @@ defmodule AshCredo.Introspection.Aliases do
     module_ast
     |> Block.module_body()
     |> Enum.flat_map(fn
-      {:alias, meta, _} = alias_ast ->
+      {directive, meta, _} = directive_ast when directive in [:alias, :require] ->
         if alias_before?(meta[:line], before_line) do
-          alias_entries(alias_ast)
+          alias_entries(directive_ast)
         else
           []
         end
@@ -131,6 +135,18 @@ defmodule AshCredo.Introspection.Aliases do
       )
       when is_list(suffix_aliases) and is_list(opts) do
     grouped_alias_entries([self_ref], suffix_aliases)
+  end
+
+  # `require Mod, as: Alias` sets up the alias exactly like
+  # `alias Mod, as: Alias` (a documented `require` option, and the
+  # idiomatic one-liner for macro modules like `Ash.Query`). A `require`
+  # without `as:` creates no alias.
+  def alias_entries({:require, _, [{:__aliases__, _, target_segments}, opts]})
+      when is_list(opts) do
+    case Keyword.get(opts, :as) do
+      {:__aliases__, _, alias_segments} -> [{alias_segments, target_segments}]
+      _ -> []
+    end
   end
 
   def alias_entries(_), do: []

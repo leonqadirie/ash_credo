@@ -83,7 +83,10 @@ defmodule AshCredo.Introspection.AshCallScanner do
     {ast, maybe_enter_lexical_scope(state, node_name)}
   end
 
-  defp enter_node({:alias, _, _} = ast, state, _collect_fn) do
+  # `require ..., as:` sets up an alias too; `alias_entries/1` yields
+  # entries only for the shapes that actually create one.
+  defp enter_node({directive, _, _} = ast, state, _collect_fn)
+       when directive in [:alias, :require] do
     {ast, put_aliases(state, Aliases.alias_entries(ast))}
   end
 

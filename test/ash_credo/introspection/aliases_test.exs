@@ -15,6 +15,15 @@ defmodule AshCredo.Introspection.AliasesTest do
       assert Aliases.module_aliases(quoted("alias Ash.Query")) == [{[:Query], [:Ash, :Query]}]
     end
 
+    test "collects require ... as: from a module body" do
+      assert Aliases.module_aliases(quoted("require Ash.Query, as: Query")) ==
+               [{[:Query], [:Ash, :Query]}]
+    end
+
+    test "ignores require without as:" do
+      assert Aliases.module_aliases(quoted("require Ash.Query")) == []
+    end
+
     test "returns [] for a non-defmodule AST" do
       assert Aliases.module_aliases({:def, [], []}) == []
       assert Aliases.module_aliases(:not_an_ast) == []
@@ -141,6 +150,16 @@ defmodule AshCredo.Introspection.AliasesTest do
     test "handles an empty target segment list" do
       ast = {:alias, [], [{:__aliases__, [], []}]}
       assert Aliases.alias_entries(ast) == [{[nil], []}]
+    end
+
+    test "maps require ... as: like the equivalent alias" do
+      ast = Code.string_to_quoted!("require Ash.Query, as: Query")
+      assert Aliases.alias_entries(ast) == [{[:Query], [:Ash, :Query]}]
+    end
+
+    test "returns [] for require without as: and for non-alias as: values" do
+      assert Aliases.alias_entries(Code.string_to_quoted!("require Ash.Query")) == []
+      assert Aliases.alias_entries(Code.string_to_quoted!("require Ash.Query, warn: false")) == []
     end
 
     test "returns [] for anything that is not an alias node" do

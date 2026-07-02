@@ -219,7 +219,11 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   # is also in `lexical_scope_nodes`) is handled by exactly one clause -
   # follow each clause's chain to confirm.
 
-  defp enter({:alias, _, _} = node, {user, scope}, on_enter, options) do
+  # `require ..., as:` sets up an alias too; `capture_alias/3` delegates
+  # to `alias_entries/1`, which yields entries only for the shapes that
+  # actually create one.
+  defp enter({directive, _, _} = node, {user, scope}, on_enter, options)
+       when directive in [:alias, :require] do
     scope = capture_alias(scope, node, options)
     {node, {on_enter.(node, scope, user), scope}}
   end
@@ -264,7 +268,8 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   # Leave: callback runs with current scope, then we pop. Mirror the enter
   # clauses so each push has a matching pop.
 
-  defp leave({:alias, _, _} = node, {user, scope}, on_leave, _options) do
+  defp leave({directive, _, _} = node, {user, scope}, on_leave, _options)
+       when directive in [:alias, :require] do
     {node, {on_leave.(node, scope, user), scope}}
   end
 
