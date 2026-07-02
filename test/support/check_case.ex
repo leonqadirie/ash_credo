@@ -9,9 +9,22 @@ defmodule AshCredo.CheckCase do
     end
   end
 
+  # Raises on unparsable source: Credo returns an `:invalid` SourceFile
+  # for broken code and this suite's AST-walking checks then report zero
+  # issues, so a syntax typo in a fixture heredoc would make negative
+  # tests pass vacuously.
   def source_file(source_code, filename \\ "test_file.ex") do
-    source_code
-    |> Credo.SourceFile.parse(filename)
+    source_file = Credo.SourceFile.parse(source_code, filename)
+
+    if source_file.status != :valid do
+      raise """
+      fixture source failed to parse (#{filename}, status: #{inspect(source_file.status)}):
+
+      #{source_code}
+      """
+    end
+
+    source_file
   end
 
   def run_check(check_module, source_code, params \\ []) do
