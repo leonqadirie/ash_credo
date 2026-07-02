@@ -100,22 +100,15 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   @type callback :: (Macro.t(), Scope.t(), user_state() -> user_state())
 
   @typedoc """
-  Walker options (see module docs). `on_frame_push`/`on_frame_pop` are
-  optional 1-arity functions that mutate `user_state` in lockstep with
-  every env-frame push/pop the walker performs. `:initial_env` seeds the
-  base env frame; `:initial_aliases` is the transitional entry-list
-  equivalent, folded into an env (both are useful when the walker is
-  invoked on a defmodule body that should inherit directives from an
-  enclosing scope).
+  Walker options (see module docs). `:initial_env` seeds the base env
+  frame - useful when the walker is invoked on a defmodule body that
+  should inherit directives from an enclosing scope.
   """
   @type opts :: [
           lexical_scope_nodes: [atom()],
           track_quote: boolean(),
           track_aliases_in_quote: boolean(),
-          initial_env: Macro.Env.t(),
-          initial_aliases: [{[atom()], [atom()]}],
-          on_frame_push: (user_state() -> user_state()),
-          on_frame_pop: (user_state() -> user_state())
+          initial_env: Macro.Env.t()
         ]
 
   # ── Public accessors on Scope ──
@@ -199,34 +192,8 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
 
   # ── Internals ──
 
-  defp initial_scope(options) do
-    %Scope{env_frames: [seed_env(options)]}
-  end
-
-  defp seed_env(%{initial_env: %Macro.Env{} = env}), do: env
-
-  defp seed_env(%{initial_aliases: entries}) do
-    Enum.reduce(entries, Aliases.base_env(), &seed_alias_entry/2)
-  end
-
-  # Transitional: folds legacy `{alias_segments, target_segments}` entries
-  # (as produced by the `aliases/1` shim) into an env. Dies with the shim.
-  defp seed_alias_entry({[alias_name], target_segments}, env)
-       when is_atom(alias_name) and is_list(target_segments) do
-    if target_segments != [] and Enum.all?(target_segments, &is_atom/1) do
-      case Macro.Env.define_alias(env, [], Module.concat(target_segments),
-             as: Module.concat([alias_name]),
-             trace: false
-           ) do
-        {:ok, updated} -> updated
-        {:error, _} -> env
-      end
-    else
-      env
-    end
-  end
-
-  defp seed_alias_entry(_entry, env), do: env
+  defp initial_scope(%{initial_env: %Macro.Env{} = env}), do: %Scope{env_frames: [env]}
+  defp initial_scope(_options), do: %Scope{env_frames: [Aliases.base_env()]}
 
   defp normalize_opts(opts) do
     %{
@@ -234,14 +201,9 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
         opts |> Keyword.get(:lexical_scope_nodes, [:with, :for]) |> List.wrap() |> MapSet.new(),
       track_quote: Keyword.get(opts, :track_quote, true),
       track_aliases_in_quote: Keyword.get(opts, :track_aliases_in_quote, false),
-      initial_env: Keyword.get(opts, :initial_env),
-      initial_aliases: Keyword.get(opts, :initial_aliases, []),
-      on_frame_push: Keyword.get(opts, :on_frame_push, &noop/1),
-      on_frame_pop: Keyword.get(opts, :on_frame_pop, &noop/1)
+      initial_env: Keyword.get(opts, :initial_env)
     }
   end
-
-  defp noop(user_state), do: user_state
 
   # Each `enter`/`leave` clause:
   #   1. updates `scope` for its node kind (push frames, capture aliases,
@@ -347,15 +309,13 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
 
   # ── Scope mutators ──
 
-  defp enter_with_frame(node, user, scope, on_enter, %{on_frame_push: on_frame_push}) do
+  defp enter_with_frame(node, user, scope, on_enter, _options) do
     scope = push_env_frame(scope)
-    user = on_frame_push.(user)
     {node, {on_enter.(node, scope, user), scope}}
   end
 
-  defp leave_with_frame(node, user, scope, on_leave, %{on_frame_pop: on_frame_pop}) do
+  defp leave_with_frame(node, user, scope, on_leave, _options) do
     user = on_leave.(node, scope, user)
-    user = on_frame_pop.(user)
     scope = pop_env_frame(scope)
     {node, {user, scope}}
   end

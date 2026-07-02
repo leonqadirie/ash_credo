@@ -610,6 +610,45 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       assert [] = run_check(MissingMacroDirective, source)
     end
 
+    test "grouped require Ash.{Query, Expr} satisfies both modules" do
+      source = """
+      defmodule MyApp.Caller do
+        require Ash.{Query, Expr}
+
+        def foo(q) do
+          q = Ash.Query.filter(q, true)
+          Ash.Expr.expr(is_nil(q))
+        end
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "an alias __MODULE__ target does not resolve to a macro module" do
+      # `Query` here is `MyApp.Query`, not `Ash.Query` - nothing to flag.
+      source = """
+      defmodule MyApp do
+        alias __MODULE__.Query
+
+        def foo(q), do: Query.filter(q, true)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "an Elixir.-prefixed call without require is flagged" do
+      source = """
+      defmodule MyApp.Caller do
+        def foo(q), do: Elixir.Ash.Query.filter(q, true)
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source)
+      assert issue.trigger == "Ash.Query.filter"
+    end
+
     test "a re-aliased name resolves to its newest target" do
       # `Q` is re-bound to `String` before the call, so `Q.filter` is
       # `String.filter` - not a macro target, nothing to flag.
