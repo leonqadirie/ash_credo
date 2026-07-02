@@ -75,6 +75,25 @@ defmodule AshCredo.Check.Warning.UnknownActionTest do
       assert issue.trigger == "Ash.Query.for_read"
     end
 
+    test "fires for a builder aliased via require ... as:" do
+      # `require Ash.Query, as: Query` sets up the alias like
+      # `alias Ash.Query, as: Query`, so the call must resolve the same way.
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        require Ash.Query, as: Query
+
+        def query do
+          Query.for_read(AshCredoFixtures.Blog.Post, :nope)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UnknownAction, source)
+      assert issue.message =~ "Unknown action"
+      assert issue.message =~ ":nope"
+      assert issue.trigger == "Ash.Query.for_read"
+    end
+
     test "fires for an Ash.Changeset.for_create builder (pattern D)" do
       source = """
       defmodule AshCredoFixtures.Blog do

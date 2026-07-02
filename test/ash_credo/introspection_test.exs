@@ -274,6 +274,37 @@ defmodule AshCredo.IntrospectionTest do
       assert [_] = calls
     end
 
+    test "finds calls aliased via require ... as:" do
+      # `require Ash.Query, as: Query` sets up the alias exactly like
+      # `alias Ash.Query, as: Query` - the idiomatic one-liner since
+      # Ash.Query.filter/2 is a macro and needs the require anyway.
+      source = """
+      defmodule MyApp.Accounts do
+        require Ash.Query, as: Query
+
+        def adults(q) do
+          Query.filter(q, age >= 18)
+        end
+      end
+      """
+
+      assert [{_ast, [:Ash, :Query]}] = AshCallScanner.calls_with_module(source_file(source))
+    end
+
+    test "a bare require does not create an alias" do
+      source = """
+      defmodule MyApp.Accounts do
+        require Ash.Query
+
+        def adults(q) do
+          Query.filter(q, age >= 18)
+        end
+      end
+      """
+
+      assert [] = AshCallScanner.calls_with_module(source_file(source))
+    end
+
     test "respects alias order at the call site" do
       source = """
       defmodule MyApp.Accounts do
