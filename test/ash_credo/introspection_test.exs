@@ -42,6 +42,10 @@ defmodule AshCredo.IntrospectionTest do
   end
   """
 
+  defp env_with_alias(directive_source) do
+    Aliases.apply_directive(Aliases.base_env(), Code.string_to_quoted!(directive_source), nil)
+  end
+
   defp first_resource_module(source) do
     source
     |> source_file()
@@ -204,21 +208,21 @@ defmodule AshCredo.IntrospectionTest do
     end
 
     test "resolves aliased Ash module" do
-      aliases = [{[:A], [:Ash]}]
+      env = env_with_alias("alias Ash, as: A")
       ast = quote(do: A.read!(MyApp.User))
-      assert AshCallScanner.call?(ast, aliases)
+      assert AshCallScanner.call?(ast, env)
     end
 
     test "resolves aliased Ash submodule" do
-      aliases = [{[:Q], [:Ash, :Query]}]
+      env = env_with_alias("alias Ash.Query, as: Q")
       ast = quote(do: Q.for_read(MyApp.User, :list))
-      assert AshCallScanner.call?(ast, aliases)
+      assert AshCallScanner.call?(ast, env)
     end
 
     test "does not match aliased non-Ash module" do
-      aliases = [{[:S], [:SomeOtherLib]}]
+      env = env_with_alias("alias SomeOtherLib, as: S")
       ast = quote(do: S.run(query))
-      refute AshCallScanner.call?(ast, aliases)
+      refute AshCallScanner.call?(ast, env)
     end
   end
 
@@ -636,64 +640,6 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
-  describe "module_aliases/2" do
-    test "returns top-level aliases declared before the given line" do
-      source = """
-      defmodule MyApp.Post do
-        alias Ash.Policy.Authorizer
-        alias Ash.Policy.{Bypass, Check}
-
-        use Ash.Resource, authorizers: [Authorizer, Bypass]
-      end
-      """
-
-      [resource] = Introspection.resource_modules(source_file(source))
-      aliases = Aliases.module_aliases(resource, before_line: 5)
-
-      assert {[:Authorizer], [:Ash, :Policy, :Authorizer]} in aliases
-      assert {[:Bypass], [:Ash, :Policy, :Bypass]} in aliases
-      assert {[:Check], [:Ash, :Policy, :Check]} in aliases
-    end
-
-    test "ignores aliases declared inside nested modules" do
-      source = """
-      defmodule MyApp.Post do
-        alias Ash.Policy.Authorizer
-
-        defmodule Draft do
-          alias Ash.Policy.Check, as: DraftCheck
-        end
-
-        use Ash.Resource, authorizers: [Authorizer]
-      end
-      """
-
-      [resource] = Introspection.resource_modules(source_file(source))
-      aliases = Aliases.module_aliases(resource, before_line: 8)
-
-      assert {[:Authorizer], [:Ash, :Policy, :Authorizer]} in aliases
-
-      refute Enum.any?(aliases, fn {alias_segments, _target_segments} ->
-               alias_segments == [:DraftCheck]
-             end)
-    end
-  end
-
-  describe "expand_alias/2" do
-    test "expands explicit and prefix aliases" do
-      aliases = [
-        {[:PolicyAuthorizer], [:Ash, :Policy, :Authorizer]},
-        {[:Policy], [:Ash, :Policy]}
-      ]
-
-      assert [:Ash, :Policy, :Authorizer] ==
-               Aliases.expand_alias([:PolicyAuthorizer], aliases)
-
-      assert [:Ash, :Policy, :Authorizer] ==
-               Aliases.expand_alias([:Policy, :Authorizer], aliases)
-    end
-  end
-
   describe "resource_context/1" do
     test "returns shared resource metadata" do
       source = """
@@ -717,7 +663,6 @@ defmodule AshCredo.IntrospectionTest do
       assert context.module_ast == resource
       assert is_integer(context.use_line)
       assert Keyword.has_key?(context.use_opts, :domain)
-      assert {[:Authorizer], [:Ash, :Policy, :Authorizer]} in context.aliases
       assert {:actions, _, _} = Introspection.find_dsl_section(context, :actions)
     end
   end
@@ -782,46 +727,6 @@ defmodule AshCredo.IntrospectionTest do
     test "falls back to the provided line and then explicit fallback" do
       assert 11 == Introspection.section_issue_line(nil, 11)
       assert 7 == Introspection.section_issue_line(nil, nil, 7)
-    end
-  end
-
-  describe "resolved_module_ref/3" do
-    test "resolves aliased module references from resource context" do
-      source = """
-      defmodule MyApp.Post do
-        alias Ash.Policy.Authorizer
-
-        use Ash.Resource,
-          domain: MyApp.Blog,
-          authorizers: [Authorizer]
-      end
-      """
-
-      [context] = Introspection.resource_contexts(source_file(source))
-      [authorizer] = Keyword.get(context.use_opts, :authorizers)
-
-      assert [:Ash, :Policy, :Authorizer] ==
-               Aliases.resolved_module_ref(authorizer, context)
-
-      assert Aliases.module_ref?(authorizer, context, [:Ash, :Policy, :Authorizer])
-    end
-
-    test "does not use aliases declared after the reference" do
-      source = """
-      defmodule MyApp.Post do
-        use Ash.Resource,
-          domain: MyApp.Blog,
-          authorizers: [Authorizer]
-
-        alias Ash.Policy.Authorizer
-      end
-      """
-
-      [context] = Introspection.resource_contexts(source_file(source))
-      [authorizer] = Keyword.get(context.use_opts, :authorizers)
-
-      assert [:Authorizer] == Aliases.resolved_module_ref(authorizer, context)
-      refute Aliases.module_ref?(authorizer, context, [:Ash, :Policy, :Authorizer])
     end
   end
 

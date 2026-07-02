@@ -8,11 +8,11 @@ defmodule AshCredo.Introspection do
   sibling modules under `AshCredo.Introspection.*` and are called directly by
   consumers; there is intentionally no single facade re-exporting them:
 
-    * `Aliases` - lexical alias resolution
+    * `Aliases` - `Macro.Env`-backed directive application and resolution
     * `AshCallScanner` / `AshCallResolver` / `AshCallSite` - `Ash.*` API call detection
     * `RemoteBangScanner` - `Mod.fun!/n` call sites
     * `Block` - do-block and module-body AST access
-    * `LexicalScopeWalker` / `LexicalAliases` - scope-aware traversal
+    * `LexicalScopeWalker` - scope-aware traversal
     * `ResourceContext` / `UseMetadata` - shared data structs
     * `Compiled` - compile-time/runtime metadata, and the sole gateway for it.
       The boundary (only `Compiled` may call Ash's runtime introspection
@@ -35,16 +35,17 @@ defmodule AshCredo.Introspection do
       including attributes/actions/policies that Spark transformers and
       extensions contribute and that the source AST never sees.
 
-  The source-AST alias and scope machinery (`LexicalScopeWalker`,
-  `LexicalAliases`, `Aliases`) is bespoke out of necessity, not for lack of a
-  library. `Credo.Code.Module.aliases/1` collects alias *names* flat across a
-  module: it drops `as:` renames and is not lexical-scope-aware, so it cannot
-  resolve `Q.filter` (from `alias Ash.Query, as: Q`) at a given call site,
-  honour a function-scoped alias that must not leak to sibling functions, or
-  track `require` frames - all of which the checks depend on and test. A real
-  `Macro.Env` would resolve these, but it is a compile-time artifact that
-  cannot be recovered for arbitrary source at lint time, so the resolution is
-  done here.
+  Source-AST lexical resolution is built on real `Macro.Env` values:
+  `Aliases` applies `alias`/`require`/`import` nodes to an env via
+  `Macro.Env.define_alias/4` and `define_require/4`, and resolves
+  references via `Macro.Env.expand_alias/4` and `Macro.Env.required?/2`
+  (Elixir 1.17+ APIs added for exactly this kind of tooling). The walkers
+  (`LexicalScopeWalker`, `AshCallScanner`) own only what an env cannot
+  know from source: scope-frame push/pop for blocks and branches, quote
+  suppression, and the `defmodule` module stack that substitutes
+  `__MODULE__` targets at declaration time. `Credo.Code.Module.aliases/1`
+  remains unsuitable - it collects alias names flat across a module,
+  dropping `as:` renames and lexical scoping.
 
   Each file is parsed once (Credo caches `SourceFile.ast/1`) and each derived
   view is memoized on `{filename, source_hash/1}` - `resource_contexts/1` here,
@@ -55,7 +56,6 @@ defmodule AshCredo.Introspection do
   alias AshCredo.Cache
 
   alias AshCredo.Introspection.{
-    Aliases,
     Block,
     LexicalScopeWalker,
     ResourceContext,
@@ -119,8 +119,7 @@ defmodule AshCredo.Introspection do
       |> LexicalScopeWalker.traverse(
         %{out: []},
         &collect_module_with_path/3,
-        fn _node, _scope, acc -> acc end,
-        track_module_stack: true
+        fn _node, _scope, acc -> acc end
       )
 
     Enum.reverse(out)
@@ -146,7 +145,6 @@ defmodule AshCredo.Introspection do
 
     %ResourceContext{
       module_ast: module_ast,
-      aliases: Aliases.module_aliases(module_ast),
       use_line: use_metadata_line(use_metadata),
       use_opts: normalized_resource_use_opts(use_metadata),
       absolute_segments: absolute_segments

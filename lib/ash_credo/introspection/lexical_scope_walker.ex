@@ -1,24 +1,21 @@
 defmodule AshCredo.Introspection.LexicalScopeWalker do
   @moduledoc """
   Thin wrapper around `Macro.traverse/4` that owns the lexical-scope plumbing
-  (alias frames, optional `quote` depth, optional `defmodule` module stack)
-  and exposes a callback API to consumers.
+  (`Macro.Env` frames, `quote` depth, the `defmodule` module stack) and
+  exposes a callback API to consumers.
 
-  Before this module existed, every traversal that needed lexical alias
-  context (`AshCredo.Introspection.AshCallScanner`, `AshCredo.Introspection`,
-  `AshCredo.Check.Warning.MissingMacroDirective`) re-implemented identical
-  push/pop helpers around `LexicalAliases`, identical `@scope_keys`/`->`
-  enter/leave clauses, and identical `quote_depth` inc/dec/clamp logic. Each
-  diverged in subtle ways: which `lexical_scope_nodes` to push frames for,
-  whether to suppress aliases inside `quote`, whether to track the module
-  stack. This walker centralises the plumbing while keeping every divergence
-  expressible as an opt.
+  Each scope frame holds a `Macro.Env` snapshot: entering a block copies
+  the parent env, `alias`/`require`/`import` nodes are applied to the head
+  env via `AshCredo.Introspection.Aliases.apply_directive/3`, and leaving
+  the block discards the copy. Resolution semantics therefore come from
+  the compiler's own `Macro.Env` APIs; the walker only decides WHERE
+  scopes begin and end and what to suppress inside `quote`.
 
   **Note on `AshCallScanner`:** that module deliberately stays outside the
   walker. Its state (`binding_frames`, `branch_depth`, `pipe_origins`, plus
   `:=` LHS-binding capture) is heterogeneous enough that routing it through
-  callbacks would cost more clarity than the alias/quote plumbing saves.
-  The scanner uses `LexicalAliases` directly.
+  callbacks would cost more clarity than the env/quote plumbing saves.
+  The scanner maintains its own env frames via `Aliases.apply_directive/3`.
 
   ## API
 
@@ -37,10 +34,10 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
 
   ## Callback timing
 
-  - On enter: the walker updates the scope FIRST (e.g. pushes a new alias
-    frame, or records a captured alias in the current frame), THEN invokes
+  - On enter: the walker updates the scope FIRST (e.g. pushes a new env
+    frame, or applies a directive to the current env), THEN invokes
     `on_enter` with the updated scope. So inside `on_enter` for an
-    `{:alias, ...}` node, `aliases/1` already includes the alias.
+    `{:alias, ...}` node, `env/1` already includes the alias.
   - On leave: `on_leave` runs FIRST (with the still-current scope), THEN the
     walker pops. So a callback that wants to read the final scope state of a
     do-block can do so before the pop.
@@ -121,20 +118,6 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   @spec env(Scope.t()) :: Macro.Env.t()
   def env(%Scope{env_frames: [env | _]}), do: env
   def env(%Scope{env_frames: []}), do: Aliases.base_env()
-
-  @doc """
-  Returns alias entries visible at the current traversal point in the
-  legacy `{alias_segments, target_segments}` shape, derived from the head
-  env. Transitional shim for consumers not yet migrated to `env/1`.
-  """
-  @spec aliases(Scope.t()) :: [{[atom()], [atom()]}]
-  def aliases(%Scope{} = scope) do
-    for {as, target} <- env(scope).aliases do
-      {module_segments(as), module_segments(target)}
-    end
-  end
-
-  defp module_segments(module), do: module |> Module.split() |> Enum.map(&String.to_atom/1)
 
   @doc "Returns the current `quote do ... end` nesting depth (0 outside any quote)."
   @spec quote_depth(Scope.t()) :: non_neg_integer()

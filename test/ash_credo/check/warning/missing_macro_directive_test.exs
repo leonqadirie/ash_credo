@@ -649,6 +649,36 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       assert issue.trigger == "Ash.Query.filter"
     end
 
+    test "an alias chain resolves to the real macro module" do
+      # `alias A.Query` resolves through the earlier `alias Ash, as: A` at
+      # declaration time, so `Query.filter` is `Ash.Query.filter` and needs
+      # a require. The entry-list resolver missed this chain entirely.
+      source = """
+      defmodule MyApp.Caller do
+        alias Ash, as: A
+        alias A.Query
+
+        def foo(q), do: Query.filter(q, true)
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source)
+      assert issue.trigger == "Ash.Query.filter"
+    end
+
+    test "directives inside a non-literal defmodule do not crash the check" do
+      source = """
+      defmodule Module.concat([:MyApp, :Dyn]) do
+        alias __MODULE__.Ignored
+
+        def foo(q), do: Ash.Query.filter(q, true)
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source)
+      assert issue.trigger == "Ash.Query.filter"
+    end
+
     test "a re-aliased name resolves to its newest target" do
       # `Q` is re-bound to `String` before the call, so `Q.filter` is
       # `String.filter` - not a macro target, nothing to flag.
