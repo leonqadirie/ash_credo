@@ -373,9 +373,14 @@ defmodule AshCredo.Introspection.AshCallResolver do
     end
   end
 
+  # Alias expansion can reintroduce non-atom segments even when `segs` is
+  # all atoms: `alias __MODULE__.Post` targets carry the `__MODULE__` AST
+  # tuple, so resolve it against the enclosing module before accepting.
   defp literal_segments({:__aliases__, _, segs}, context) when is_list(segs) do
     if Enum.all?(segs, &is_atom/1) do
-      {:ok, Aliases.expand_alias(segs, context.aliases)}
+      segs
+      |> Aliases.expand_alias(context.aliases)
+      |> Aliases.resolve_module_self(context.enclosing_module_segments)
     else
       :error
     end

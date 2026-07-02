@@ -49,6 +49,24 @@ defmodule AshCredo.Introspection.Aliases do
 
   def expand_alias(segments, _aliases), do: segments
 
+  @doc """
+  Substitutes `__MODULE__` elements in expanded alias segments with the
+  enclosing `defmodule`'s absolute segments (`alias __MODULE__.Post` targets
+  carry the raw `__MODULE__` AST tuple). Returns `{:ok, segments}` only when
+  every resulting segment is an atom - `Module.concat/1` raises on anything
+  else - and `:error` when substitution is impossible (no enclosing literal
+  module) or non-atom segments remain.
+  """
+  def resolve_module_self(segments, enclosing) when is_list(segments) do
+    resolved =
+      Enum.flat_map(segments, fn
+        {:__MODULE__, _, _} when is_list(enclosing) and enclosing != [] -> enclosing
+        other -> [other]
+      end)
+
+    if Enum.all?(resolved, &is_atom/1), do: {:ok, resolved}, else: :error
+  end
+
   @doc "Resolves a module reference or segments within a module or resource context."
   def resolved_module_ref(ref_or_segments, module_or_context, opts \\ [])
 
@@ -96,6 +114,23 @@ defmodule AshCredo.Introspection.Aliases do
       )
       when is_list(suffix_aliases) and is_list(opts) do
     grouped_alias_entries(prefix_segments, suffix_aliases)
+  end
+
+  # `alias __MODULE__.{Post, Comment}` - the prefix is the raw __MODULE__
+  # AST tuple, carried into the target segments for consumers to resolve
+  # via `resolve_module_self/2`.
+  def alias_entries(
+        {:alias, _, [{{:., _, [{:__MODULE__, _, _} = self_ref, :{}]}, _, suffix_aliases}]}
+      )
+      when is_list(suffix_aliases) do
+    grouped_alias_entries([self_ref], suffix_aliases)
+  end
+
+  def alias_entries(
+        {:alias, _, [{{:., _, [{:__MODULE__, _, _} = self_ref, :{}]}, _, suffix_aliases}, opts]}
+      )
+      when is_list(suffix_aliases) and is_list(opts) do
+    grouped_alias_entries([self_ref], suffix_aliases)
   end
 
   def alias_entries(_), do: []

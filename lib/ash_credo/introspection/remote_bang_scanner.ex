@@ -44,19 +44,17 @@ defmodule AshCredo.Introspection.RemoteBangScanner do
        )
        when is_list(args) and is_atom(fun_name) and is_list(segments) do
     if bang?(fun_name) do
-      expanded =
+      # `resolve_module_self/2` drops calls that cannot resolve to a
+      # concrete module (e.g. `__MODULE__` inside a non-literal
+      # `defmodule unquote(...)`) - `Module.concat/1` would raise on them.
+      resolved =
         segments
         |> Aliases.expand_alias(LexicalScopeWalker.aliases(scope))
-        |> resolve_module_self(LexicalScopeWalker.current_module_segments(scope))
+        |> Aliases.resolve_module_self(LexicalScopeWalker.current_module_segments(scope))
 
-      # After substituting `__MODULE__` with the enclosing module's segments,
-      # any remaining non-atoms (e.g. `__MODULE__` inside a non-literal
-      # `defmodule unquote(...)`) mean we still cannot resolve to a concrete
-      # module. `Module.concat/1` would raise, so drop the call.
-      if Enum.all?(expanded, &is_atom/1) do
-        %{state | calls: [{call_ast, expanded, fun_name} | state.calls]}
-      else
-        state
+      case resolved do
+        {:ok, expanded} -> %{state | calls: [{call_ast, expanded, fun_name} | state.calls]}
+        :error -> state
       end
     else
       state
@@ -64,15 +62,6 @@ defmodule AshCredo.Introspection.RemoteBangScanner do
   end
 
   defp on_enter(_node, _scope, state), do: state
-
-  defp resolve_module_self(segments, nil), do: segments
-
-  defp resolve_module_self(segments, enclosing) when is_list(enclosing) do
-    Enum.flat_map(segments, fn
-      {:__MODULE__, _, _} -> enclosing
-      other -> [other]
-    end)
-  end
 
   defp bang?(fun_name) do
     fun_name |> Atom.to_string() |> String.ends_with?("!")
