@@ -81,6 +81,49 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptionsTest do
     assert issue.message =~ "Ash.create!"
   end
 
+  test "reports actor: on an aggregate call after a for_read pipe" do
+    source = """
+    defmodule MyApp.Posts do
+      def total_likes(current_user) do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.sum(:likes, actor: current_user)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "actor"
+    assert issue.message =~ "Ash.sum"
+  end
+
+  test "reports tenant: on Ash.aggregate! when the query is bound to a variable" do
+    source = """
+    defmodule MyApp.Posts do
+      def stats(tenant) do
+        query = Ash.Query.for_read(MyApp.Post, :read, %{})
+        Ash.aggregate!(query, {:count, :count}, tenant: tenant)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "tenant"
+    assert issue.message =~ "Ash.aggregate!"
+  end
+
+  test "no issue for an aggregate without a pre-built subject (sanctioned form)" do
+    source = """
+    defmodule MyApp.Posts do
+      def total_likes(current_user) do
+        Ash.sum(MyApp.Post, :likes, actor: current_user)
+      end
+    end
+    """
+
+    assert [] = run_check(ActorOnCallOptions, source)
+  end
+
   test "resolves aliased builder modules" do
     source = """
     defmodule MyApp.Posts do

@@ -39,8 +39,10 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
   alias AshCredo.Introspection.AshCallScanner
 
   # Ash action-invocation functions taking a query/changeset/input subject
-  # plus an options list.
-  @action_funs ~w(read read! read_one read_one! first first! stream! count count! exists exists? create create! update update! destroy destroy! run_action run_action!)a
+  # plus an options list. The aggregate family (`Ash.sum/3` and friends)
+  # belongs here too: their opts merge Ash's global options, so they take
+  # `actor:`/`tenant:` at call time just like `Ash.read!/2`.
+  @action_funs ~w(read read! read_one read_one! first first! stream! count count! exists exists? create create! update update! destroy destroy! run_action run_action! aggregate aggregate! sum sum! avg avg! min min! max max! list list!)a
 
   # Builders that establish the action context; actor/tenant belong in their
   # options.
