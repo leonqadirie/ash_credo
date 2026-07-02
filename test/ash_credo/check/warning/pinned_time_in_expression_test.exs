@@ -176,6 +176,103 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpressionTest do
     assert [] = run_check(PinnedTimeInExpression, source)
   end
 
+  test "no issue for expr inside function bodies" do
+    # Ash.Expr.expr/1 splices the pinned code into its call site, so in a
+    # function the pin re-evaluates on every call and is not frozen.
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      import Ash.Expr
+
+      def stale_query, do: Ash.Query.filter(__MODULE__, ^stale_expr())
+      defp stale_expr, do: expr(inserted_at >= ^DateTime.utc_now())
+    end
+    """
+
+    assert [] = run_check(PinnedTimeInExpression, source)
+  end
+
+  test "no issue for expr inside anonymous functions in the DSL" do
+    source = """
+    defmodule MyApp.Session do
+      use Ash.Resource, domain: MyApp.Auth
+
+      actions do
+        read :active do
+          prepare fn query, _context ->
+            Ash.Query.filter(query, expr(expires_at >= ^DateTime.utc_now()))
+          end
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(PinnedTimeInExpression, source)
+  end
+
+  test "reports pinned time in an immediately-invoked fn in DSL position" do
+    # The fn runs while the resource compiles, so the pin IS frozen here -
+    # unlike a stored fn, which runs per invocation.
+    source = """
+    defmodule MyApp.Session do
+      use Ash.Resource, domain: MyApp.Auth
+
+      actions do
+        read :active do
+          filter (fn -> expr(expires_at >= ^DateTime.utc_now()) end).()
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(PinnedTimeInExpression, source)
+    assert issue.trigger == "^DateTime.utc_now()"
+  end
+
+  test "reports pinned time passed as an argument to an immediately-invoked fn" do
+    # The argument evaluates at the call site during compilation, so the
+    # pin is frozen even though it never appears inside the fn body.
+    for line <- [
+          "filter (fn e -> e end).(expr(expires_at >= ^DateTime.utc_now()))",
+          "filter (& &1).(expr(expires_at >= ^DateTime.utc_now()))"
+        ] do
+      source = """
+      defmodule MyApp.Session do
+        use Ash.Resource, domain: MyApp.Auth
+
+        actions do
+          read :active do
+            #{line}
+          end
+        end
+      end
+      """
+
+      assert [issue] = run_check(PinnedTimeInExpression, source)
+      assert issue.trigger == "^DateTime.utc_now()"
+    end
+  end
+
+  test "still reports pinned time in DSL position alongside function helpers" do
+    source = """
+    defmodule MyApp.Session do
+      use Ash.Resource, domain: MyApp.Auth
+
+      actions do
+        read :active do
+          filter expr(expires_at >= ^DateTime.utc_now())
+        end
+      end
+
+      def helper, do: expr(expires_at >= ^DateTime.utc_now())
+    end
+    """
+
+    assert [issue] = run_check(PinnedTimeInExpression, source)
+    assert issue.line_no == 6
+  end
+
   test "ignores expr calls inside nested modules" do
     source = """
     defmodule MyApp.Post do
