@@ -399,23 +399,45 @@ defmodule AshCredo.Introspection do
     end)
   end
 
-  @doc "Returns all `policy` and `bypass` entities from a policies section, including inside `policy_group`."
+  @doc "Returns all `policy` and `bypass` entities from a policies section, including inside `policy_group`s at any depth."
   def policy_entities(policies_ast) do
-    entries = section_entries(policies_ast)
-
-    top_level =
-      filter_entities(entries, :policy) ++ filter_entities(entries, :bypass)
-
-    nested =
-      entries
-      |> filter_entities(:policy_group)
-      |> Enum.flat_map(fn group ->
-        group_body = Block.do_block_entries(group)
-        filter_entities(group_body, :policy) ++ filter_entities(group_body, :bypass)
-      end)
-
-    top_level ++ nested
+    policies_ast
+    |> policy_entities_with_conditions()
+    |> Enum.map(&elem(&1, 0))
   end
+
+  @doc """
+  Returns `{entity, inherited_conditions}` pairs for all `policy` and
+  `bypass` entities in a policies section, in source order.
+
+  `policy_group`s are descended at any depth (`policy_group` is declared
+  `recursive_as: :policies` in Ash) and their condition arguments are
+  accumulated, outermost first: Ash adds the group conditions to each
+  policy the group contains, so `inherited_conditions` is part of every
+  contained policy's effective condition.
+  """
+  def policy_entities_with_conditions(policies_ast) do
+    policies_ast
+    |> section_entries()
+    |> collect_policy_entities([])
+  end
+
+  defp collect_policy_entities(entries, inherited) do
+    Enum.flat_map(entries, fn
+      {kind, _, _} = entity when kind in [:policy, :bypass] ->
+        [{entity, inherited}]
+
+      {:policy_group, _, args} = group ->
+        conditions = Enum.reject(List.wrap(args), &do_block?/1)
+        collect_policy_entities(Block.do_block_entries(group), inherited ++ conditions)
+
+      _other ->
+        []
+    end)
+  end
+
+  defp do_block?([{:do, _} | _]), do: true
+  defp do_block?(_), do: false
 
   @doc "Extracts the body statements from an entity's do block."
   def entity_body(ast), do: Block.do_block_entries(ast)

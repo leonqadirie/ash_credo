@@ -11,7 +11,25 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
       A policy is unscoped when its condition is `always()` or `expr(true)`,
       when every element of a list condition is one of those, when it has no
       condition at all (Ash defaults the condition to true), or when its only
-      body-level `condition` is `always()`/`expr(true)`.
+      body-level `condition` is `always()`/`expr(true)`. Conditions on
+      enclosing `policy_group`s count: Ash adds them to every policy the
+      group contains, so a policy inside `policy_group actor_attribute_equals(:role, :admin)`
+      is scoped even without a condition of its own.
+
+      Entity options do not scope: `policy description: "..." do` still
+      applies everywhere, and the condition is recognised whether passed
+      positionally or via the `condition:` option.
+
+      Checks apply top to bottom and the first one that reaches a decision
+      wins, so `authorize_if always()` preceded by a `forbid_if`/`forbid_unless`
+      is the deliberate allow-all-except pattern and is not flagged.
+      Guards that can never fire (`forbid_if never()`, `forbid_unless always()`,
+      boolean literals) do not count:
+
+          policy always() do
+            forbid_if actor_attribute_equals(:banned, true)
+            authorize_if always()
+          end
 
       Scope permissive policies to specific actions or action types:
 
@@ -36,10 +54,12 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
 
   defp check_policies(policies_ast, issue_meta) do
     policies_ast
-    |> Introspection.policy_entities()
-    |> Enum.filter(&has_authorize_if_always?/1)
-    |> Enum.reject(&scoped_policy?/1)
-    |> Enum.map(fn {kind, meta, _} ->
+    |> Introspection.policy_entities_with_conditions()
+    |> Enum.filter(fn {entity, _conditions} -> unguarded_authorize_always?(entity) end)
+    |> Enum.reject(fn {entity, inherited_conditions} ->
+      scoped_policy?(entity) or Enum.any?(inherited_conditions, &scoped_condition?/1)
+    end)
+    |> Enum.map(fn {{kind, meta, _}, _conditions} ->
       label = if kind == :bypass, do: "Bypass", else: "Unscoped policy"
 
       format_issue(issue_meta,
@@ -51,21 +71,46 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
     end)
   end
 
-  defp has_authorize_if_always?({kind, _, _} = policy_ast) when kind in [:policy, :bypass] do
-    Enum.any?(Introspection.entity_body(policy_ast), fn
-      {:authorize_if, _, [{:always, _, _}]} -> true
-      _ -> false
+  # Checks apply top to bottom and the first decision wins, so
+  # `authorize_if always()` only grants unconditional access when no
+  # earlier `forbid_if`/`forbid_unless` can deny first - with one, this is
+  # the deliberate allow-all-except pattern. Guards that can never fire
+  # (`forbid_if never()`/`expr(false)`/`false`, `forbid_unless
+  # always()`/`expr(true)`/`true`) do not count. Checks accept a trailing
+  # options list (`forbid_if never(), name: "..."`), which does not change
+  # the check itself.
+  defp unguarded_authorize_always?({kind, _, _} = policy_ast) when kind in [:policy, :bypass] do
+    policy_ast
+    |> Introspection.entity_body()
+    |> Enum.reduce_while(false, fn
+      {forbid, _, [check | _opts]}, acc when forbid in [:forbid_if, :forbid_unless] ->
+        if noop_forbid?(forbid, check), do: {:cont, acc}, else: {:halt, false}
+
+      {forbid, _, _}, _acc when forbid in [:forbid_if, :forbid_unless] ->
+        {:halt, false}
+
+      {:authorize_if, _, [{:always, _, _}]}, _acc ->
+        {:halt, true}
+
+      _other, acc ->
+        {:cont, acc}
     end)
   end
 
-  defp has_authorize_if_always?(_), do: false
+  defp unguarded_authorize_always?(_), do: false
+
+  defp noop_forbid?(:forbid_if, {:never, _, _}), do: true
+  defp noop_forbid?(:forbid_if, {:expr, _, [false]}), do: true
+  defp noop_forbid?(:forbid_if, false), do: true
+  defp noop_forbid?(:forbid_unless, check), do: unscoped_condition?(check)
+  defp noop_forbid?(_forbid, _check), do: false
 
   defp scoped_policy?({kind, _, args} = policy_ast) when kind in [:policy, :bypass] do
     case Enum.reject(args, &do_block?/1) do
       # policy do ... end - Ash defaults the condition to static true, so the
       # policy is only scoped if its body declares a restrictive `condition`
       [] -> scoped_body_condition?(policy_ast)
-      [condition | _] -> scoped_condition?(condition)
+      [condition_or_opts | _] -> scoped_condition_arg?(condition_or_opts, policy_ast)
     end
   end
 
@@ -73,6 +118,28 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
 
   defp do_block?([{:do, _} | _]), do: true
   defp do_block?(_), do: false
+
+  # The condition arg is optional and the entity takes options
+  # (`policy description: "..." do`), so a keyword list of known policy
+  # option keys is options, not a condition - the condition, if any, is
+  # its `:condition` key.
+  @policy_option_keys ~w(description access_type condition error_message)a
+
+  defp scoped_condition_arg?(arg, policy_ast) do
+    if policy_opts?(arg) do
+      case Keyword.fetch(arg, :condition) do
+        {:ok, condition} -> scoped_condition?(condition)
+        :error -> scoped_body_condition?(policy_ast)
+      end
+    else
+      scoped_condition?(arg)
+    end
+  end
+
+  defp policy_opts?(arg) do
+    Keyword.keyword?(arg) and arg != [] and
+      Enum.all?(arg, fn {key, _} -> key in @policy_option_keys end)
+  end
 
   defp scoped_body_condition?(policy_ast) do
     Enum.any?(Introspection.entity_body(policy_ast), fn
@@ -88,9 +155,11 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
 
   defp scoped_condition?(condition), do: not unscoped_condition?(condition)
 
-  # always() applies to everything; expr(true) is effectively unscoped.
-  # Anything else - action_type(:read), action([...]), actor checks - scopes.
+  # always() applies to everything; expr(true) and a bare `true` literal
+  # (Ash accepts booleans as checks) are effectively unscoped. Anything
+  # else - action_type(:read), action([...]), actor checks - scopes.
   defp unscoped_condition?({:always, _, _}), do: true
   defp unscoped_condition?({:expr, _, [true]}), do: true
+  defp unscoped_condition?(true), do: true
   defp unscoped_condition?(_), do: false
 end

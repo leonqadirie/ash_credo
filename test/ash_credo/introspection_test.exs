@@ -1083,6 +1083,42 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "policy_entities_with_conditions/1" do
+    test "accumulates group conditions across nested policy_groups, outermost first" do
+      source = """
+      defmodule Foo do
+        use Ash.Resource
+
+        policies do
+          policy action_type(:read) do
+            authorize_if always()
+          end
+
+          policy_group actor_attribute_equals(:role, :admin) do
+            policy_group actor_present() do
+              policy do
+                authorize_if always()
+              end
+            end
+          end
+        end
+      end
+      """
+
+      policies = first_resource_section(source, :policies)
+
+      assert [
+               {{:policy, _, _}, []},
+               {{:policy, _, _},
+                [{:actor_attribute_equals, _, [:role, :admin]}, {:actor_present, _, _}]}
+             ] = Introspection.policy_entities_with_conditions(policies)
+    end
+
+    test "returns empty list for nil" do
+      assert [] == Introspection.policy_entities_with_conditions(nil)
+    end
+  end
+
   describe "entity_body/1" do
     test "extracts body statements from entity with do block" do
       actions = first_resource_section(@ash_resource, :actions)
