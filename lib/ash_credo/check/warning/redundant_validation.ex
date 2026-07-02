@@ -31,7 +31,18 @@ defmodule AshCredo.Check.Warning.RedundantValidation do
       Fields opened up via `allow_nil_input` on an action are skipped:
       there the attribute may legitimately be nil at validation time (for
       example filled by the data layer during an upsert), so `present` does
-      add a real constraint. Validations in read and generic actions are
+      add a real constraint. Fields shadowed by a same-named `argument` on
+      an update or destroy action are skipped too. In the atomic execution
+      path - the default for those action types (`require_atomic?`
+      defaults to `true`) - `Ash.Resource.Validation.Present` validates
+      the argument instead of the attribute, so the validation enforces
+      "the caller supplied the argument" regardless of the attribute
+      constraint. (The non-atomic path falls back to the attribute when
+      the argument is nil, where the validation is indeed vacuous - but
+      advising removal would silently drop the atomic-path constraint, so
+      the check stays silent.) Create actions never execute atomically, so
+      a same-named argument on a create does not rescue the validation and
+      no escape applies there. Validations in read and generic actions are
       also skipped, because `present` resolves against action arguments
       there, not attributes.
 
@@ -189,22 +200,41 @@ defmodule AshCredo.Check.Warning.RedundantValidation do
 
   defp redundant?(%{fields: fields, scope: scope}, non_nullable, actions) do
     Enum.all?(fields, &MapSet.member?(non_nullable, &1)) and
-      no_nullable_inputs?(fields, scope, actions)
+      no_input_overrides?(fields, scope, actions)
   end
 
-  defp no_nullable_inputs?(fields, {:action, action_name}, actions) do
+  # An action-level input can make `present` meaningful again despite the
+  # attribute constraint: `allow_nil_input` reopens the attribute, and a
+  # same-named `argument` redirects `present` to validate the argument in
+  # the atomic path (Ash.Resource.Validation.Present.atomic/3; the
+  # non-atomic path falls back to the attribute, but removal would drop
+  # the atomic-path constraint, so skip conservatively). Only update and
+  # destroy actions have an atomic path (`require_atomic?` exists on
+  # neither create struct nor create execution), so on creates the
+  # argument never rescues the validation and no escape applies.
+  defp no_input_overrides?(fields, {:action, action_name}, actions) do
     case Enum.find(actions, &(&1.name == action_name)) do
       # Source names an action the compiled module does not have (stale
       # build or fragment drift) - do not flag what we cannot resolve.
       nil -> false
-      action -> Enum.all?(fields, &(&1 not in nullable_inputs(action)))
+      action -> Enum.all?(fields, &(&1 not in overriding_inputs(action)))
     end
   end
 
-  defp no_nullable_inputs?(fields, :global, actions) do
-    nullable = Enum.flat_map(actions, &nullable_inputs/1)
-    Enum.all?(fields, &(&1 not in nullable))
+  defp no_input_overrides?(fields, :global, actions) do
+    overriding = Enum.flat_map(actions, &overriding_inputs/1)
+    Enum.all?(fields, &(&1 not in overriding))
   end
+
+  defp overriding_inputs(action), do: argument_names(action) ++ nullable_inputs(action)
+
+  @atomic_action_types ~w(update destroy)a
+
+  defp argument_names(%{type: type} = action) when type in @atomic_action_types do
+    action |> Map.get(:arguments) |> List.wrap() |> Enum.map(& &1.name)
+  end
+
+  defp argument_names(_action), do: []
 
   defp nullable_inputs(action), do: List.wrap(Map.get(action, :allow_nil_input) || [])
 

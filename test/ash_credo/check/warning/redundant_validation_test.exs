@@ -166,6 +166,80 @@ defmodule AshCredo.Check.Warning.RedundantValidationTest do
     assert [] = run_check(RedundantValidation, source)
   end
 
+  test "no issue when an update action defines a same-named argument" do
+    # The compiled :reslug action defines `argument :slug`, so `present`
+    # validates the argument, not the attribute, in the atomic path
+    # (Ash.Resource.Validation.Present.atomic/3) - a real constraint
+    # despite the attribute's allow_nil? false.
+    source = """
+    defmodule AshCredoFixtures.Blog.Contact do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+
+      actions do
+        update :reslug do
+          validate present(:slug)
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(RedundantValidation, source)
+  end
+
+  test "reports present when a create action defines a same-named argument" do
+    # Creates never execute atomically, so the non-atomic fallback to the
+    # attribute always applies and the validation stays redundant - the
+    # argument escape must not fire for create actions.
+    source = """
+    defmodule AshCredoFixtures.Blog.Contact do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+
+      actions do
+        create :import_slugged do
+          validate present(:slug)
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(RedundantValidation, source)
+    assert issue.message =~ ":slug"
+  end
+
+  test "reports present on the same attribute in an action without the argument" do
+    source = """
+    defmodule AshCredoFixtures.Blog.Contact do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+
+      actions do
+        update :rename do
+          validate present(:slug)
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(RedundantValidation, source)
+    assert issue.message =~ ":slug"
+  end
+
+  test "no issue for a global validation when an update action defines a same-named argument" do
+    source = """
+    defmodule AshCredoFixtures.Blog.Contact do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+
+      validations do
+        validate present(:slug)
+      end
+    end
+    """
+
+    # The compiled :reslug update action defines `argument :slug`, so the
+    # global validation is load-bearing for that action's atomic path.
+    # (The create :import_slugged argument alone would not suppress it.)
+    assert [] = run_check(RedundantValidation, source)
+  end
+
   test "no issue for present in read actions (checks arguments, not attributes)" do
     source = """
     defmodule AshCredoFixtures.Blog.Contact do
