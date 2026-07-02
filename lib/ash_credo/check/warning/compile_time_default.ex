@@ -48,6 +48,7 @@ defmodule AshCredo.Check.Warning.CompileTimeDefault do
     {[:NaiveDateTime], :utc_now},
     {[:Time], :utc_now},
     {[:Ash, :UUID], :generate},
+    {[:Ash, :UUIDv7], :generate},
     {[:Ecto, :UUID], :generate}
   ]
 
