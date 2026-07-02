@@ -246,6 +246,23 @@ defmodule AshCredo.Introspection do
     Enum.flat_map(action_types, &filter_entities(entries, &1))
   end
 
+  @doc """
+  Returns the explicit action entities whose `accept` option is honored at
+  runtime: creates, updates, and soft destroys. Ash's `DefaultAccept`
+  transformer resets `accept` to `[]` on hard destroys (`soft?` false), so
+  an accept list there is dead configuration rather than an input surface.
+  """
+  def accepting_action_entities(actions_ast) do
+    action_entities(actions_ast, ~w(create update)a) ++
+      soft_destroy_entities(actions_ast)
+  end
+
+  defp soft_destroy_entities(actions_ast) do
+    actions_ast
+    |> action_entities([:destroy])
+    |> Enum.filter(&entity_has_opt?(&1, :soft?, true))
+  end
+
   @doc "Returns the line number of a section's opening."
   def section_line({_name, meta, _}), do: meta[:line]
   def section_line(_), do: nil

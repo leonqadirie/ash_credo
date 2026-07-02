@@ -40,6 +40,57 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
     assert issue.column != nil
   end
 
+  test "reports issue for accept :* on a soft destroy" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        destroy :archive do
+          soft? true
+          accept :*
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(WildcardAcceptOnAction, source)
+    assert issue.message =~ "`archive`"
+    assert issue.line_no == 7
+  end
+
+  test "reports issue for accept :* on an inline soft?: true destroy" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        destroy :archive, soft?: true, accept: :*
+      end
+    end
+    """
+
+    assert [issue] = run_check(WildcardAcceptOnAction, source)
+    assert issue.message =~ "`archive`"
+    assert issue.line_no == 5
+  end
+
+  test "no issue for accept :* on a hard destroy (Ash resets its accept)" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        destroy :purge do
+          accept :*
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(WildcardAcceptOnAction, source)
+  end
+
   test "no issue for explicit accept list" do
     source = """
     defmodule MyApp.Post do

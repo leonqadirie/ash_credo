@@ -8,13 +8,18 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
     ],
     explanations: [
       check: """
-      Using `accept :*` on create or update actions accepts all public
-      attributes, which is a mass-assignment vulnerability. Explicitly
-      list the accepted attributes instead.
+      Using `accept :*` on create, update, or soft destroy actions accepts
+      all public attributes, which is a mass-assignment vulnerability.
+      Explicitly list the accepted attributes instead.
 
           create :create do
             accept [:title, :body]
           end
+
+      Hard destroy actions are not checked: Ash resets their `accept` to
+      `[]` at compile time, so an accept list there takes no input. Soft
+      destroys are updates under the hood and honor `accept` like any
+      other writable action.
 
       Test directories are excluded by default, since test factories and seeds
       often use `accept :*` on purpose. Override `excluded_paths` to scope the
@@ -31,7 +36,9 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
   alias AshCredo.{Introspection, PathFilter}
   alias AshCredo.Orchestration
 
-  @writable_action_types ~w(create update)a
+  # For the `defaults` list only: `defaults [destroy: :*]` raises a DslError
+  # in Ash, so keyword defaults entries can never carry a destroy accept.
+  @default_writable_action_types ~w(create update)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
@@ -56,7 +63,7 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
     source_file = IssueMeta.source_file(issue_meta)
 
     actions_ast
-    |> Introspection.action_entities(@writable_action_types)
+    |> Introspection.accepting_action_entities()
     |> Enum.flat_map(fn {type, _meta, _} = entity ->
       entity
       |> Introspection.option_occurrences(:accept)
@@ -102,7 +109,7 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
   end
 
   defp wildcard_default_actions({:defaults, meta, _} = defaults_ast) do
-    @writable_action_types
+    @default_writable_action_types
     |> Enum.filter(&Introspection.default_action_has_value?(defaults_ast, &1, :*))
     |> Enum.map(&{&1, meta})
   end

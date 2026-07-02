@@ -19,6 +19,10 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
             change set_attribute(:role, :user)
           end
 
+      Create, update, and soft destroy actions are checked. Hard destroy
+      actions are not: Ash resets their `accept` to `[]` at compile time,
+      so an accept list there takes no input.
+
       Test directories are excluded by default, since test factories and seeds
       often accept these fields on purpose. Override `excluded_paths` to scope
       the check differently.
@@ -38,7 +42,9 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
   alias AshCredo.{Introspection, PathFilter}
   alias AshCredo.Introspection.ResourceContext
 
-  @writable_action_types ~w(create update)a
+  # For the `defaults` list only: `defaults [destroy: :*]` raises a DslError
+  # in Ash, so keyword defaults entries can never carry a destroy accept.
+  @default_writable_action_types ~w(create update)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
@@ -69,7 +75,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
   defp check_actions(actions_ast, dangerous, issue_meta) do
     action_issues =
       actions_ast
-      |> Introspection.action_entities(@writable_action_types)
+      |> Introspection.accepting_action_entities()
       |> Enum.flat_map(&find_dangerous_accepts(&1, dangerous, issue_meta))
 
     defaults_issues = find_dangerous_defaults(actions_ast, dangerous, issue_meta)
@@ -113,7 +119,8 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
     defaults_ast
     |> Introspection.default_action_entries()
     |> Enum.flat_map(fn
-      {type, default_fields} when type in @writable_action_types and is_list(default_fields) ->
+      {type, default_fields}
+      when type in @default_writable_action_types and is_list(default_fields) ->
         default_fields
         |> Enum.filter(&dangerous_field?(&1, dangerous))
         |> Enum.map(fn field ->
