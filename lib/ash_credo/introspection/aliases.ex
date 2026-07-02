@@ -63,6 +63,38 @@ defmodule AshCredo.Introspection.Aliases do
   def expand_to_module(_segments, %Macro.Env{}), do: :error
 
   @doc """
+  Extracts the literal alias segments from a `defmodule` AST node, or `nil`
+  when the module name is not a literal alias (e.g. `Module.concat(...)`).
+  """
+  def defmodule_literal_segments({:defmodule, _, [{:__aliases__, _, segs}, _]})
+      when is_list(segs), do: segs
+
+  def defmodule_literal_segments(_), do: nil
+
+  @doc """
+  Resolves a literal `defmodule` name into absolute module segments through
+  the visible env.
+
+  When `parent_absolute` is empty, the module is top-level and visible
+  aliases apply to its literal segments. When it is a module path, the
+  module is nested and Elixir resolves it by prepending the enclosing path
+  without applying lexical aliases to the nested name itself. Returns `nil`
+  when the segments are not a literal alias or the enclosing module path is
+  already unknown.
+  """
+  def absolute_module_segments(literal_segments, parent_absolute, %Macro.Env{} = env)
+      when is_list(literal_segments) do
+    cond do
+      not Enum.all?(literal_segments, &is_atom/1) -> nil
+      is_nil(parent_absolute) -> nil
+      parent_absolute == [] -> expand_alias(literal_segments, env)
+      true -> parent_absolute ++ literal_segments
+    end
+  end
+
+  def absolute_module_segments(_literal_segments, _parent_absolute, %Macro.Env{}), do: nil
+
+  @doc """
   Returns top-level alias mappings in a module body, optionally filtered by
   `:before_line`. Covers `alias` directives and `require ..., as:` (which
   sets up the same alias).

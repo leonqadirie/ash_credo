@@ -64,12 +64,15 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
     declared inside a `quote do ... end` are NOT recorded into frames.
     They belong to the macro caller, not the macro author. Set `true`
     only if you specifically need to model the author's lexical view.
-  - `:track_module_stack` (default `false`) - when truthy, the walker
-    maintains a module stack and `current_module_segments/1` returns
-    the absolute segments of the innermost enclosing `defmodule`.
+  - `:initial_env` - a `Macro.Env` seeding the base frame, for walking a
+    defmodule body that inherits directives from an enclosing scope.
+
+  The module stack is always maintained: `current_module_segments/1`
+  returns the absolute segments of the innermost enclosing `defmodule`,
+  and directive capture substitutes `__MODULE__` targets through it.
   """
 
-  alias AshCredo.Introspection.{Aliases, LexicalAliases}
+  alias AshCredo.Introspection.Aliases
 
   @scope_keys ~w(do else after rescue catch)a
 
@@ -80,14 +83,14 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
     """
 
     @type t :: %__MODULE__{
-            alias_frames: [[{[atom()], [atom()]}]],
+            env_frames: [Macro.Env.t()],
             quote_depth: non_neg_integer(),
-            module_stack: [[atom()]] | nil
+            module_stack: [[atom()] | nil]
           }
 
-    defstruct alias_frames: [[]],
+    defstruct env_frames: [],
               quote_depth: 0,
-              module_stack: nil
+              module_stack: []
   end
 
   @typedoc "User-provided state threaded through the traversal."
@@ -99,17 +102,17 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   @typedoc """
   Walker options (see module docs). `on_frame_push`/`on_frame_pop` are
   optional 1-arity functions that mutate `user_state` in lockstep with
-  every alias-frame push/pop the walker performs - useful for callers who
-  maintain their own per-scope frame stacks (e.g. `MissingMacroDirective`'s
-  `require_frames`). `:initial_aliases` pre-populates the base alias frame
-  - useful when the walker is invoked on a defmodule body that should
-  inherit aliases from an enclosing scope.
+  every env-frame push/pop the walker performs. `:initial_env` seeds the
+  base env frame; `:initial_aliases` is the transitional entry-list
+  equivalent, folded into an env (both are useful when the walker is
+  invoked on a defmodule body that should inherit directives from an
+  enclosing scope).
   """
   @type opts :: [
           lexical_scope_nodes: [atom()],
           track_quote: boolean(),
           track_aliases_in_quote: boolean(),
-          track_module_stack: boolean(),
+          initial_env: Macro.Env.t(),
           initial_aliases: [{[atom()], [atom()]}],
           on_frame_push: (user_state() -> user_state()),
           on_frame_pop: (user_state() -> user_state())
@@ -118,13 +121,27 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   # ── Public accessors on Scope ──
 
   @doc """
-  Returns alias entries visible at the current traversal point, flattened
-  across all enclosing frames. Most-recently-declared aliases come first, so
-  `Aliases.expand_alias/2` (which longest-matches and tie-breaks by first
-  position) honours shadowing automatically.
+  Returns the `Macro.Env` visible at the current traversal point. Frames
+  inherit their parent env on push, so the head env always carries every
+  directive lexically in scope.
+  """
+  @spec env(Scope.t()) :: Macro.Env.t()
+  def env(%Scope{env_frames: [env | _]}), do: env
+  def env(%Scope{env_frames: []}), do: Aliases.base_env()
+
+  @doc """
+  Returns alias entries visible at the current traversal point in the
+  legacy `{alias_segments, target_segments}` shape, derived from the head
+  env. Transitional shim for consumers not yet migrated to `env/1`.
   """
   @spec aliases(Scope.t()) :: [{[atom()], [atom()]}]
-  def aliases(%Scope{alias_frames: frames}), do: LexicalAliases.current_aliases(frames)
+  def aliases(%Scope{} = scope) do
+    for {as, target} <- env(scope).aliases do
+      {module_segments(as), module_segments(target)}
+    end
+  end
+
+  defp module_segments(module), do: module |> Module.split() |> Enum.map(&String.to_atom/1)
 
   @doc "Returns the current `quote do ... end` nesting depth (0 outside any quote)."
   @spec quote_depth(Scope.t()) :: non_neg_integer()
@@ -136,13 +153,11 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
 
   @doc """
   Returns the absolute module segments of the innermost enclosing `defmodule`,
-  or `nil` if there is no enclosing module or `:track_module_stack` was not
-  enabled. Top-level modules have visible aliases applied to their literal
-  segments; nested modules prepend the enclosing path without re-aliasing
-  (matches Elixir's actual resolution).
+  or `nil` if there is no enclosing module. Top-level modules have visible
+  aliases applied to their literal segments; nested modules prepend the
+  enclosing path without re-aliasing (matches Elixir's actual resolution).
   """
   @spec current_module_segments(Scope.t()) :: [atom()] | nil
-  def current_module_segments(%Scope{module_stack: nil}), do: nil
   def current_module_segments(%Scope{module_stack: []}), do: nil
   def current_module_segments(%Scope{module_stack: [top | _]}), do: top
 
@@ -153,11 +168,8 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   `current_module_segments/1`, which returns `nil` both for "not in a module"
   AND for "in a module with a non-literal name." Use this when you need to
   decide whether to skip into a nested-module body.
-
-  Returns `false` if `:track_module_stack` was not enabled.
   """
   @spec in_module?(Scope.t()) :: boolean()
-  def in_module?(%Scope{module_stack: nil}), do: false
   def in_module?(%Scope{module_stack: []}), do: false
   def in_module?(%Scope{module_stack: [_ | _]}), do: true
 
@@ -187,12 +199,34 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
 
   # ── Internals ──
 
-  defp initial_scope(%{track_module_stack: track_module_stack, initial_aliases: initial_aliases}) do
-    %Scope{
-      alias_frames: [initial_aliases],
-      module_stack: if(track_module_stack, do: [])
-    }
+  defp initial_scope(options) do
+    %Scope{env_frames: [seed_env(options)]}
   end
+
+  defp seed_env(%{initial_env: %Macro.Env{} = env}), do: env
+
+  defp seed_env(%{initial_aliases: entries}) do
+    Enum.reduce(entries, Aliases.base_env(), &seed_alias_entry/2)
+  end
+
+  # Transitional: folds legacy `{alias_segments, target_segments}` entries
+  # (as produced by the `aliases/1` shim) into an env. Dies with the shim.
+  defp seed_alias_entry({[alias_name], target_segments}, env)
+       when is_atom(alias_name) and is_list(target_segments) do
+    if target_segments != [] and Enum.all?(target_segments, &is_atom/1) do
+      case Macro.Env.define_alias(env, [], Module.concat(target_segments),
+             as: Module.concat([alias_name]),
+             trace: false
+           ) do
+        {:ok, updated} -> updated
+        {:error, _} -> env
+      end
+    else
+      env
+    end
+  end
+
+  defp seed_alias_entry(_entry, env), do: env
 
   defp normalize_opts(opts) do
     %{
@@ -200,7 +234,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
         opts |> Keyword.get(:lexical_scope_nodes, [:with, :for]) |> List.wrap() |> MapSet.new(),
       track_quote: Keyword.get(opts, :track_quote, true),
       track_aliases_in_quote: Keyword.get(opts, :track_aliases_in_quote, false),
-      track_module_stack: Keyword.get(opts, :track_module_stack, false),
+      initial_env: Keyword.get(opts, :initial_env),
       initial_aliases: Keyword.get(opts, :initial_aliases, []),
       on_frame_push: Keyword.get(opts, :on_frame_push, &noop/1),
       on_frame_pop: Keyword.get(opts, :on_frame_pop, &noop/1)
@@ -219,12 +253,11 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   # is also in `lexical_scope_nodes`) is handled by exactly one clause -
   # follow each clause's chain to confirm.
 
-  # `require ..., as:` sets up an alias too; `capture_alias/3` delegates
-  # to `alias_entries/1`, which yields entries only for the shapes that
-  # actually create one.
+  # `capture_directive/3` applies the node to the head env; shapes that
+  # create nothing (e.g. a bare `alias __MODULE__`) leave it unchanged.
   defp enter({directive, _, _} = node, {user, scope}, on_enter, options)
-       when directive in [:alias, :require] do
-    scope = capture_alias(scope, node, options)
+       when directive in [:alias, :require, :import] do
+    scope = capture_directive(scope, node, options)
     {node, {on_enter.(node, scope, user), scope}}
   end
 
@@ -233,7 +266,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
     {node, {on_enter.(node, scope, user), scope}}
   end
 
-  defp enter({:defmodule, _, _} = node, {user, scope}, on_enter, %{track_module_stack: true}) do
+  defp enter({:defmodule, _, _} = node, {user, scope}, on_enter, _options) do
     scope = push_module_stack(scope, node)
     {node, {on_enter.(node, scope, user), scope}}
   end
@@ -269,7 +302,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   # clauses so each push has a matching pop.
 
   defp leave({directive, _, _} = node, {user, scope}, on_leave, _options)
-       when directive in [:alias, :require] do
+       when directive in [:alias, :require, :import] do
     {node, {on_leave.(node, scope, user), scope}}
   end
 
@@ -279,7 +312,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
     {node, {user, scope}}
   end
 
-  defp leave({:defmodule, _, _} = node, {user, scope}, on_leave, %{track_module_stack: true}) do
+  defp leave({:defmodule, _, _} = node, {user, scope}, on_leave, _options) do
     user = on_leave.(node, scope, user)
     scope = pop_module_stack(scope)
     {node, {user, scope}}
@@ -315,7 +348,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   # ── Scope mutators ──
 
   defp enter_with_frame(node, user, scope, on_enter, %{on_frame_push: on_frame_push}) do
-    scope = push_alias_frame(scope)
+    scope = push_env_frame(scope)
     user = on_frame_push.(user)
     {node, {on_enter.(node, scope, user), scope}}
   end
@@ -323,31 +356,37 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   defp leave_with_frame(node, user, scope, on_leave, %{on_frame_pop: on_frame_pop}) do
     user = on_leave.(node, scope, user)
     user = on_frame_pop.(user)
-    scope = pop_alias_frame(scope)
+    scope = pop_env_frame(scope)
     {node, {user, scope}}
   end
 
-  defp push_alias_frame(%Scope{alias_frames: frames} = scope) do
-    %{scope | alias_frames: LexicalAliases.push_frame(frames)}
+  # A pushed frame starts as a copy of its parent env, so everything
+  # lexically visible stays visible; the pop discards additions made
+  # inside the scope.
+  defp push_env_frame(%Scope{env_frames: frames} = scope) do
+    %{scope | env_frames: [env(scope) | frames]}
   end
 
-  defp pop_alias_frame(%Scope{alias_frames: frames} = scope) do
-    %{scope | alias_frames: LexicalAliases.pop_frame(frames)}
-  end
+  defp pop_env_frame(%Scope{env_frames: [_ | rest]} = scope), do: %{scope | env_frames: rest}
+  defp pop_env_frame(scope), do: scope
 
-  defp capture_alias(%Scope{quote_depth: depth} = scope, _alias_node, %{
+  defp capture_directive(%Scope{quote_depth: depth} = scope, _node, %{
          track_quote: true,
          track_aliases_in_quote: false
        })
        when depth > 0, do: scope
 
-  defp capture_alias(%Scope{alias_frames: frames} = scope, alias_node, _options) do
-    entries = Aliases.alias_entries(alias_node)
-    %{scope | alias_frames: LexicalAliases.put_aliases(frames, entries)}
+  defp capture_directive(%Scope{env_frames: frames} = scope, node, _options) do
+    updated = Aliases.apply_directive(env(scope), node, current_module_segments(scope))
+
+    case frames do
+      [_head | rest] -> %{scope | env_frames: [updated | rest]}
+      [] -> %{scope | env_frames: [updated]}
+    end
   end
 
-  defp push_module_stack(%Scope{module_stack: stack, alias_frames: frames} = scope, defmodule_ast) do
-    literal = LexicalAliases.defmodule_literal_segments(defmodule_ast)
+  defp push_module_stack(%Scope{module_stack: stack} = scope, defmodule_ast) do
+    literal = Aliases.defmodule_literal_segments(defmodule_ast)
 
     parent_absolute =
       case stack do
@@ -355,7 +394,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
         [] -> []
       end
 
-    absolute = LexicalAliases.absolute_module_segments(literal, parent_absolute, frames)
+    absolute = Aliases.absolute_module_segments(literal, parent_absolute, env(scope))
     %{scope | module_stack: [absolute | stack]}
   end
 
