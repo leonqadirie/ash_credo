@@ -9,7 +9,7 @@ defmodule AshCredo.CheckCase do
     end
   end
 
-  # Raises on unparseable source: Credo returns an `:invalid` SourceFile
+  # Raises on unparsable source: Credo returns an `:invalid` SourceFile
   # for broken code and this suite's AST-walking checks then report zero
   # issues, so a syntax typo in a fixture heredoc would make negative
   # tests pass vacuously.
