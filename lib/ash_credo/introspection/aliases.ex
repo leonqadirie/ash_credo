@@ -189,6 +189,10 @@ defmodule AshCredo.Introspection.Aliases do
     )
   end
 
+  def resolved_module_ref(segments, %{env: %Macro.Env{} = env}, _opts) when is_list(segments) do
+    expand_alias(segments, env)
+  end
+
   def resolved_module_ref(segments, module_or_context, opts) when is_list(segments) do
     expand_alias(segments, context_aliases(module_or_context, opts))
   end

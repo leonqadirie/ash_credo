@@ -15,11 +15,11 @@ defmodule AshCredo.Introspection.AshCallScanner do
     * `calls/1` - raw call ASTs
     * `calls_with_module/1` - `{ast, expanded_module_segments}` tuples
     * `calls_with_context/1` - enriched maps with `:call_ast`,
-      `:expanded_module`, `:args`, `:aliases`, `:bindings`, and
+      `:expanded_module`, `:args`, `:env`, `:bindings`, and
       `:enclosing_module_segments`
   """
 
-  alias AshCredo.Introspection.{Aliases, LexicalAliases}
+  alias AshCredo.Introspection.Aliases
 
   @scope_keys ~w(do else after rescue catch)a
   @lexical_scope_nodes ~w(defmodule def defp defmacro defmacrop fn if unless case cond with try receive for)a
@@ -27,10 +27,10 @@ defmodule AshCredo.Introspection.AshCallScanner do
   @function_scope_nodes ~w(def defp defmacro defmacrop)a
 
   @doc "Returns true if the AST node is a call to an `Ash.*` module."
-  def call?(ast, aliases \\ [])
+  def call?(ast, env \\ nil)
 
-  def call?({{:., _, [{:__aliases__, _, segments}, _fun]}, _meta, _args}, aliases) do
-    match?([:Ash | _], Aliases.expand_alias(segments, aliases))
+  def call?({{:., _, [{:__aliases__, _, segments}, _fun]}, _meta, _args}, env) do
+    match?([:Ash | _], Aliases.expand_alias(segments, env || Aliases.base_env()))
   end
 
   def call?(_, _), do: false
@@ -45,7 +45,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
     traverse(source_file, fn ast, expanded, _state -> {ast, expanded} end)
   end
 
-  @doc "Returns enriched call maps with `:call_ast`, `:expanded_module`, `:args`, `:aliases`, and `:bindings`."
+  @doc "Returns enriched call maps with `:call_ast`, `:expanded_module`, `:args`, `:env`, and `:bindings`."
   def calls_with_context(source_file) do
     traverse(source_file, &build_call_context/3, track_context?: true)
   end
@@ -83,11 +83,13 @@ defmodule AshCredo.Introspection.AshCallScanner do
     {ast, maybe_enter_lexical_scope(state, node_name)}
   end
 
-  # `require ..., as:` sets up an alias too; `alias_entries/1` yields
-  # entries only for the shapes that actually create one.
+  # `require ..., as:` sets up an alias too; `apply_directive/3` records
+  # exactly the shapes that create one. Unlike the walker, the scanner has
+  # no quote tracking: directives inside `quote do ... end` are recorded,
+  # preserving long-standing scanner behavior.
   defp enter_node({directive, _, _} = ast, state, _collect_fn)
        when directive in [:alias, :require] do
-    {ast, put_aliases(state, Aliases.alias_entries(ast))}
+    {ast, capture_directive(state, ast)}
   end
 
   defp enter_node({:|>, _, [left, {{:., _, _}, meta, _}]} = ast, state, _collect_fn)
@@ -97,7 +99,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   defp enter_node({{:., _, [module_ast, _fun_name]}, _meta, args} = call_ast, state, collect_fn)
        when is_list(args) do
-    expanded_module = expanded_call_module(module_ast, current_aliases(state))
+    expanded_module = expanded_call_module(module_ast, current_env(state))
 
     if match?([:Ash | _], expanded_module) do
       {call_ast, record_call(state, call_ast, expanded_module, collect_fn)}
@@ -136,7 +138,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   defp initial_state(opts) do
     %{
-      alias_frames: [[]],
+      env_frames: [Aliases.base_env()],
       binding_frames: [],
       branch_depth: 0,
       calls: [],
@@ -160,14 +162,14 @@ defmodule AshCredo.Introspection.AshCallScanner do
       call_ast: call_ast,
       expanded_module: expanded_module,
       args: normalized_call_args(args, call_meta, state.pipe_origins),
-      aliases: current_aliases(state),
+      env: current_env(state),
       bindings: current_bindings(state),
       enclosing_module_segments: current_module_segments(state)
     }
   end
 
   defp push_module_stack(state, ast) do
-    literal = LexicalAliases.defmodule_literal_segments(ast)
+    literal = Aliases.defmodule_literal_segments(ast)
 
     parent_absolute =
       case state.module_stack do
@@ -175,8 +177,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
         [] -> []
       end
 
-    absolute =
-      LexicalAliases.absolute_module_segments(literal, parent_absolute, state.alias_frames)
+    absolute = Aliases.absolute_module_segments(literal, parent_absolute, current_env(state))
 
     %{state | module_stack: [absolute | state.module_stack]}
   end
@@ -212,21 +213,24 @@ defmodule AshCredo.Introspection.AshCallScanner do
     %{state | pipe_origins: Map.put(state.pipe_origins, key, left)}
   end
 
+  # A pushed frame starts as a copy of its parent env; the pop discards
+  # additions made inside the scope.
   defp push_alias_frame(state) do
-    update_in(state.alias_frames, &LexicalAliases.push_frame/1)
+    update_in(state.env_frames, &[current_env(state) | &1])
   end
 
-  defp pop_alias_frame(%{alias_frames: frames} = state) do
-    %{state | alias_frames: LexicalAliases.pop_frame(frames)}
+  defp pop_alias_frame(%{env_frames: [_ | rest]} = state) when rest != [] do
+    %{state | env_frames: rest}
   end
 
-  defp put_aliases(%{alias_frames: _frames} = state, new_aliases) do
-    %{state | alias_frames: LexicalAliases.put_aliases(state.alias_frames, new_aliases)}
+  defp pop_alias_frame(state), do: state
+
+  defp capture_directive(%{env_frames: [head | rest]} = state, directive_ast) do
+    updated = Aliases.apply_directive(head, directive_ast, current_module_segments(state))
+    %{state | env_frames: [updated | rest]}
   end
 
-  defp current_aliases(%{alias_frames: frames}) do
-    LexicalAliases.current_aliases(frames)
-  end
+  defp current_env(%{env_frames: [env | _]}), do: env
 
   defp normalized_call_args(args, call_meta, pipe_origins) do
     case Map.get(pipe_origins, call_key(call_meta)) do
@@ -237,11 +241,11 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   defp call_key(meta), do: {meta[:line], meta[:column] || 0}
 
-  defp expanded_call_module({:__aliases__, _, segments}, aliases) when is_list(segments) do
-    Aliases.expand_alias(segments, aliases)
+  defp expanded_call_module({:__aliases__, _, segments}, env) when is_list(segments) do
+    Aliases.expand_alias(segments, env)
   end
 
-  defp expanded_call_module(_module_ast, _aliases), do: []
+  defp expanded_call_module(_module_ast, _env), do: []
 
   defp maybe_push_binding_frame(state, node_name) when node_name in @function_scope_nodes do
     update_in(state.binding_frames, &[%{} | &1])

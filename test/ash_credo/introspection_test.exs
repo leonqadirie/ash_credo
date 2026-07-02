@@ -424,7 +424,7 @@ defmodule AshCredo.IntrospectionTest do
 
       assert bulk_update.expanded_module == [:Ash]
       assert [{:query, _, nil}, :archive, {:%{}, _, []}] = bulk_update.args
-      assert {[:Q], [:Ash, :Query]} in bulk_update.aliases
+      assert Aliases.expand_alias([:Q], bulk_update.env) == [:Ash, :Query]
 
       assert match?(
                {{:., _, [{:__aliases__, _, [:Q]}, :for_read]}, _, _},
@@ -470,11 +470,11 @@ defmodule AshCredo.IntrospectionTest do
       end
       """
 
-      [%{call_ast: call_ast, expanded_module: expanded_module, aliases: aliases}] =
+      [%{call_ast: call_ast, expanded_module: expanded_module, env: env}] =
         AshCallScanner.calls_with_context(source_file(source))
 
       assert expanded_module == [:Ash]
-      assert {[:A], [:Ash]} in aliases
+      assert Aliases.expand_alias([:A], env) == [:Ash]
 
       assert match?(
                {{:., _, [{:__aliases__, _, [:A]}, :read!]}, _, _},
