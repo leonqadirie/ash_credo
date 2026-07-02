@@ -573,6 +573,58 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       assert [] = run_check(MissingMacroDirective, source)
     end
 
+    test "require Ash.Query, as: Q satisfies calls through the Q alias" do
+      source = """
+      defmodule MyApp.Caller do
+        require Ash.Query, as: Q
+
+        def foo(q), do: Q.filter(q, true)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "require Ash.Query, as: Q satisfies calls through the real name" do
+      source = """
+      defmodule MyApp.Caller do
+        require Ash.Query, as: Q
+
+        def foo(q), do: Ash.Query.filter(q, true)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "alias + import under the alias name satisfies the check" do
+      source = """
+      defmodule MyApp.Caller do
+        alias Ash.Query, as: Q
+        import Q
+
+        def foo(q), do: Q.filter(q, true)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "a re-aliased name resolves to its newest target" do
+      # `Q` is re-bound to `String` before the call, so `Q.filter` is
+      # `String.filter` - not a macro target, nothing to flag.
+      source = """
+      defmodule MyApp.Caller do
+        alias Ash.Query, as: Q
+        alias String, as: Q
+
+        def foo(q), do: Q.filter(q, true)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
     test "alias inside a function body is scoped to that function" do
       # `alias` inside `def foo` is visible to `Q.filter` inside the same body,
       # so the check should still flag it as needing `require Ash.Query`.
