@@ -96,6 +96,280 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicyTest do
     assert issue.line_no == 6
   end
 
+  test "no issue when the enclosing policy_group has a restrictive condition" do
+    # Ash adds the group condition to every policy the group contains, so
+    # the inner policy is effectively scoped to admins.
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy_group actor_attribute_equals(:role, :admin) do
+          policy do
+            authorize_if always()
+          end
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(OverlyPermissivePolicy, source)
+  end
+
+  test "reports issue when the enclosing policy_group condition is always()" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy_group always() do
+          policy always() do
+            authorize_if always()
+          end
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(OverlyPermissivePolicy, source)
+    assert issue.message =~ "Unscoped policy"
+  end
+
+  test "no issue when a nested policy_group carries the restrictive condition" do
+    # policy_group is recursive; the inner group's condition scopes the policy.
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy_group always() do
+          policy_group actor_attribute_equals(:role, :admin) do
+            policy do
+              authorize_if always()
+            end
+          end
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(OverlyPermissivePolicy, source)
+  end
+
+  test "reports issue for an unscoped policy nested two policy_groups deep" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy_group always() do
+          policy_group expr(true) do
+            policy do
+              authorize_if always()
+            end
+          end
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(OverlyPermissivePolicy, source)
+    assert issue.line_no == 7
+  end
+
+  test "no issue for the allow-all-except pattern (forbid_if before authorize_if always())" do
+    # Checks apply top to bottom and the first decision wins, so the
+    # forbid_if guards the authorize_if always().
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy always() do
+          forbid_if actor_attribute_equals(:banned, true)
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(OverlyPermissivePolicy, source)
+  end
+
+  test "no issue when forbid_unless precedes authorize_if always()" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy always() do
+          forbid_unless actor_present()
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(OverlyPermissivePolicy, source)
+  end
+
+  test "reports issue when the only guard is a forbid that can never fire" do
+    # forbid_unless always()/expr(true) never forbids; forbid_if
+    # never()/expr(false) never fires - these are not real guards.
+    for guard <- [
+          "forbid_unless always()",
+          "forbid_unless expr(true)",
+          "forbid_if never()",
+          "forbid_if expr(false)"
+        ] do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+        policies do
+          policy always() do
+            #{guard}
+            authorize_if always()
+          end
+        end
+      end
+      """
+
+      assert [issue] = run_check(OverlyPermissivePolicy, source)
+      assert issue.message =~ "Unscoped policy"
+    end
+  end
+
+  test "reports issue when the no-op guard carries a trailing options list" do
+    # Checks accept options (`name:`); they do not make a dead guard real.
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy always() do
+          forbid_if never(), name: "documentation no-op"
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(OverlyPermissivePolicy, source)
+    assert issue.message =~ "Unscoped policy"
+  end
+
+  test "no issue when a real guard carries a trailing options list" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy always() do
+          forbid_if actor_attribute_equals(:banned, true), name: "no banned actors"
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(OverlyPermissivePolicy, source)
+  end
+
+  test "reports issue when the guard is a bare boolean no-op" do
+    # Ash accepts booleans as checks; forbid_if false and forbid_unless true
+    # never forbid anything.
+    for guard <- ["forbid_if false", "forbid_unless true"] do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+        policies do
+          policy always() do
+            #{guard}
+            authorize_if always()
+          end
+        end
+      end
+      """
+
+      assert [issue] = run_check(OverlyPermissivePolicy, source)
+      assert issue.message =~ "Unscoped policy"
+    end
+  end
+
+  test "reports issue for an unconditioned policy declared with entity options" do
+    # `policy description: "..." do` passes options, not a condition - the
+    # policy still defaults to applying everywhere.
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy description: "everyone can do everything" do
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(OverlyPermissivePolicy, source)
+    assert issue.message =~ "Unscoped policy"
+  end
+
+  test "no issue when the condition is passed via the condition option" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy condition: actor_attribute_equals(:role, :admin), description: "admins" do
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(OverlyPermissivePolicy, source)
+  end
+
+  test "reports issue when the condition option is itself unscoped" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy condition: always(), description: "everyone" do
+          authorize_if always()
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(OverlyPermissivePolicy, source)
+    assert issue.message =~ "Unscoped policy"
+  end
+
+  test "reports issue when authorize_if always() precedes the forbid check" do
+    # The authorize_if always() decides first; the forbid_if below it never
+    # runs, so the policy is genuinely all-permissive.
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy always() do
+          authorize_if always()
+          forbid_if actor_attribute_equals(:banned, true)
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(OverlyPermissivePolicy, source)
+    assert issue.message =~ "Unscoped policy"
+  end
+
   test "no issue for scoped bypass" do
     source = """
     defmodule MyApp.Post do
