@@ -46,7 +46,7 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
   # required argument that happens to be a keyword-shaped list - e.g. the
   # aggregate specs in `Ash.aggregate(query, [{:actor, :count}])` - is
   # never mistaken for the opts.
-  @subject_opts_funs ~w(read read! read_one read_one! first first! stream! count count! exists exists? create create! update update! destroy destroy! run_action run_action!)a
+  @subject_opts_funs ~w(read read! read_one read_one! read_first read_first! first first! stream! count count! exists exists? create create! update update! destroy destroy! run_action run_action! data_layer_query data_layer_query!)a
   @aggregate_funs ~w(aggregate aggregate! sum sum! avg avg! min min! max max! list list!)a
   @bulk_funs ~w(bulk_update bulk_update! bulk_destroy bulk_destroy!)a
   @action_funs @subject_opts_funs ++ @aggregate_funs ++ @bulk_funs

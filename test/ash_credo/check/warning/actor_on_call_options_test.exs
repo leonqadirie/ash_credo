@@ -140,6 +140,38 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptionsTest do
     assert [] = run_check(ActorOnCallOptions, source)
   end
 
+  test "reports actor: on read_first after a for_read pipe" do
+    source = """
+    defmodule MyApp.Posts do
+      def newest(current_user) do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.read_first(actor: current_user)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "actor"
+    assert issue.message =~ "Ash.read_first"
+  end
+
+  test "reports actor: on data_layer_query (delegates to read)" do
+    source = """
+    defmodule MyApp.Posts do
+      def raw_query(current_user) do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.data_layer_query(actor: current_user)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "actor"
+    assert issue.message =~ "Ash.data_layer_query"
+  end
+
   test "reports actor: on bulk_update after a for_read pipe" do
     source = """
     defmodule MyApp.Posts do
