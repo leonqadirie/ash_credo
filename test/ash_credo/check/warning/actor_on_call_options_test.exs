@@ -81,6 +81,144 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptionsTest do
     assert issue.message =~ "Ash.create!"
   end
 
+  test "reports actor: on an aggregate call after a for_read pipe" do
+    source = """
+    defmodule MyApp.Posts do
+      def total_likes(current_user) do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.sum(:likes, actor: current_user)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "actor"
+    assert issue.message =~ "Ash.sum"
+  end
+
+  test "reports tenant: on Ash.aggregate! when the query is bound to a variable" do
+    source = """
+    defmodule MyApp.Posts do
+      def stats(tenant) do
+        query = Ash.Query.for_read(MyApp.Post, :read, %{})
+        Ash.aggregate!(query, {:count, :count}, tenant: tenant)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "tenant"
+    assert issue.message =~ "Ash.aggregate!"
+  end
+
+  test "no issue for an aggregate without a pre-built subject (sanctioned form)" do
+    source = """
+    defmodule MyApp.Posts do
+      def total_likes(current_user) do
+        Ash.sum(MyApp.Post, :likes, actor: current_user)
+      end
+    end
+    """
+
+    assert [] = run_check(ActorOnCallOptions, source)
+  end
+
+  test "no issue for a 2-arg aggregate whose spec list names an :actor aggregate" do
+    # Without a trailing opts argument, the aggregate-spec list is a
+    # required argument, not the options of the call.
+    source = """
+    defmodule MyApp.Posts do
+      def stats do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.aggregate([{:actor, :count}])
+      end
+    end
+    """
+
+    assert [] = run_check(ActorOnCallOptions, source)
+  end
+
+  test "reports actor: on read_first after a for_read pipe" do
+    source = """
+    defmodule MyApp.Posts do
+      def newest(current_user) do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.read_first(actor: current_user)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "actor"
+    assert issue.message =~ "Ash.read_first"
+  end
+
+  test "reports actor: on data_layer_query (delegates to read)" do
+    source = """
+    defmodule MyApp.Posts do
+      def raw_query(current_user) do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.data_layer_query(actor: current_user)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "actor"
+    assert issue.message =~ "Ash.data_layer_query"
+  end
+
+  test "reports actor: on bulk_update after a for_read pipe" do
+    source = """
+    defmodule MyApp.Posts do
+      def archive_all(current_user) do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.bulk_update(:archive, %{archived: true}, actor: current_user)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "actor"
+    assert issue.message =~ "Ash.bulk_update"
+  end
+
+  test "reports tenant: on bulk_destroy! when the query is bound to a variable" do
+    source = """
+    defmodule MyApp.Posts do
+      def purge(tenant) do
+        query = Ash.Query.for_read(MyApp.Post, :read, %{})
+        Ash.bulk_destroy!(query, :destroy, %{}, tenant: tenant)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "tenant"
+    assert issue.message =~ "Ash.bulk_destroy!"
+  end
+
+  test "no issue for a bulk_update whose keyword input names an :actor field" do
+    # Without a trailing opts argument, the input keyword list is a
+    # required argument, not the options of the call.
+    source = """
+    defmodule MyApp.Posts do
+      def reassign(new_actor) do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.bulk_update(:reassign, [actor: new_actor])
+      end
+    end
+    """
+
+    assert [] = run_check(ActorOnCallOptions, source)
+  end
+
   test "resolves aliased builder modules" do
     source = """
     defmodule MyApp.Posts do
