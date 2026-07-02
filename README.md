@@ -88,7 +88,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `SensitiveAttributeExposed` | Warning | High | No | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
 | `SensitiveFieldInAccept` | Warning | High | No | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
 | `UnknownAction` | Warning | High | No | Flags `Ash.*` calls referencing actions that do not exist on the resolved resource, with a fuzzy `Did you mean` hint. **Requires compiled project.** |
-| `WildcardAcceptOnAction` | Warning | High | No | Detects `accept :*` on `create`/`update` actions (mass-assignment risk) |
+| `WildcardAcceptOnAction` | Warning | High | No | Detects `accept :*` on `create`/`update`/soft `destroy` actions (mass-assignment risk) |
 | `AnonymousFunctionInDsl` | Refactor | Normal | No | Flags `fn`/`&` captures passed to `change`/`validate`/`prepare`/`calculate` - anonymous functions can never be atomic (changes/validations) or supply an expression (calculations); extract them into callback modules |
 | `DirectiveInFunctionBody` | Refactor | Normal | No | Flags `require`/`import`/`alias` of configured modules (default `Ash.Query`, `Ash.Expr`) declared inside function bodies instead of at module level |
 | `LargeResource` | Refactor | Low | No | Flags resource files exceeding 400 lines |

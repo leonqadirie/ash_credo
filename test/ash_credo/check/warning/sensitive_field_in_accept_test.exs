@@ -73,6 +73,41 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAcceptTest do
     assert issue.message =~ "is_admin"
   end
 
+  test "reports issue for dangerous fields accepted by a soft destroy" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource, domain: MyApp.Accounts
+
+      actions do
+        destroy :archive do
+          soft? true
+          accept [:archived_reason, :is_admin]
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(SensitiveFieldInAccept, source)
+    assert issue.message =~ "is_admin"
+    assert issue.line_no == 7
+  end
+
+  test "no issue for dangerous fields on a hard destroy (Ash resets its accept)" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource, domain: MyApp.Accounts
+
+      actions do
+        destroy :purge do
+          accept [:is_admin]
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(SensitiveFieldInAccept, source)
+  end
+
   test "reports issue for dangerous fields in defaults" do
     source = """
     defmodule MyApp.User do

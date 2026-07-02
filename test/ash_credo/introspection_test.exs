@@ -846,6 +846,35 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "accepting_action_entities/1" do
+    test "returns creates, updates, and soft destroys but not hard destroys" do
+      # Ash's DefaultAccept transformer resets `accept` to [] on destroys
+      # unless `soft?` is true, so only soft destroys have a live accept.
+      source = """
+      defmodule Foo do
+        use Ash.Resource
+
+        actions do
+          read :read
+          create :create
+          update :update
+          destroy :hard_destroy
+          destroy :archive do
+            soft? true
+          end
+          destroy :archive_inline, soft?: true
+        end
+      end
+      """
+
+      actions = first_resource_section(source, :actions)
+      entities = Introspection.accepting_action_entities(actions)
+
+      names = Enum.map(entities, &Introspection.entity_name/1)
+      assert names == [:create, :update, :archive, :archive_inline]
+    end
+  end
+
   describe "option_occurrences/2" do
     test "returns normalized inline and body option values" do
       ast =
