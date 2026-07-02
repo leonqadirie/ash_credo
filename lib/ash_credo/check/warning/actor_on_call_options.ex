@@ -39,10 +39,17 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
   alias AshCredo.Introspection.AshCallScanner
 
   # Ash action-invocation functions taking a query/changeset/input subject
-  # plus an options list. The aggregate family (`Ash.sum/3` and friends)
-  # belongs here too: their opts merge Ash's global options, so they take
-  # `actor:`/`tenant:` at call time just like `Ash.read!/2`.
-  @action_funs ~w(read read! read_one read_one! first first! stream! count count! exists exists? create create! update update! destroy destroy! run_action run_action! aggregate aggregate! sum sum! avg avg! min min! max max! list list!)a
+  # plus an options list. The aggregate and bulk families belong here too:
+  # their opts merge Ash's global options, so they take `actor:`/`tenant:`
+  # at call time just like `Ash.read!/2`. They are grouped by how many
+  # arguments precede the optional trailing opts (subject included), so a
+  # required argument that happens to be a keyword-shaped list - e.g. the
+  # aggregate specs in `Ash.aggregate(query, [{:actor, :count}])` - is
+  # never mistaken for the opts.
+  @subject_opts_funs ~w(read read! read_one read_one! first first! stream! count count! exists exists? create create! update update! destroy destroy! run_action run_action!)a
+  @aggregate_funs ~w(aggregate aggregate! sum sum! avg avg! min min! max max! list list!)a
+  @bulk_funs ~w(bulk_update bulk_update! bulk_destroy bulk_destroy!)a
+  @action_funs @subject_opts_funs ++ @aggregate_funs ++ @bulk_funs
 
   # Builders that establish the action context; actor/tenant belong in their
   # options.
@@ -67,7 +74,7 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
 
     with true <- fun_name in @action_funs,
          [subject | _] <- call_info.args,
-         keys when keys != [] <- flagged_keys(call_info.args),
+         keys when keys != [] <- flagged_keys(call_info.args, required_args(fun_name)),
          true <- builder_subject?(subject, call_info, MapSet.new()) do
       Enum.map(keys, &flagged_key_issue(&1, fun_name, meta, issue_meta))
     else
@@ -77,15 +84,27 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
 
   defp check_call(_call_info, _issue_meta), do: []
 
-  # Walks to the final argument (the options of an Ash call) in one pass
-  # with no intermediate list - the descent is what `List.last/1` does
-  # internally, with the keyword-list shape check fused in.
-  defp flagged_keys([opts]) when is_list(opts) do
+  # Number of arguments (subject included, after pipe normalization) that
+  # precede the optional trailing opts. Only a trailing keyword list beyond
+  # that count is the options of the call.
+  defp required_args(fun_name) when fun_name in @aggregate_funs, do: 2
+  defp required_args(fun_name) when fun_name in @bulk_funs, do: 3
+  defp required_args(_fun_name), do: 1
+
+  # Descends past the required arguments, then walks to the final argument
+  # in one pass with no intermediate list, with the keyword-list shape
+  # check fused in. A call with no argument beyond the required ones has
+  # no options to scan.
+  defp flagged_keys([_arg | rest], required_args) when required_args > 0 do
+    flagged_keys(rest, required_args - 1)
+  end
+
+  defp flagged_keys([opts], 0) when is_list(opts) do
     for {key, _value} <- opts, is_atom(key), key in @flagged_keys, do: key
   end
 
-  defp flagged_keys([_arg | rest]), do: flagged_keys(rest)
-  defp flagged_keys(_args), do: []
+  defp flagged_keys([_arg | rest], 0), do: flagged_keys(rest, 0)
+  defp flagged_keys(_args, _required_args), do: []
 
   # True when the call subject visibly went through a `for_*` builder:
   # directly, anywhere in a pipe chain, or via simple variable bindings

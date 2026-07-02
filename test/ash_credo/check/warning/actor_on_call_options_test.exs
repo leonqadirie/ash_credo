@@ -124,6 +124,69 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptionsTest do
     assert [] = run_check(ActorOnCallOptions, source)
   end
 
+  test "no issue for a 2-arg aggregate whose spec list names an :actor aggregate" do
+    # Without a trailing opts argument, the aggregate-spec list is a
+    # required argument, not the options of the call.
+    source = """
+    defmodule MyApp.Posts do
+      def stats do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.aggregate([{:actor, :count}])
+      end
+    end
+    """
+
+    assert [] = run_check(ActorOnCallOptions, source)
+  end
+
+  test "reports actor: on bulk_update after a for_read pipe" do
+    source = """
+    defmodule MyApp.Posts do
+      def archive_all(current_user) do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.bulk_update(:archive, %{archived: true}, actor: current_user)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "actor"
+    assert issue.message =~ "Ash.bulk_update"
+  end
+
+  test "reports tenant: on bulk_destroy! when the query is bound to a variable" do
+    source = """
+    defmodule MyApp.Posts do
+      def purge(tenant) do
+        query = Ash.Query.for_read(MyApp.Post, :read, %{})
+        Ash.bulk_destroy!(query, :destroy, %{}, tenant: tenant)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "tenant"
+    assert issue.message =~ "Ash.bulk_destroy!"
+  end
+
+  test "no issue for a bulk_update whose keyword input names an :actor field" do
+    # Without a trailing opts argument, the input keyword list is a
+    # required argument, not the options of the call.
+    source = """
+    defmodule MyApp.Posts do
+      def reassign(new_actor) do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.bulk_update(:reassign, [actor: new_actor])
+      end
+    end
+    """
+
+    assert [] = run_check(ActorOnCallOptions, source)
+  end
+
   test "resolves aliased builder modules" do
     source = """
     defmodule MyApp.Posts do
