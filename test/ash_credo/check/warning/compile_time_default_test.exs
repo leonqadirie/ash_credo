@@ -71,6 +71,22 @@ defmodule AshCredo.Check.Warning.CompileTimeDefaultTest do
     assert issue.trigger == "Ash.UUID.generate()"
   end
 
+  test "reports frozen Ash.UUIDv7.generate() default" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      attributes do
+        attribute :id, :uuid_v7, default: Ash.UUIDv7.generate()
+      end
+    end
+    """
+
+    assert [issue] = run_check(CompileTimeDefault, source)
+    assert issue.trigger == "Ash.UUIDv7.generate()"
+    assert issue.message =~ "default: &Ash.UUIDv7.generate/0"
+  end
+
   test "reports frozen default on an action argument" do
     source = """
     defmodule MyApp.Post do
