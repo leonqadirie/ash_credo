@@ -347,7 +347,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
 
   defp ast_context(call_info) do
     %{
-      aliases: call_info.aliases,
+      env: call_info.env,
       bindings: call_info.bindings,
       enclosing_module_segments: call_info.enclosing_module_segments
     }
@@ -373,14 +373,12 @@ defmodule AshCredo.Introspection.AshCallResolver do
     end
   end
 
-  # Alias expansion can reintroduce non-atom segments even when `segs` is
-  # all atoms: `alias __MODULE__.Post` targets carry the `__MODULE__` AST
-  # tuple, so resolve it against the enclosing module before accepting.
+  # `alias __MODULE__.Post` targets are substituted at declaration time by
+  # the scanner's directive capture, so env expansion always yields plain
+  # atom segments here.
   defp literal_segments({:__aliases__, _, segs}, context) when is_list(segs) do
     if Enum.all?(segs, &is_atom/1) do
-      segs
-      |> Aliases.expand_alias(context.aliases)
-      |> Aliases.resolve_module_self(context.enclosing_module_segments)
+      {:ok, Aliases.expand_alias(segs, context.env)}
     else
       :error
     end

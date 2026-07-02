@@ -10,12 +10,11 @@ defmodule AshCredo.Introspection.ResourceContext do
   module name is not a literal alias.
   """
 
-  @enforce_keys [:module_ast, :aliases, :use_line, :use_opts, :absolute_segments]
-  defstruct [:module_ast, :aliases, :use_line, :use_opts, :absolute_segments]
+  @enforce_keys [:module_ast, :use_line, :use_opts, :absolute_segments]
+  defstruct [:module_ast, :use_line, :use_opts, :absolute_segments]
 
   @type t :: %__MODULE__{
           module_ast: Macro.t(),
-          aliases: [{[atom()], [atom()]}],
           use_line: pos_integer() | nil,
           use_opts: keyword(),
           absolute_segments: [atom()] | nil

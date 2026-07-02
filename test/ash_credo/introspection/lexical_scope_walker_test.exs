@@ -1,6 +1,7 @@
 defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
   use ExUnit.Case, async: true
 
+  alias AshCredo.Introspection.Aliases
   alias AshCredo.Introspection.LexicalScopeWalker
   alias AshCredo.Introspection.LexicalScopeWalker.Scope
 
@@ -12,10 +13,10 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
 
   defp parse!(source), do: Code.string_to_quoted!(source)
 
-  defp record_aliases_at(target_call) do
+  defp record_env_at(target_call) do
     fn
       {{:., _, [_, ^target_call]}, _, _}, scope, acc ->
-        [LexicalScopeWalker.aliases(scope) | acc]
+        [LexicalScopeWalker.env(scope) | acc]
 
       _node, _scope, acc ->
         acc
@@ -24,7 +25,9 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
 
   defp noop, do: fn _node, _scope, acc -> acc end
 
-  describe "alias frame push/pop" do
+  defp resolves?(env, segments, target), do: Aliases.expand_alias(segments, env) == target
+
+  describe "env frame push/pop" do
     test "alias declared in module body is visible at every nested call" do
       ast =
         parse!("""
@@ -35,9 +38,9 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
         end
         """)
 
-      [aliases_at_mark] = walk(ast, [], record_aliases_at(:mark), noop())
+      [env_at_mark] = walk(ast, [], record_env_at(:mark), noop())
 
-      assert aliases_at_mark == [{[:Query], [:Ash, :Query]}]
+      assert resolves?(env_at_mark, [:Query], [:Ash, :Query])
     end
 
     test "alias declared inside a def body is scoped to that def" do
@@ -54,12 +57,12 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
         """)
 
       results =
-        walk(ast, [], record_aliases_at(:mark), noop())
+        walk(ast, [], record_env_at(:mark), noop())
         |> Enum.reverse()
 
-      assert [aliases_in_first, aliases_in_second] = results
-      assert {[:Q], [:Ash, :Query]} in aliases_in_first
-      refute Enum.any?(aliases_in_second, fn {alias_segs, _target} -> alias_segs == [:Q] end)
+      assert [env_in_first, env_in_second] = results
+      assert resolves?(env_in_first, [:Q], [:Ash, :Query])
+      assert resolves?(env_in_second, [:Q], [:Q])
     end
 
     test "alias inside one branch does not leak into the sibling branch" do
@@ -78,12 +81,73 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
         """)
 
       results =
-        walk(ast, [], record_aliases_at(:mark), noop())
+        walk(ast, [], record_env_at(:mark), noop())
         |> Enum.reverse()
 
-      [in_do, in_else] = results
-      assert {[:Q], [:Ash, :Query]} in in_do
-      refute Enum.any?(in_else, fn {alias_segs, _target} -> alias_segs == [:Q] end)
+      [env_in_do, env_in_else] = results
+      assert resolves?(env_in_do, [:Q], [:Ash, :Query])
+      assert resolves?(env_in_else, [:Q], [:Q])
+    end
+  end
+
+  describe "require and import tracking" do
+    test "require in one def is not visible in a sibling def" do
+      ast =
+        parse!("""
+        defmodule Foo do
+          def first(q) do
+            require Ash.Query
+            Probe.mark(q)
+          end
+
+          def second(q), do: Probe.mark(q)
+        end
+        """)
+
+      results =
+        walk(ast, [], record_env_at(:mark), noop())
+        |> Enum.reverse()
+
+      [env_in_first, env_in_second] = results
+      assert Macro.Env.required?(env_in_first, Ash.Query)
+      refute Macro.Env.required?(env_in_second, Ash.Query)
+    end
+
+    test "require inside a with clause is visible in its do block but not after" do
+      ast =
+        parse!("""
+        defmodule Foo do
+          def go do
+            with _x <- (require Ash.Query; :ok) do
+              Probe.mark(:inside)
+            end
+            Probe.mark(:after)
+          end
+        end
+        """)
+
+      results =
+        walk(ast, [], record_env_at(:mark), noop())
+        |> Enum.reverse()
+
+      [env_inside, env_after] = results
+      assert Macro.Env.required?(env_inside, Ash.Query)
+      refute Macro.Env.required?(env_after, Ash.Query)
+    end
+
+    test "import registers a require" do
+      ast =
+        parse!("""
+        defmodule Foo do
+          import Ash.Query
+
+          def go(q), do: Probe.mark(q)
+        end
+        """)
+
+      [env_at_mark] = walk(ast, [], record_env_at(:mark), noop())
+
+      assert Macro.Env.required?(env_at_mark, Ash.Query)
     end
   end
 
@@ -104,13 +168,13 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
         """)
 
       results =
-        walk(ast, [], record_aliases_at(:mark), noop())
+        walk(ast, [], record_env_at(:mark), noop())
         |> Enum.reverse()
 
-      [inside_quote, after_quote] = results
+      [env_inside_quote, env_after_quote] = results
       # The Q alias was dropped, so it's NOT visible at either probe site.
-      refute Enum.any?(inside_quote, fn {alias_segs, _target} -> alias_segs == [:Q] end)
-      refute Enum.any?(after_quote, fn {alias_segs, _target} -> alias_segs == [:Q] end)
+      assert resolves?(env_inside_quote, [:Q], [:Q])
+      assert resolves?(env_after_quote, [:Q], [:Q])
     end
 
     test "in_quote? reflects nesting" do
@@ -158,10 +222,10 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
         end
         """)
 
-      [inside_quote] =
-        walk(ast, [], record_aliases_at(:mark), noop(), track_aliases_in_quote: true)
+      [env_inside_quote] =
+        walk(ast, [], record_env_at(:mark), noop(), track_aliases_in_quote: true)
 
-      assert {[:Q], [:Ash, :Query]} in inside_quote
+      assert resolves?(env_inside_quote, [:Q], [:Ash, :Query])
     end
   end
 
@@ -183,9 +247,9 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
         end
         """)
 
-      [aliases_after_with] = walk(ast, [], record_aliases_at(:mark), noop())
+      [env_after_with] = walk(ast, [], record_env_at(:mark), noop())
 
-      refute Enum.any?(aliases_after_with, fn {alias_segs, _target} -> alias_segs == [:Q] end)
+      assert resolves?(env_after_with, [:Q], [:Q])
     end
 
     test "for-construct scopes aliases by default (matches Elixir)" do
@@ -201,9 +265,9 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
         end
         """)
 
-      [aliases_after_for] = walk(ast, [], record_aliases_at(:mark), noop())
+      [env_after_for] = walk(ast, [], record_env_at(:mark), noop())
 
-      refute Enum.any?(aliases_after_for, fn {alias_segs, _target} -> alias_segs == [:Q] end)
+      assert resolves?(env_after_for, [:Q], [:Q])
     end
 
     test "passing lexical_scope_nodes: [] opts out of with/for scoping" do
@@ -222,40 +286,15 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
         end
         """)
 
-      [aliases_after_with] =
-        walk(ast, [], record_aliases_at(:mark), noop(), lexical_scope_nodes: [])
+      [env_after_with] =
+        walk(ast, [], record_env_at(:mark), noop(), lexical_scope_nodes: [])
 
-      assert {[:Q], [:Ash, :Query]} in aliases_after_with
+      assert resolves?(env_after_with, [:Q], [:Ash, :Query])
     end
   end
 
   describe "module_stack" do
-    test "current_module_segments returns nil when not tracking" do
-      ast =
-        parse!("""
-        defmodule MyApp.Foo do
-          def go, do: Probe.mark()
-        end
-        """)
-
-      [segs] =
-        walk(
-          ast,
-          [],
-          fn
-            {{:., _, [_, :mark]}, _, _}, scope, acc ->
-              [LexicalScopeWalker.current_module_segments(scope) | acc]
-
-            _node, _scope, acc ->
-              acc
-          end,
-          noop()
-        )
-
-      assert segs == nil
-    end
-
-    test "current_module_segments returns absolute path when tracking" do
+    test "current_module_segments returns absolute path across nested defmodules" do
       ast =
         parse!("""
         defmodule MyApp.Outer do
@@ -276,8 +315,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
             _node, _scope, acc ->
               acc
           end,
-          noop(),
-          track_module_stack: true
+          noop()
         )
 
       assert segs == [:MyApp, :Outer, :Inner]
@@ -302,19 +340,16 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
             _node, _scope, acc ->
               acc
           end,
-          noop(),
-          track_module_stack: true
+          noop()
         )
 
       assert in_module == true
     end
 
     test "current_module_segments returns nil for non-literal defmodule names" do
-      # The pre-walker code distinguished "not in a module" (depth 0) from
-      # "in a module with unknown name" (depth > 0, top = nil) via
-      # `defmodule_depth`. The walker now exposes this via `in_module?/1`
-      # while `current_module_segments/1` keeps returning nil for unknown
-      # names (so callers that need the segments can branch correctly).
+      # `in_module?/1` distinguishes "not in a module" from "in a module
+      # with unknown name"; `current_module_segments/1` returns nil for
+      # unknown names so callers that need the segments can branch.
       ast =
         parse!("""
         defmodule Module.concat([:Foo]) do
@@ -333,8 +368,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
             _node, _scope, acc ->
               acc
           end,
-          noop(),
-          track_module_stack: true
+          noop()
         )
 
       assert segs == nil
@@ -361,11 +395,25 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
             _node, _scope, acc ->
               acc
           end,
-          noop(),
-          track_module_stack: true
+          noop()
         )
 
       assert segs == [:MyApp, :Accounts, :User]
+    end
+
+    test "alias __MODULE__ targets resolve against the enclosing module" do
+      ast =
+        parse!("""
+        defmodule MyApp.Blog do
+          alias __MODULE__.Post
+
+          def go, do: Probe.mark(Post)
+        end
+        """)
+
+      [env_at_mark] = walk(ast, [], record_env_at(:mark), noop())
+
+      assert resolves?(env_at_mark, [:Post], [:MyApp, :Blog, :Post])
     end
   end
 
@@ -383,11 +431,11 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
         end
         """)
 
-      results = walk(ast, [], record_aliases_at(:mark), noop())
+      results = walk(ast, [], record_env_at(:mark), noop())
 
-      assert Enum.all?(results, fn aliases ->
-               {[:Query], [:Ash, :Query]} in aliases and
-                 {[:Expr], [:Ash, :Expr]} in aliases
+      assert Enum.all?(results, fn env ->
+               resolves?(env, [:Query], [:Ash, :Query]) and
+                 resolves?(env, [:Expr], [:Ash, :Expr])
              end)
     end
   end
@@ -396,18 +444,18 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
     test "on_enter for an :alias node sees the alias already added" do
       ast = parse!("alias Ash.Query, as: Q")
 
-      [seen] =
+      [env_seen] =
         walk(
           ast,
           [],
           fn
-            {:alias, _, _}, scope, acc -> [LexicalScopeWalker.aliases(scope) | acc]
+            {:alias, _, _}, scope, acc -> [LexicalScopeWalker.env(scope) | acc]
             _node, _scope, acc -> acc
           end,
           noop()
         )
 
-      assert {[:Q], [:Ash, :Query]} in seen
+      assert resolves?(env_seen, [:Q], [:Ash, :Query])
     end
 
     test "on_leave for a :do block sees the scope before it pops" do
@@ -418,18 +466,18 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
         end
         """)
 
-      [seen] =
+      [env_seen] =
         walk(
           ast,
           [],
           noop(),
           fn
-            {:do, _}, scope, acc -> [LexicalScopeWalker.aliases(scope) | acc]
+            {:do, _}, scope, acc -> [LexicalScopeWalker.env(scope) | acc]
             _node, _scope, acc -> acc
           end
         )
 
-      assert {[:Q], [:Ash, :Query]} in seen
+      assert resolves?(env_seen, [:Q], [:Ash, :Query])
     end
   end
 
@@ -458,10 +506,11 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
 
     test "Scope struct exposes correct accessors" do
       scope = %Scope{}
-      assert LexicalScopeWalker.aliases(scope) == []
+      assert %Macro.Env{} = LexicalScopeWalker.env(scope)
       assert LexicalScopeWalker.quote_depth(scope) == 0
       assert LexicalScopeWalker.in_quote?(scope) == false
       assert LexicalScopeWalker.current_module_segments(scope) == nil
+      refute LexicalScopeWalker.in_module?(scope)
     end
   end
 end

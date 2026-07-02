@@ -7,13 +7,14 @@ defmodule AshCredo.Introspection.RemoteBangScanner do
   Used by `AshCredo.Check.Refactor.RaisingCall`'s compiled-introspection
   pass to find candidate code-interface bang calls.
 
-  Aliases are resolved lexically via `LexicalScopeWalker`, including the
-  common `alias __MODULE__.Foo` pattern: when an expanded alias contains
-  `__MODULE__`, the scanner substitutes the enclosing `defmodule`'s
-  absolute segments so `Foo.archive!()` resolves to the same module as
-  the fully-qualified spelling. Calls with a non-literal module
-  (`apply/3`, variable references, bare `__MODULE__.fun!()`) are skipped,
-  since the call site cannot be resolved to a concrete module at lint time.
+  Aliases are resolved lexically via `LexicalScopeWalker`'s env. The
+  common `alias __MODULE__.Foo` pattern is substituted at declaration
+  time by the walker, and use-site `__MODULE__.Foo.bar!()` segments are
+  substituted here against the enclosing `defmodule`'s absolute segments,
+  so both resolve to the same module as the fully-qualified spelling.
+  Calls with a non-literal module (`apply/3`, variable references, bare
+  `__MODULE__.fun!()`) are skipped, since the call site cannot be
+  resolved to a concrete module at lint time.
   """
 
   alias AshCredo.Introspection.{Aliases, LexicalScopeWalker}
@@ -30,8 +31,7 @@ defmodule AshCredo.Introspection.RemoteBangScanner do
       |> LexicalScopeWalker.traverse(
         %{calls: []},
         &on_enter/3,
-        fn _node, _scope, state -> state end,
-        track_module_stack: true
+        fn _node, _scope, state -> state end
       )
 
     Enum.reverse(calls)
@@ -44,12 +44,14 @@ defmodule AshCredo.Introspection.RemoteBangScanner do
        )
        when is_list(args) and is_atom(fun_name) and is_list(segments) do
     if bang?(fun_name) do
-      # `resolve_module_self/2` drops calls that cannot resolve to a
-      # concrete module (e.g. `__MODULE__` inside a non-literal
-      # `defmodule unquote(...)`) - `Module.concat/1` would raise on them.
+      # Expand first, substitute second: `expand_alias/2` is a no-op on
+      # `__MODULE__`-headed segments, and `resolve_module_self/2` drops
+      # calls that cannot resolve to a concrete module (e.g. `__MODULE__`
+      # inside a non-literal `defmodule unquote(...)`) - `Module.concat/1`
+      # would raise on them.
       resolved =
         segments
-        |> Aliases.expand_alias(LexicalScopeWalker.aliases(scope))
+        |> Aliases.expand_alias(LexicalScopeWalker.env(scope))
         |> Aliases.resolve_module_self(LexicalScopeWalker.current_module_segments(scope))
 
       case resolved do

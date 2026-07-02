@@ -141,8 +141,6 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
   alias AshCredo.Introspection.{Aliases, LexicalScopeWalker}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
-  @directive_kinds ~w(require import)a
-
   @impl AshCredo.CompiledCheck
   def run_compiled(source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
@@ -159,21 +157,13 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
 
   defp do_run(source_file, targets, issue_meta) do
     {resolved, load_issues} = resolve_macro_sets(targets, issue_meta)
-    target_keys = resolved |> Map.keys() |> MapSet.new()
 
     call_issues =
       source_file
       |> Credo.SourceFile.ast()
-      |> collect_module_bodies(target_keys)
-      |> Enum.flat_map(fn {body, inherited_aliases, inherited_required} ->
-        check_module_body(
-          body,
-          inherited_aliases,
-          inherited_required,
-          resolved,
-          target_keys,
-          issue_meta
-        )
+      |> collect_module_bodies()
+      |> Enum.flat_map(fn {body, inherited_env} ->
+        check_module_body(body, inherited_env, resolved, issue_meta)
       end)
       |> Enum.sort_by(& &1.line_no)
 
@@ -204,128 +194,69 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     end
   end
 
-  # Walks the whole file AST and returns `{body, inherited_aliases,
-  # inherited_required}` tuples for every `defmodule` (including nested ones).
-  # `inherited_aliases` and `inherited_required` are the aliases and required
-  # target modules visible at the point of the `defmodule` declaration - in
-  # Elixir, nested modules inherit both `alias` and `require`/`import` from
-  # the enclosing lexical scope. Defmodules inside `quote do ... end` are
-  # NOT captured (they belong to the macro caller's site).
-  defp collect_module_bodies(ast, target_keys) do
-    initial_state = %{
-      require_frames: [MapSet.new()],
-      target_keys: target_keys,
-      bodies: []
-    }
-
+  # Walks the whole file AST and returns `{body, inherited_env}` tuples for
+  # every `defmodule` (including nested ones). `inherited_env` is the
+  # `Macro.Env` visible at the point of the `defmodule` declaration - the
+  # walker records `alias`/`require`/`import` directives into it, so nested
+  # modules inherit all three from the enclosing lexical scope, exactly as
+  # Elixir does. Defmodules inside `quote do ... end` are NOT captured (they
+  # belong to the macro caller's site).
+  defp collect_module_bodies(ast) do
     {%{bodies: bodies}, _scope} =
       LexicalScopeWalker.traverse(
         ast,
-        initial_state,
+        %{bodies: []},
         &enter_for_bodies/3,
-        fn _node, _scope, acc -> acc end,
-        on_frame_push: &push_require_frame/1,
-        on_frame_pop: &pop_require_frame/1
+        fn _node, _scope, acc -> acc end
       )
 
     Enum.reverse(bodies)
-  end
-
-  defp enter_for_bodies({directive, _, [{:__aliases__, _, segs} | _]}, scope, state)
-       when directive in @directive_kinds do
-    if LexicalScopeWalker.in_quote?(scope) do
-      state
-    else
-      maybe_put_required(state, segs, scope)
-    end
   end
 
   defp enter_for_bodies({:defmodule, _, [_alias, [do: body]]}, scope, state) do
     if LexicalScopeWalker.in_quote?(scope) do
       state
     else
-      captured = {body, LexicalScopeWalker.aliases(scope), current_required(state)}
+      captured = {body, LexicalScopeWalker.env(scope)}
       %{state | bodies: [captured | state.bodies]}
     end
   end
 
   defp enter_for_bodies(_node, _scope, state), do: state
 
-  # Single-pass per-body check: walks the body tracking lexical alias and
-  # require/import frames, and records sites only when the call's module is
-  # NOT in the require scope visible at that call site.
-  defp check_module_body(
-         body,
-         inherited_aliases,
-         inherited_required,
-         resolved,
-         target_keys,
-         issue_meta
-       ) do
+  # Single-pass per-body check: walks the body with the inherited env as
+  # the base frame, and records sites only when the call's module is NOT
+  # required in the env visible at that call site.
+  defp check_module_body(body, inherited_env, resolved, issue_meta) do
     body
-    |> collect_call_sites(inherited_aliases, inherited_required, resolved, target_keys)
+    |> collect_call_sites(inherited_env, resolved)
     |> Enum.map(&build_issue(&1, issue_meta))
-  end
-
-  # Walks `segs` once: returns `{:ok, Module.concat(segs)}` only if every
-  # segment is an atom (rejecting interpolated/quoted aliases like
-  # `unquote(mod)` or `__MODULE__` mid-segment), otherwise `:error`.
-  defp atomic_module(segs) do
-    reduced =
-      Enum.reduce_while(segs, [], fn
-        seg, acc when is_atom(seg) -> {:cont, [seg | acc]}
-        _seg, _acc -> {:halt, :error}
-      end)
-
-    case reduced do
-      :error -> :error
-      reversed -> {:ok, reversed |> Enum.reverse() |> Module.concat()}
-    end
   end
 
   # The body we traverse is already the contents of the enclosing `defmodule`'s
   # do-block - we never visit that outermost `{:do, body}` tuple ourselves, so
-  # we rely on the walker's `:initial_aliases` opt to seed inherited aliases
-  # into the base frame, and we seed `require_frames` with the inherited
-  # required set in `initial_state` below. A nested module's calls then
-  # expand and resolve the same way Elixir does.
-  defp collect_call_sites(body, inherited_aliases, inherited_required, resolved, target_keys) do
-    initial_state = %{
-      require_frames: [inherited_required],
-      target_keys: target_keys,
-      sites: []
-    }
-
+  # the walker's `:initial_env` opt seeds the inherited env into the base
+  # frame. A nested module's calls then expand and resolve the same way
+  # Elixir does.
+  defp collect_call_sites(body, inherited_env, resolved) do
     {%{sites: sites}, _scope} =
       LexicalScopeWalker.traverse(
         body,
-        initial_state,
+        %{sites: []},
         &enter_for_calls(&1, &2, &3, resolved),
         fn _node, _scope, acc -> acc end,
-        track_module_stack: true,
-        initial_aliases: inherited_aliases,
-        on_frame_push: &push_require_frame/1,
-        on_frame_pop: &pop_require_frame/1
+        initial_env: inherited_env
       )
 
     Enum.reverse(sites)
   end
 
-  defp enter_for_calls({directive, _, [{:__aliases__, _, segs} | _]}, scope, state, _resolved)
-       when directive in @directive_kinds do
-    if LexicalScopeWalker.in_quote?(scope) do
-      state
-    else
-      maybe_put_required(state, segs, scope)
-    end
-  end
-
   # Qualified remote call: `Alias.fun(args)` parses as
-  #   {{:., _, [{:__aliases__, _, segs}, fun}]}, meta, args}
-  # Expand `segs` against the visible alias frames so `alias Ash.Query, as: Q;
-  # Q.filter(...)` is matched the same as a literal `Ash.Query.filter(...)`.
-  # Skip when inside a nested `defmodule` (that body is processed separately)
-  # or inside a `quote do ... end`.
+  #   {{:., _, [{:__aliases__, _, segs}, fun]}, meta, args}
+  # Expand `segs` through the env visible at the call so `alias Ash.Query,
+  # as: Q; Q.filter(...)` is matched the same as a literal
+  # `Ash.Query.filter(...)`. Skip when inside a nested `defmodule` (that
+  # body is processed separately) or inside a `quote do ... end`.
   defp enter_for_calls(
          {{:., _, [{:__aliases__, _, segs}, fun]}, meta, args},
          scope,
@@ -333,10 +264,11 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
          resolved
        )
        when is_atom(fun) and is_list(args) do
+    env = LexicalScopeWalker.env(scope)
+
     with false <- in_nested_module_or_quote?(scope),
-         {:ok, mod} <-
-           atomic_module(Aliases.expand_alias(segs, LexicalScopeWalker.aliases(scope))) do
-      maybe_record_call(state, resolved, mod, fun, args, meta)
+         {:ok, mod} <- Aliases.expand_to_module(segs, env) do
+      maybe_record_call(state, resolved, mod, fun, args, meta, env)
     else
       _ -> state
     end
@@ -352,46 +284,16 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     LexicalScopeWalker.in_module?(scope) or LexicalScopeWalker.in_quote?(scope)
   end
 
-  defp maybe_record_call(state, resolved, mod, fun, args, meta) do
+  defp maybe_record_call(state, resolved, mod, fun, args, meta, env) do
     with {:ok, macros} <- Map.fetch(resolved, mod),
          true <- MapSet.member?(macros, fun),
-         false <- MapSet.member?(current_required(state), mod) do
+         false <- Macro.Env.required?(env, mod) do
       site = %{module: mod, fun: fun, arity: length(args), line: meta[:line]}
       %{state | sites: [site | state.sites]}
     else
       _ -> state
     end
   end
-
-  # Each frame carries the cumulative set of requires visible at its depth: a
-  # pushed frame inherits its parent's set (Elixir nested scopes inherit
-  # `require`/`import`), so `current_required/1` is an O(1) head read instead
-  # of unioning the whole stack on every visited node.
-  defp push_require_frame(%{require_frames: [current | _]} = state),
-    do: update_in(state.require_frames, &[current | &1])
-
-  defp push_require_frame(state), do: update_in(state.require_frames, &[MapSet.new() | &1])
-
-  defp pop_require_frame(%{require_frames: [_ | rest]} = state),
-    do: %{state | require_frames: rest}
-
-  defp pop_require_frame(state), do: state
-
-  # Resolve `segs` against the visible alias frames, then add to the current
-  # require frame iff it expands to a tracked target module.
-  defp maybe_put_required(state, segs, scope) do
-    with {:ok, mod} <-
-           atomic_module(Aliases.expand_alias(segs, LexicalScopeWalker.aliases(scope))),
-         true <- MapSet.member?(state.target_keys, mod),
-         [current | rest] <- state.require_frames do
-      %{state | require_frames: [MapSet.put(current, mod) | rest]}
-    else
-      _ -> state
-    end
-  end
-
-  defp current_required(%{require_frames: [current | _]}), do: current
-  defp current_required(_), do: MapSet.new()
 
   defp build_issue(site, issue_meta) do
     mod_str = inspect(site.module)

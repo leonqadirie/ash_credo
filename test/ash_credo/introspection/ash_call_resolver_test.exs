@@ -153,10 +153,11 @@ defmodule AshCredo.Introspection.AshCallResolverTest do
     end
 
     test "resolves through multi-alias __MODULE__.{X} without crashing" do
-      # The grouped __MODULE__ prefix yields a real alias entry (see
-      # Aliases.alias_entries/1), so this resolves via resolve_module_self;
-      # the implicit nested-module fallback would coincidentally find the
-      # same module here, but the alias path is what this exercises.
+      # The grouped __MODULE__ prefix is substituted at declaration time by
+      # Aliases.apply_directive/3, so `Post` expands straight to the
+      # absolute module; the implicit nested-module fallback would
+      # coincidentally find the same module here, but the alias path is
+      # what this exercises.
       source = """
       defmodule AshCredoFixtures.Blog do
         alias __MODULE__.{Post}

@@ -573,6 +573,127 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       assert [] = run_check(MissingMacroDirective, source)
     end
 
+    test "require Ash.Query, as: Q satisfies calls through the Q alias" do
+      source = """
+      defmodule MyApp.Caller do
+        require Ash.Query, as: Q
+
+        def foo(q), do: Q.filter(q, true)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "require Ash.Query, as: Q satisfies calls through the real name" do
+      source = """
+      defmodule MyApp.Caller do
+        require Ash.Query, as: Q
+
+        def foo(q), do: Ash.Query.filter(q, true)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "alias + import under the alias name satisfies the check" do
+      source = """
+      defmodule MyApp.Caller do
+        alias Ash.Query, as: Q
+        import Q
+
+        def foo(q), do: Q.filter(q, true)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "grouped require Ash.{Query, Expr} satisfies both modules" do
+      source = """
+      defmodule MyApp.Caller do
+        require Ash.{Query, Expr}
+
+        def foo(q) do
+          q = Ash.Query.filter(q, true)
+          Ash.Expr.expr(is_nil(q))
+        end
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "an alias __MODULE__ target does not resolve to a macro module" do
+      # `Query` here is `MyApp.Query`, not `Ash.Query` - nothing to flag.
+      source = """
+      defmodule MyApp do
+        alias __MODULE__.Query
+
+        def foo(q), do: Query.filter(q, true)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
+    test "an Elixir.-prefixed call without require is flagged" do
+      source = """
+      defmodule MyApp.Caller do
+        def foo(q), do: Elixir.Ash.Query.filter(q, true)
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source)
+      assert issue.trigger == "Ash.Query.filter"
+    end
+
+    test "an alias chain resolves to the real macro module" do
+      # `alias A.Query` resolves through the earlier `alias Ash, as: A` at
+      # declaration time, so `Query.filter` is `Ash.Query.filter` and needs
+      # a require. The entry-list resolver missed this chain entirely.
+      source = """
+      defmodule MyApp.Caller do
+        alias Ash, as: A
+        alias A.Query
+
+        def foo(q), do: Query.filter(q, true)
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source)
+      assert issue.trigger == "Ash.Query.filter"
+    end
+
+    test "directives inside a non-literal defmodule do not crash the check" do
+      source = """
+      defmodule Module.concat([:MyApp, :Dyn]) do
+        alias __MODULE__.Ignored
+
+        def foo(q), do: Ash.Query.filter(q, true)
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source)
+      assert issue.trigger == "Ash.Query.filter"
+    end
+
+    test "a re-aliased name resolves to its newest target" do
+      # `Q` is re-bound to `String` before the call, so `Q.filter` is
+      # `String.filter` - not a macro target, nothing to flag.
+      source = """
+      defmodule MyApp.Caller do
+        alias Ash.Query, as: Q
+        alias String, as: Q
+
+        def foo(q), do: Q.filter(q, true)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source)
+    end
+
     test "alias inside a function body is scoped to that function" do
       # `alias` inside `def foo` is visible to `Q.filter` inside the same body,
       # so the check should still flag it as needing `require Ash.Query`.

@@ -55,12 +55,12 @@ defmodule AshCredo.CheckArchitectureTest do
   # `:as` rename, grouped (`alias X.{Compiled, Aliases}`), and a parent alias
   # with a relative call (`alias X; X.Compiled.f(...)`).
   defp references_compiled?(ast) do
-    aliases = collect_aliases(ast)
+    env = collect_aliases_env(ast)
 
     {_ast, found?} =
       Macro.prewalk(ast, false, fn
         {{:., _, [{:__aliases__, _, segs}, fun]}, _, _} = node, acc when is_atom(fun) ->
-          {node, acc or Aliases.expand_alias(segs, aliases) == @compiled_segments}
+          {node, acc or Aliases.expand_alias(segs, env) == @compiled_segments}
 
         node, acc ->
           {node, acc}
@@ -69,14 +69,14 @@ defmodule AshCredo.CheckArchitectureTest do
     found?
   end
 
-  defp collect_aliases(ast) do
-    {_ast, entries} =
-      Macro.prewalk(ast, [], fn
-        {:alias, _, _} = node, acc -> {node, acc ++ Aliases.alias_entries(node)}
+  defp collect_aliases_env(ast) do
+    {_ast, env} =
+      Macro.prewalk(ast, Aliases.base_env(), fn
+        {:alias, _, _} = node, acc -> {node, Aliases.apply_directive(acc, node, nil)}
         node, acc -> {node, acc}
       end)
 
-    entries
+    env
   end
 
   test "every check that depends on Compiled uses the AshCredo.CompiledCheck base" do
