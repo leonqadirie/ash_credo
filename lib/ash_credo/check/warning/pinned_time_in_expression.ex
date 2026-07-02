@@ -22,6 +22,11 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
 
           # Good
           filter expr(inserted_at >= now())
+
+      Only DSL-position expressions are checked. Inside function bodies
+      and anonymous functions the pin is re-evaluated on every call
+      (`Ash.Expr.expr/1` splices the pinned code into its call site), so
+      it is not frozen and is not flagged.
       """
     ]
 
@@ -82,10 +87,27 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
     |> Enum.flat_map(&expr_issues(&1, issue_meta))
   end
 
+  # Heads whose bodies run after compilation: the pinned call inside them
+  # is re-evaluated per invocation, so the freeze bug does not exist there.
+  @deferred_heads ~w(def defp defmacro defmacrop fn &)a
+
   defp expr_issues(ast, issue_meta) do
     Credo.Code.prewalk(
       ast,
       fn
+        # An immediately-invoked fn/capture runs while the DSL compiles, so
+        # its body is NOT deferred - unwrap it and keep walking the bodies.
+        # The call arguments evaluate at the call site too, so walk them
+        # as well (`(fn e -> e end).(expr(^DateTime.utc_now()))`).
+        {{:., _, [{:fn, _, clauses}]}, _meta, args}, acc when is_list(args) ->
+          {{:__block__, [], [clause_bodies(clauses) | args]}, acc}
+
+        {{:., _, [{:&, _, capture_body}]}, _meta, args}, acc when is_list(args) ->
+          {{:__block__, [], List.wrap(capture_body) ++ args}, acc}
+
+        {head, _meta, args}, acc when head in @deferred_heads and is_list(args) ->
+          {:pruned, acc}
+
         {:expr, _meta, [body]} = node, acc ->
           {node, find_pinned_time_calls(body, issue_meta) ++ acc}
 
@@ -95,4 +117,14 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
       []
     )
   end
+
+  defp clause_bodies(clauses) when is_list(clauses) do
+    {:__block__, [],
+     Enum.map(clauses, fn
+       {:->, _, [_args, body]} -> body
+       other -> other
+     end)}
+  end
+
+  defp clause_bodies(other), do: other
 end
