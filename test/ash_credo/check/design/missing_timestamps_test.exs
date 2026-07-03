@@ -23,7 +23,8 @@ defmodule AshCredo.Check.Design.MissingTimestampsTest do
     """
 
     assert [issue] = run_check(MissingTimestamps, source)
-    assert issue.message =~ "missing timestamps"
+    assert issue.message =~ "no timestamps"
+    assert issue.message =~ "timestamps()"
   end
 
   test "reports an issue when only `update_timestamp` is present" do
@@ -40,7 +41,23 @@ defmodule AshCredo.Check.Design.MissingTimestampsTest do
     """
 
     assert [issue] = run_check(MissingTimestamps, source)
-    assert issue.message =~ "missing timestamps"
+    assert issue.message =~ "no create timestamp"
+    assert issue.message =~ "create_timestamp :inserted_at"
+    refute issue.message =~ "timestamps()"
+  end
+
+  test "reports the update side when only `create_timestamp` is present" do
+    source = """
+    defmodule AshCredoFixtures.Blog.CreateOnlyTimestamp do
+      use Ash.Resource,
+        domain: AshCredoFixtures.Blog,
+        data_layer: AshPostgres.DataLayer
+    end
+    """
+
+    assert [issue] = run_check(MissingTimestamps, source)
+    assert issue.message =~ "no update timestamp"
+    assert issue.message =~ "update_timestamp :updated_at"
   end
 
   test "no issue when the resource uses `timestamps()`" do

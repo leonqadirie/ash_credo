@@ -5,10 +5,14 @@ defmodule AshCredo.Check.Warning.MissingDomain do
     tags: [:ash],
     explanations: [
       check: """
-      In Ash 3.x, resources without a `domain:` option cannot be queried
-      through the standard API.
+      In Ash 3.x, a resource normally declares its domain:
 
           use Ash.Resource, domain: MyApp.Blog
+
+      Without it, code interfaces and domain configuration do not apply,
+      and callers must supply the domain themselves. A resource shared
+      across domains can opt out explicitly with `domain: nil` - the
+      check accepts that and only flags a missing option.
       """
     ]
 
@@ -27,7 +31,9 @@ defmodule AshCredo.Check.Warning.MissingDomain do
     else
       [
         format_issue(issue_meta,
-          message: "Resource is missing a `domain:` option in `use Ash.Resource`.",
+          message:
+            "Resource declares no `domain:` in `use Ash.Resource`. " <>
+              "Name its domain, or pass `domain: nil` explicitly if it is deliberately shared across domains.",
           trigger: "use Ash.Resource",
           line_no: Introspection.resource_issue_line(context)
         )

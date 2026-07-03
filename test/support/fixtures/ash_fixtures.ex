@@ -74,6 +74,7 @@ defmodule AshCredoFixtures.Blog do
 
     resource AshCredoFixtures.Blog.Article
     resource AshCredoFixtures.Blog.PartialTimestamps
+    resource AshCredoFixtures.Blog.CreateOnlyTimestamp
     resource AshCredoFixtures.Blog.CustomTimestamps
     resource AshCredoFixtures.Blog.Tag
     resource AshCredoFixtures.Blog.Contact
@@ -302,6 +303,28 @@ defmodule AshCredoFixtures.Blog.PartialTimestamps do
     uuid_primary_key :id
     attribute :title, :string, public?: true
     update_timestamp :updated_at
+  end
+end
+
+defmodule AshCredoFixtures.Blog.CreateOnlyTimestamp do
+  @moduledoc """
+  `MissingTimestamps` fixture with only a `create_timestamp`: the check
+  must name the missing update side.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  actions do
+    defaults [:read]
+    default_accept []
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :title, :string, public?: true
+    create_timestamp :inserted_at
   end
 end
 
