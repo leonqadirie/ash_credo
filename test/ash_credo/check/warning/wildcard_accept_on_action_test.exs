@@ -160,15 +160,68 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
     assert issue.line_no == 5
   end
 
-  test "reports issue for default_accept :*" do
+  test "reports issue for default_accept :* inherited by an action" do
     source = """
     defmodule MyApp.Post do
       use Ash.Resource, domain: MyApp.Blog
 
       actions do
         default_accept :*
-        create :create do
-          accept [:title]
+        create :create
+      end
+    end
+    """
+
+    assert [issue] = run_check(WildcardAcceptOnAction, source)
+    assert issue.message =~ "default_accept"
+  end
+
+  test "reports issue for default_accept :* inherited by a bare defaults entry" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        default_accept :*
+        defaults [:create, :read]
+      end
+    end
+    """
+
+    assert [issue] = run_check(WildcardAcceptOnAction, source)
+    assert issue.message =~ "default_accept"
+  end
+
+  test "reports default_accept :* when defaults is a module attribute (conservative)" do
+    # `defaults @default_actions` may expand to inheriting entries - the
+    # gate must not silence the warning based on an unreadable list.
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      @default_actions [:create]
+
+      actions do
+        default_accept :*
+        defaults @default_actions
+      end
+    end
+    """
+
+    assert [issue] = run_check(WildcardAcceptOnAction, source)
+    assert issue.message =~ "default_accept"
+  end
+
+  test "reports default_accept :* inherited by a soft destroy" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        default_accept :*
+
+        destroy :archive do
+          soft? true
         end
       end
     end
@@ -176,6 +229,67 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
 
     assert [issue] = run_check(WildcardAcceptOnAction, source)
     assert issue.message =~ "default_accept"
+  end
+
+  test "reports default_accept :* when soft? is a module attribute (conservative)" do
+    # `soft? @soft` may compile the destroy soft, making it inherit -
+    # anything but a literal `soft? false` counts.
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      @soft true
+
+      actions do
+        default_accept :*
+
+        destroy :archive do
+          soft? @soft
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(WildcardAcceptOnAction, source)
+    assert issue.message =~ "default_accept"
+  end
+
+  test "no issue for default_accept :* when no action can inherit it" do
+    # Reads and hard destroys never take an accept list, and the create's
+    # explicit accept overrides the default - the option is dead config,
+    # not a mass-assignment surface.
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        default_accept :*
+        read :read
+        destroy :destroy
+
+        create :create do
+          accept [:title]
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(WildcardAcceptOnAction, source)
+  end
+
+  test "no issue for default_accept :* on a hard-destroy-only resource" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        default_accept :*
+        destroy :purge
+      end
+    end
+    """
+
+    assert [] = run_check(WildcardAcceptOnAction, source)
   end
 
   test "ignores read and destroy actions" do
