@@ -137,6 +137,25 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAcceptTest do
     assert issue.message =~ "is_admin"
   end
 
+  test "reports dangerous default_accept inherited by a soft destroy" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource, domain: MyApp.Accounts
+
+      actions do
+        default_accept [:name, :is_admin]
+
+        destroy :archive do
+          soft? true
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(SensitiveFieldInAccept, source)
+    assert issue.message =~ "is_admin"
+  end
+
   test "no issue for dangerous default_accept when no action can inherit it" do
     source = """
     defmodule MyApp.User do
