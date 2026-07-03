@@ -182,6 +182,44 @@ defmodule AshCredo.CacheTest do
                Cache.member?(:k)
              end) == ""
     end
+
+    test "concurrent first accesses emit the hint exactly once" do
+      Cache.reset_missing_table_hint()
+
+      # Mimics Credo's start-of-run burst: many check tasks hit a missing
+      # table at the same instant. Release all callers through a barrier so
+      # they race the first emission; the hint must still appear only once.
+      output =
+        capture_io(:stderr, fn ->
+          parent = self()
+
+          pids =
+            for _ <- 1..50 do
+              spawn_link(fn ->
+                receive do
+                  :go -> Cache.get(:k)
+                end
+
+                send(parent, {:done, self()})
+              end)
+            end
+
+          Enum.each(pids, &send(&1, :go))
+
+          Enum.each(pids, fn pid ->
+            assert_receive {:done, ^pid}, 5_000
+          end)
+        end)
+
+      occurrences =
+        output
+        |> String.split("ash_credo plugin not registered")
+        |> length()
+        |> Kernel.-(1)
+
+      assert occurrences == 1,
+             "expected exactly one missing-table hint, got #{occurrences}:\n#{output}"
+    end
   end
 
   describe "missing-table hint with the table present" do
