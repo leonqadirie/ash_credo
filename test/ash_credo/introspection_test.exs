@@ -365,6 +365,63 @@ defmodule AshCredo.IntrospectionTest do
                {{:., _, [{:__aliases__, _, [:Ash]}, :create!]}, _, _}
              ] = calls
     end
+
+    test "a nested defmodule named Ash shadows the real Ash afterwards" do
+      # After `defmodule Ash do ... end` inside MyApp, `Ash` refers to
+      # `MyApp.Ash` for the rest of the body - the call is not an Ash
+      # API call and must not be collected.
+      source = """
+      defmodule MyApp do
+        defmodule Ash do
+          def read!(resource), do: resource
+        end
+
+        def go do
+          Ash.read!(MyApp.User)
+        end
+      end
+      """
+
+      assert AshCallScanner.calls(source_file(source)) == []
+    end
+
+    test "a dotted nested defmodule aliases its first segment" do
+      # `defmodule Ash.Helpers` inside MyApp defines `MyApp.Ash.Helpers`
+      # and aliases `Ash` to `MyApp.Ash`, so a later `Ash.read!` is
+      # `MyApp.Ash.read!`, not the real Ash.
+      source = """
+      defmodule MyApp do
+        defmodule Ash.Helpers do
+          def noop, do: :ok
+        end
+
+        def go do
+          Ash.read!(MyApp.User)
+        end
+      end
+      """
+
+      assert AshCallScanner.calls(source_file(source)) == []
+    end
+
+    test "the defmodule-created alias does not leak past the enclosing module" do
+      source = """
+      defmodule MyApp do
+        defmodule Ash do
+          def read!(resource), do: resource
+        end
+      end
+
+      defmodule MyApp.Accounts do
+        def go do
+          Ash.read!(MyApp.User)
+        end
+      end
+      """
+
+      assert [{{:., _, [{:__aliases__, _, [:Ash]}, :read!]}, _, _}] =
+               AshCallScanner.calls(source_file(source))
+    end
   end
 
   describe "ash_api_calls_with_module/1" do

@@ -118,6 +118,24 @@ defmodule AshCredo.Check.Refactor.RaisingCallTest do
     assert [] = run_check(RaisingCall, source, excluded_functions: [{Ash, :read!}])
   end
 
+  test "a nested defmodule named Ash shadows the real Ash for later calls" do
+    # After `defmodule Ash do ... end` inside MyApp, `Ash.read!` is
+    # `MyApp.Ash.read!` - not an Ash API call, so nothing to flag.
+    source = """
+    defmodule MyApp do
+      defmodule Ash do
+        def read!(resource), do: resource
+      end
+
+      def go do
+        Ash.read!(MyApp.User)
+      end
+    end
+    """
+
+    assert [] = run_check(RaisingCall, source)
+  end
+
   describe "message shape varies with the counterpart's return type" do
     test "tuple-returning APIs (Ash.read!) get the tuple-matching message" do
       source = """

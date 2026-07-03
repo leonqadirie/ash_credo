@@ -257,9 +257,18 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
     {node, {user, scope}}
   end
 
-  defp leave({:defmodule, _, _} = node, {user, scope}, on_leave, _options) do
+  # A defmodule aliases its (first literal) name in the enclosing scope
+  # for the rest of that body; the alias lands in the frame that is
+  # current after the module stack pops back to the parent.
+  defp leave({:defmodule, _, _} = node, {user, scope}, on_leave, options) do
     user = on_leave.(node, scope, user)
-    scope = pop_module_stack(scope)
+    child_absolute = current_module_segments(scope)
+
+    scope =
+      scope
+      |> pop_module_stack()
+      |> register_defmodule_alias(node, child_absolute, options)
+
     {node, {user, scope}}
   end
 
@@ -321,6 +330,26 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
 
   defp capture_directive(%Scope{env_frames: frames} = scope, node, _options) do
     updated = Aliases.apply_directive(env(scope), node, current_module_segments(scope))
+
+    case frames do
+      [_head | rest] -> %{scope | env_frames: [updated | rest]}
+      [] -> %{scope | env_frames: [updated]}
+    end
+  end
+
+  defp register_defmodule_alias(%Scope{quote_depth: depth} = scope, _node, _child_absolute, %{
+         track_quote: true,
+         track_aliases_in_quote: false
+       })
+       when depth > 0, do: scope
+
+  defp register_defmodule_alias(
+         %Scope{env_frames: frames} = scope,
+         node,
+         child_absolute,
+         _options
+       ) do
+    updated = Aliases.define_defmodule_alias(env(scope), node, child_absolute)
 
     case frames do
       [_head | rest] -> %{scope | env_frames: [updated | rest]}

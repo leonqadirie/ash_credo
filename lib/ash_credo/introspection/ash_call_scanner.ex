@@ -122,11 +122,19 @@ defmodule AshCredo.Introspection.AshCallScanner do
     {ast, maybe_record_binding(state, lhs, rhs)}
   end
 
+  # A defmodule aliases its (first literal) name in the enclosing scope
+  # for the rest of that body, so the alias is registered after the
+  # defmodule's own frames are gone and the parent frame is current again.
   defp leave_node({:defmodule, _, _} = ast, state) do
-    {ast,
-     state
-     |> pop_module_stack()
-     |> maybe_leave_lexical_scope(:defmodule)}
+    child_absolute = current_module_segments(state)
+
+    state =
+      state
+      |> pop_module_stack()
+      |> maybe_leave_lexical_scope(:defmodule)
+      |> register_defmodule_alias(ast, child_absolute)
+
+    {ast, state}
   end
 
   defp leave_node({node_name, _, _} = ast, state)
@@ -227,6 +235,11 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   defp capture_directive(%{env_frames: [head | rest]} = state, directive_ast) do
     updated = Aliases.apply_directive(head, directive_ast, current_module_segments(state))
+    %{state | env_frames: [updated | rest]}
+  end
+
+  defp register_defmodule_alias(%{env_frames: [head | rest]} = state, ast, child_absolute) do
+    updated = Aliases.define_defmodule_alias(head, ast, child_absolute)
     %{state | env_frames: [updated | rest]}
   end
 

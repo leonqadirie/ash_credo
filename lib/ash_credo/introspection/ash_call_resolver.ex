@@ -186,7 +186,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
   # explicit `Ash.read!(MyApp.Post, action: :read)` form, and so a `:not_loadable`
   # diagnostic still fires for projects that only ever call the bare shape.
   defp implicit_read_sites(segments, ctx) do
-    case resolve_resource(segments, ctx) do
+    case resolve_resource(segments) do
       {:ok, _resource, %{actions: actions}} = resolution ->
         case primary_read_action_name(actions) do
           nil -> []
@@ -301,44 +301,23 @@ defmodule AshCredo.Introspection.AshCallResolver do
   end
 
   defp build_site(segments, action_name, ctx) do
-    build_site_with(ctx, action_name, resolve_resource(segments, ctx))
+    build_site_with(ctx, action_name, resolve_resource(segments))
   end
 
-  defp resolve_resource(segments, ctx) do
+  # No enclosing-module fallback here: a bare `Post` inside
+  # `defmodule MyApp.Blog` is the top-level `Post` unless a nested
+  # `defmodule Post` (or an alias) precedes it, and the scanner registers
+  # that defmodule-created alias, so `segments` arrive fully resolved.
+  defp resolve_resource(segments) do
     resource = Module.concat(segments)
 
     case CompiledIntrospection.inspect_module(resource) do
-      {:ok, info} ->
-        {:ok, resource, info}
-
-      {:error, :not_a_resource} ->
-        :not_a_resource
-
-      {:error, :ash_missing} ->
-        :ash_missing
-
-      {:error, :not_loadable} ->
-        case try_implicit_resolution(segments, ctx) do
-          {:ok, atom, info} -> {:ok, atom, info}
-          :error -> {:not_loadable, resource}
-        end
+      {:ok, info} -> {:ok, resource, info}
+      {:error, :not_a_resource} -> :not_a_resource
+      {:error, :ash_missing} -> :ash_missing
+      {:error, :not_loadable} -> {:not_loadable, resource}
     end
   end
-
-  # Elixir implicitly aliases direct sub-modules: inside `defmodule MyApp.Blog`,
-  # `Post` refers to `MyApp.Blog.Post`. If the direct resolution of `segments`
-  # is not loadable, try prepending the enclosing defmodule's absolute segments.
-  defp try_implicit_resolution(segments, %{call_info: %{enclosing_module_segments: enclosing}})
-       when is_list(enclosing) and enclosing != [] do
-    candidate = Module.concat(enclosing ++ segments)
-
-    case CompiledIntrospection.inspect_module(candidate) do
-      {:ok, info} -> {:ok, candidate, info}
-      _ -> :error
-    end
-  end
-
-  defp try_implicit_resolution(_segments, _ctx), do: :error
 
   defp builder_prefix([:Ash, :Changeset]), do: :changeset_to
   defp builder_prefix([:Ash, :Query]), do: :query_to
