@@ -37,7 +37,8 @@ defmodule AshCredo.MixProject do
         "lint.no_emdash",
         "lint.credence",
         "lint.reach",
-        "xref graph --format cycles --fail-above 0"
+        "xref graph --format cycles --fail-above 0",
+        "docs --warnings-as-errors"
       ]
     ]
   end
