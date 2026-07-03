@@ -70,6 +70,25 @@ defmodule AshCredo.Introspection.Aliases do
   def defmodule_literal_segments(_), do: nil
 
   @doc """
+  Registers the alias a `defmodule` itself creates in the enclosing
+  lexical scope: after `defmodule Post do ... end` inside `MyApp.Blog`,
+  `Post` refers to `MyApp.Blog.Post` for the rest of the enclosing body.
+  A dotted name aliases its first segment (`defmodule Blog.Article`
+  inside `MyApp` makes `Blog` mean `MyApp.Blog`). Non-literal names and
+  unknown absolute paths register nothing.
+  """
+  def define_defmodule_alias(%Macro.Env{} = env, defmodule_ast, child_absolute) do
+    with literal when is_list(literal) <- defmodule_literal_segments(defmodule_ast),
+         true <- atom_segments?(literal),
+         true <- is_list(child_absolute) and atom_segments?(child_absolute),
+         target when target != [] <- Enum.drop(child_absolute, -(length(literal) - 1)) do
+      define(env, :alias, [], Module.concat(target), [])
+    else
+      _ -> env
+    end
+  end
+
+  @doc """
   Resolves a literal `defmodule` name into absolute module segments through
   the visible env.
 

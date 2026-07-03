@@ -521,10 +521,16 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
 
   # ── Implicit submodule alias ───────────────────────────────────────────────
 
-  describe "implicit submodule alias" do
-    test "unqualified resource resolves to enclosing_module.Resource" do
+  describe "defmodule-created aliases" do
+    test "a nested defmodule aliases its name for the rest of the enclosing body" do
+      # After `defmodule Post do ... end` inside `AshCredoFixtures.Blog`,
+      # `Post` refers to `AshCredoFixtures.Blog.Post` - resolution goes to
+      # the compiled fixture of that name.
       source = """
       defmodule AshCredoFixtures.Blog do
+        defmodule Post do
+        end
+
         def list_published do
           Ash.read!(Post, action: :published)
         end
@@ -535,9 +541,41 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       assert issue.message =~ "AshCredoFixtures.Blog.Post.published_posts!"
     end
 
-    test "implicit alias is not applied when a matching top-level module exists" do
-      # `AshCredoFixtures.Blog.Post` is loadable directly, so the direct
-      # resolution wins and implicit lookup is not consulted.
+    test "a bare name without a nested defmodule is the top-level module" do
+      # Elixir does NOT alias `Post` merely because the code sits inside
+      # `defmodule AshCredoFixtures.Blog` - the ref is the top-level `Post`,
+      # which is not loadable here, so the config diagnostic fires instead
+      # of a suggestion borrowed from `AshCredoFixtures.Blog.Post`.
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def list_published do
+          Ash.read!(Post, action: :published)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "Could not load `Post`"
+    end
+
+    test "before the nested defmodule the bare name is still top-level" do
+      # The defmodule-created alias only exists after the definition.
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def list_published do
+          Ash.read!(Post, action: :published)
+        end
+
+        defmodule Post do
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "Could not load `Post`"
+    end
+
+    test "a fully qualified ref resolves directly regardless of nesting" do
       source = """
       defmodule AshCredoFixtures.Accounts do
         def list_published do
