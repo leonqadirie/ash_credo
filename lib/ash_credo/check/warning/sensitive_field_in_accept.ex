@@ -137,7 +137,17 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
     end)
   end
 
+  # Mirrors WildcardAcceptOnAction: `default_accept` is only an input
+  # surface when some action can inherit it.
   defp find_dangerous_default_accept(actions_ast, dangerous, issue_meta) do
+    if Introspection.default_accept_inheritors?(actions_ast) do
+      dangerous_default_accept_issues(actions_ast, dangerous, issue_meta)
+    else
+      []
+    end
+  end
+
+  defp dangerous_default_accept_issues(actions_ast, dangerous, issue_meta) do
     actions_ast
     |> Introspection.option_occurrences(:default_accept)
     |> Enum.flat_map(fn

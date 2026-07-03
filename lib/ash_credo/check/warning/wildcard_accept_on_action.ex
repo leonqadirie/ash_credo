@@ -94,7 +94,18 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
     end)
   end
 
+  # `default_accept` only reaches actions that can inherit it; on a
+  # resource with none (e.g. only reads and hard destroys) the option is
+  # dead configuration, not a mass-assignment surface.
   defp default_accept_issues(actions_ast, issue_meta) do
+    if Introspection.default_accept_inheritors?(actions_ast) do
+      wildcard_default_accept_issues(actions_ast, issue_meta)
+    else
+      []
+    end
+  end
+
+  defp wildcard_default_accept_issues(actions_ast, issue_meta) do
     actions_ast
     |> Introspection.option_occurrences(:default_accept)
     |> Enum.filter(fn {value, _line_no} -> wildcard_accept_value?(value) end)

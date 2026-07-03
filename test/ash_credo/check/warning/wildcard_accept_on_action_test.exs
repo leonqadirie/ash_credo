@@ -160,13 +160,51 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
     assert issue.line_no == 5
   end
 
-  test "reports issue for default_accept :*" do
+  test "reports issue for default_accept :* inherited by an action" do
     source = """
     defmodule MyApp.Post do
       use Ash.Resource, domain: MyApp.Blog
 
       actions do
         default_accept :*
+        create :create
+      end
+    end
+    """
+
+    assert [issue] = run_check(WildcardAcceptOnAction, source)
+    assert issue.message =~ "default_accept"
+  end
+
+  test "reports issue for default_accept :* inherited by a bare defaults entry" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        default_accept :*
+        defaults [:create, :read]
+      end
+    end
+    """
+
+    assert [issue] = run_check(WildcardAcceptOnAction, source)
+    assert issue.message =~ "default_accept"
+  end
+
+  test "no issue for default_accept :* when no action can inherit it" do
+    # Reads and hard destroys never take an accept list, and the create's
+    # explicit accept overrides the default - the option is dead config,
+    # not a mass-assignment surface.
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        default_accept :*
+        read :read
+        destroy :destroy
+
         create :create do
           accept [:title]
         end
@@ -174,8 +212,22 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
     end
     """
 
-    assert [issue] = run_check(WildcardAcceptOnAction, source)
-    assert issue.message =~ "default_accept"
+    assert [] = run_check(WildcardAcceptOnAction, source)
+  end
+
+  test "no issue for default_accept :* on a hard-destroy-only resource" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        default_accept :*
+        destroy :purge
+      end
+    end
+    """
+
+    assert [] = run_check(WildcardAcceptOnAction, source)
   end
 
   test "ignores read and destroy actions" do

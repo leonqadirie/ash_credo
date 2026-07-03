@@ -255,6 +255,28 @@ defmodule AshCredo.Introspection do
       soft_destroy_entities(actions_ast)
   end
 
+  @doc """
+  Returns true when some action in the section can inherit
+  `default_accept`: an accepting action (create, update, soft destroy)
+  without its own `accept` option, or a bare `:create`/`:update` atom in
+  `defaults`. Ash's DefaultAccept transformer applies the default only to
+  those - explicit accept lists override it, and hard destroys and reads
+  never take one.
+  """
+  def default_accept_inheritors?(actions_ast) do
+    inheriting_entity? =
+      actions_ast
+      |> accepting_action_entities()
+      |> Enum.any?(&(not entity_has_opt_key?(&1, :accept)))
+
+    inheriting_entity? or
+      Enum.any?(entities(actions_ast, :defaults), fn defaults_ast ->
+        defaults_ast
+        |> default_action_entries()
+        |> Enum.any?(&(&1 in [:create, :update]))
+      end)
+  end
+
   defp soft_destroy_entities(actions_ast) do
     actions_ast
     |> action_entities([:destroy])

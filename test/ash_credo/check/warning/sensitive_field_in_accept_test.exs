@@ -137,6 +137,22 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAcceptTest do
     assert issue.message =~ "is_admin"
   end
 
+  test "no issue for dangerous default_accept when no action can inherit it" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource, domain: MyApp.Accounts
+
+      actions do
+        default_accept [:name, :is_admin]
+        read :read
+        destroy :purge
+      end
+    end
+    """
+
+    assert [] = run_check(SensitiveFieldInAccept, source)
+  end
+
   test "matches dangerous fields by regex when configured" do
     source = """
     defmodule MyApp.User do
