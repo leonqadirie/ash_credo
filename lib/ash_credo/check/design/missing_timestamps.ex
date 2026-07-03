@@ -44,10 +44,12 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
       issue_meta,
       __MODULE__,
       fn attributes ->
-        if has_timestamps?(attributes) do
-          []
-        else
-          [missing_timestamps_issue(context.module_ast, context, issue_meta)]
+        case timestamp_sides(attributes) do
+          {true, true} ->
+            []
+
+          sides ->
+            [missing_timestamps_issue(sides, context.module_ast, context, issue_meta)]
         end
       end
     )
@@ -65,14 +67,11 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
   # `create_timestamp`/`update_timestamp` DSL entries without hard-coding
   # specific attribute names, while still catching partial setups where
   # only one side is present.
-  defp has_timestamps?(attributes) do
-    {has_create?, has_update?} =
-      Enum.reduce(attributes, {false, false}, fn attr, {has_create?, has_update?} ->
-        {has_create? or create_timestamp_attribute?(attr),
-         has_update? or update_timestamp_attribute?(attr)}
-      end)
-
-    has_create? and has_update?
+  defp timestamp_sides(attributes) do
+    Enum.reduce(attributes, {false, false}, fn attr, {has_create?, has_update?} ->
+      {has_create? or create_timestamp_attribute?(attr),
+       has_update? or update_timestamp_attribute?(attr)}
+    end)
   end
 
   defp create_timestamp_attribute?(%{
@@ -102,13 +101,27 @@ defmodule AshCredo.Check.Design.MissingTimestamps do
   # create-timestamp predicate and mask a missing `create_timestamp`.
   defp datetime_attribute_type?(type), do: CompiledIntrospection.datetime_type?(type)
 
-  defp missing_timestamps_issue(module_ast, context, issue_meta) do
+  defp missing_timestamps_issue(sides, module_ast, context, issue_meta) do
     attrs_ast = Introspection.find_dsl_section(module_ast, :attributes)
 
     format_issue(issue_meta,
-      message: "Resource is missing timestamps.",
+      message: missing_timestamps_message(sides),
       trigger: "attributes",
       line_no: Introspection.resource_issue_line(context, attrs_ast)
     )
+  end
+
+  defp missing_timestamps_message({false, false}) do
+    "Resource has no timestamps. Add `timestamps()` to the `attributes` block."
+  end
+
+  defp missing_timestamps_message({false, true}) do
+    "Resource has an update timestamp but no create timestamp. " <>
+      "Add `create_timestamp :inserted_at` to the `attributes` block."
+  end
+
+  defp missing_timestamps_message({true, false}) do
+    "Resource has a create timestamp but no update timestamp. " <>
+      "Add `update_timestamp :updated_at` to the `attributes` block."
   end
 end
