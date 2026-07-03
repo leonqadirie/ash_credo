@@ -233,7 +233,9 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     end
     """
 
-    assert [_, _] = run_check(AuthorizeFalse, source)
+    issues = run_check(AuthorizeFalse, source)
+    assert sorted_triggers(issues) == ["authorize?: false", "authorize?: false"]
+    assert sorted_lines(issues) == [5, 6]
   end
 
   test "no issue for action with authorize?: true" do
@@ -357,7 +359,8 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
       end
       """
 
-      assert [_] = run_check(AuthorizeFalse, source, __filename__: "lib/my_app/accounts.ex")
+      assert [issue] = run_check(AuthorizeFalse, source, __filename__: "lib/my_app/accounts.ex")
+      assert issue.trigger == "authorize?: false"
     end
 
     test "respects an empty excluded_paths override" do
@@ -365,11 +368,13 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
       Ash.read!(MyApp.User, authorize?: false)
       """
 
-      assert [_] =
+      assert [issue] =
                run_check(AuthorizeFalse, source,
                  __filename__: "test/my_app/user_test.exs",
                  excluded_paths: []
                )
+
+      assert issue.trigger == "authorize?: false"
     end
 
     test "respects a custom excluded_paths list" do

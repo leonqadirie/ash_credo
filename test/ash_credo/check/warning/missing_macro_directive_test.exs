@@ -1,13 +1,7 @@
 defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
-  use AshCredo.CheckCase
+  use AshCredo.CheckCase, clear_cache: true
 
   alias AshCredo.Check.Warning.MissingMacroDirective
-  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
-
-  setup do
-    CompiledIntrospection.clear_cache()
-    :ok
-  end
 
   describe "Ash.Query" do
     test "flags Ash.Query.filter without require" do

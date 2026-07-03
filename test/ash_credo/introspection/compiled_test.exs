@@ -6,17 +6,12 @@ defmodule AshCredo.Introspection.CompiledTest do
   error propagation are only exercised here. Each resolves against the
   loadable `AshCredoFixtures.*` resources.
   """
-  use ExUnit.Case, async: false
+  use AshCredo.CheckCase, clear_cache: true
 
   alias AshCredo.Introspection.Compiled
 
   @post AshCredoFixtures.Blog.Post
   @plain AshCredoFixtures.Plain
-
-  setup do
-    Compiled.clear_cache()
-    :ok
-  end
 
   describe "resource aspect accessors" do
     test "domain/1 returns the declared domain" do

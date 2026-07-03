@@ -1,8 +1,7 @@
 defmodule AshCredo.Check.Design.MissingPrimaryActionTest do
-  use AshCredo.CheckCase
+  use AshCredo.CheckCase, clear_cache: true
 
   alias AshCredo.Check.Design.MissingPrimaryAction
-  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   # Tests reference real fixture modules from `test/support/fixtures/ash_fixtures.ex`
   # so that compiled-introspection (`Ash.Resource.Info.actions/1`) returns the
@@ -15,11 +14,6 @@ defmodule AshCredo.Check.Design.MissingPrimaryActionTest do
   #     `create :create_with_slug`, neither primary. Failure-path fixture.
   #   * `AshCredoFixtures.Accounts.User` - `defaults [:create, :read, :update, :destroy]`,
   #     single action of each type. Happy-path fixture.
-
-  setup do
-    CompiledIntrospection.clear_cache()
-    :ok
-  end
 
   test "no issue for a resource with a single primary action per type" do
     source = """

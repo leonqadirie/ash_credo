@@ -114,9 +114,9 @@ defmodule AshCredo.Check.Refactor.DirectiveInFunctionBodyTest do
       end
       """
 
-      assert issues = run_check(DirectiveInFunctionBody, source)
-      assert [_, _, _] = issues
-      assert Enum.all?(issues, &(&1.trigger == "Ash.Query"))
+      issues = run_check(DirectiveInFunctionBody, source)
+      assert sorted_triggers(issues) == ["Ash.Query", "Ash.Query", "Ash.Query"]
+      assert sorted_lines(issues) == [3, 8, 13]
     end
 
     test "flags `require Ash.Expr` inside a function body (included in default)" do

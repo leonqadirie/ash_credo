@@ -58,8 +58,8 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapperTest do
       """
 
       issues = run_check(MissingBuiltinWrapper, source)
-      assert [_, _] = issues
-      assert Enum.all?(issues, &(&1.trigger == "set_attribute"))
+      assert sorted_triggers(issues) == ["set_attribute", "set_attribute"]
+      assert sorted_lines(issues) == [6, 10]
     end
 
     test "reports multiple naked builtins of mixed families in one action" do
@@ -85,6 +85,10 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapperTest do
                trigger_set(issues),
                MapSet.new(~w(set_attribute manage_relationship present))
              )
+
+      assert sorted_lines(issues) == [7, 8, 9]
+
+      assert sorted_lines(issues) == [7, 8, 9]
 
       assert find_by_trigger(issues, "present").message =~ "`validate` wrapper"
       assert find_by_trigger(issues, "set_attribute").message =~ "`change` wrapper"
@@ -212,6 +216,7 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapperTest do
       assert [_, _] = issues
       assert find_by_trigger(issues, "present")
       assert find_by_trigger(issues, "compare").message =~ "validate compare(...)"
+      assert sorted_lines(issues) == [7, 11]
     end
   end
 
@@ -270,9 +275,9 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapperTest do
       """
 
       issues = run_check(MissingBuiltinWrapper, source)
-      assert [_, _] = issues
-      assert Enum.all?(issues, &(&1.trigger == "set_context"))
+      assert sorted_triggers(issues) == ["set_context", "set_context"]
       assert Enum.all?(issues, &(&1.message =~ "`prepare` wrapper"))
+      assert sorted_lines(issues) == [6, 10]
     end
 
     test "set_context in create/update/destroy gets change advice" do
@@ -335,6 +340,7 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapperTest do
       assert find_by_trigger(issues, "set_attribute").message =~ "`change` wrapper"
       assert find_by_trigger(issues, "present").message =~ "`validate` wrapper"
       assert find_by_trigger(issues, "build").message =~ "`prepare` wrapper"
+      assert sorted_lines(issues) == [6, 7, 8]
     end
 
     test "set_context in a pipeline gets change advice and is flagged exactly once" do
@@ -393,6 +399,7 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapperTest do
       assert find_by_trigger(issues, "set_attribute").message =~ "`change` wrapper"
       assert find_by_trigger(issues, "set_context").message =~ "`change` wrapper"
       assert find_by_trigger(issues, "present").message =~ "`validate` wrapper"
+      assert sorted_lines(issues) == [5, 6, 7]
     end
 
     test "reports naked validation builtin in the validations section" do
@@ -428,6 +435,7 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapperTest do
       assert [_, _] = issues
       assert find_by_trigger(issues, "build").message =~ "`prepare` wrapper"
       assert find_by_trigger(issues, "set_context").message =~ "`prepare` wrapper"
+      assert sorted_lines(issues) == [5, 6]
     end
 
     test "no issue for wrapped entities in global sections" do

@@ -1,8 +1,7 @@
 defmodule AshCredo.Check.Warning.AuthorizerWithoutPoliciesTest do
-  use AshCredo.CheckCase
+  use AshCredo.CheckCase, clear_cache: true
 
   alias AshCredo.Check.Warning.AuthorizerWithoutPolicies
-  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   # Tests reference real fixture modules from `test/support/fixtures/ash_fixtures.ex`:
   #
@@ -12,11 +11,6 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPoliciesTest do
   #     Happy-path fixture (check should silently skip).
   #   * `AshCredoFixtures.Blog.WithAuthorizerAndPolicies` - declares the
   #     authorizer AND a non-empty `policies` block. Happy-path fixture.
-
-  setup do
-    CompiledIntrospection.clear_cache()
-    :ok
-  end
 
   test "reports an issue when Ash.Policy.Authorizer is declared but no policies exist" do
     source = """

@@ -99,6 +99,7 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDslTest do
     issues = run_check(AnonymousFunctionInDsl, source)
     assert [_, _, _] = issues
     assert MapSet.equal?(trigger_set(issues), MapSet.new(~w(change validate prepare)))
+    assert sorted_lines(issues) == [5, 9, 13]
   end
 
   test "reports anonymous functions inside pipeline bodies" do

@@ -22,6 +22,7 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpressionTest do
 
     issues = run_check(PinnedTimeInExpression, source)
     assert [_, _] = issues
+    assert sorted_lines(issues) == [8, 9]
 
     Enum.each(issues, fn issue ->
       assert issue.message =~ "today()"

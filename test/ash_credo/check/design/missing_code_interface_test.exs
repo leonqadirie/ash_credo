@@ -1,8 +1,7 @@
 defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
-  use AshCredo.CheckCase
+  use AshCredo.CheckCase, clear_cache: true
 
   alias AshCredo.Check.Design.MissingCodeInterface
-  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   # Tests reference real fixture modules from `test/support/fixtures/ash_fixtures.ex`:
   #
@@ -16,11 +15,6 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
   #
   #   * `AshCredoFixtures.Accounts.User` - has `:create`, `:read`, `:update`,
   #     `:destroy` (via defaults). ZERO interfaces. All 4 actions should be flagged.
-
-  setup do
-    CompiledIntrospection.clear_cache()
-    :ok
-  end
 
   test "reports one issue per action without an interface" do
     source = """

@@ -123,6 +123,7 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
     assert [_, _] = issues
     assert find_by_message(issues, "Default `create` action")
     assert find_by_message(issues, "Default `update` action")
+    assert sorted_lines(issues) == [5, 5]
   end
 
   test "reports issue for inline accept: :* on create" do
