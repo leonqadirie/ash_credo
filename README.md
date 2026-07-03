@@ -221,7 +221,7 @@ The following checks accept custom parameters:
 
 ### Adapting `UseCodeInterface` to your team's conventions
 
-`UseCodeInterface` accepts three params that map to common code-interface
+`UseCodeInterface` accepts params that map to common code-interface
 philosophies. The two `enforce_*` flags decide *which call sites* the check
 fires on; `prefer_interface_scope` decides *which interface* the suggestion
 points at. They compose freely.

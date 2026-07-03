@@ -49,7 +49,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
       ## Configuration
 
-      Three params let you adapt the check to a team's code-interface
+      These params adapt the check to a team's code-interface
       conventions:
 
         * `enforce_code_interface_in_domain` (default `true`) - when
@@ -113,26 +113,28 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
   alias AshCredo.PathFilter
 
+  # Path filtering lives here rather than in `run_compiled/2` so an
+  # excluded file cannot emit the Ash-missing diagnostic either - the
+  # guard consults `active?/2` before checking Ash availability.
   @impl AshCredo.CompiledCheck
-  def active?(_source_file, params) do
-    Params.get(params, :enforce_code_interface_in_domain, __MODULE__) or
-      Params.get(params, :enforce_code_interface_outside_domain, __MODULE__)
+  def active?(source_file, params) do
+    enforcing? =
+      Params.get(params, :enforce_code_interface_in_domain, __MODULE__) or
+        Params.get(params, :enforce_code_interface_outside_domain, __MODULE__)
+
+    excluded_paths = Params.get(params, :excluded_paths, __MODULE__)
+
+    enforcing? and not PathFilter.excluded?(source_file.filename, excluded_paths)
   end
 
   @impl AshCredo.CompiledCheck
   def run_compiled(source_file, params) do
-    excluded_paths = Params.get(params, :excluded_paths, __MODULE__)
+    issue_meta = IssueMeta.for(source_file, params)
+    config = load_config(params)
 
-    if PathFilter.excluded?(source_file.filename, excluded_paths) do
-      []
-    else
-      issue_meta = IssueMeta.for(source_file, params)
-      config = load_config(params)
-
-      source_file
-      |> AshCallResolver.sites()
-      |> Enum.flat_map(&check_site(&1, issue_meta, config))
-    end
+    source_file
+    |> AshCallResolver.sites()
+    |> Enum.flat_map(&check_site(&1, issue_meta, config))
   end
 
   defp load_config(params) do

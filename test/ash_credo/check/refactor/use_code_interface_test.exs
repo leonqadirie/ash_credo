@@ -424,6 +424,24 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
                run_check(UseCodeInterface, source, __filename__: "test/support/factory.ex")
     end
 
+    test "an excluded file emits no Ash-missing diagnostic either" do
+      # The path filter lives in active?/2, which the compiled-check guard
+      # consults before the Ash-availability check - so excluded files
+      # stay fully silent even when Ash is not loadable.
+      Cache.put({CompiledIntrospection, :ash_available?}, false)
+
+      source = """
+      defmodule MyApp.Factory do
+        def post do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :published)
+        end
+      end
+      """
+
+      assert [] =
+               run_check(UseCodeInterface, source, __filename__: "test/support/factory.ex")
+    end
+
     test "can be overridden to also scan test files" do
       source = """
       defmodule MyApp.Factory do
