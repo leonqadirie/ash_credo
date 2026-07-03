@@ -1,8 +1,7 @@
 defmodule AshCredo.Check.Warning.RedundantValidationTest do
-  use AshCredo.CheckCase
+  use AshCredo.CheckCase, clear_cache: true
 
   alias AshCredo.Check.Warning.RedundantValidation
-  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   # Tests resolve attributes against the compiled fixture
   # `AshCredoFixtures.Blog.Contact` (test/support/fixtures/ash_fixtures.ex):
@@ -10,11 +9,6 @@ defmodule AshCredo.Check.Warning.RedundantValidationTest do
   # and the `:import` create action lists `:name` in `allow_nil_input` -
   # which also shields GLOBAL validations on `:name`, so the global-scope
   # happy-path tests use `:handle`.
-
-  setup do
-    CompiledIntrospection.clear_cache()
-    :ok
-  end
 
   test "reports redundant present on a non-nullable attribute in a create action" do
     source = """

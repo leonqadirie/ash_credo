@@ -56,7 +56,7 @@ defmodule AshCredo.Check.Readability.ActionMissingDescriptionTest do
 
     issues = run_check(ActionMissingDescription, source)
     assert [_, _] = issues
-    assert issues |> Enum.map(& &1.line_no) |> Enum.sort() == [5, 9]
+    assert sorted_lines(issues) == [5, 9]
     assert Enum.all?(issues, &(&1.message =~ "description"))
   end
 

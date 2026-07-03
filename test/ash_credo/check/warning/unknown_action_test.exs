@@ -1,19 +1,13 @@
 defmodule AshCredo.Check.Warning.UnknownActionTest do
-  use AshCredo.CheckCase
+  use AshCredo.CheckCase, clear_cache: true
 
   alias AshCredo.Check.Warning.UnknownAction
-  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   # Tests reference the real fixture `AshCredoFixtures.Blog.Post`, which has
   # actions `:read` (primary), `:published`, `:draft`, `:publish`, `:archive`,
   # `:create`, `:update`, `:destroy`. The check resolves the resource via
   # `Compiled.inspect_module/1` and then asks `Compiled.action/2` whether
   # the literal action exists.
-
-  setup do
-    CompiledIntrospection.clear_cache()
-    :ok
-  end
 
   describe "unknown action detection" do
     test "emits an issue with a jaro-distance suggestion for a near-miss typo" do

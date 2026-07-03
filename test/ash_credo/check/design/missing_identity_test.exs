@@ -1,8 +1,7 @@
 defmodule AshCredo.Check.Design.MissingIdentityTest do
-  use AshCredo.CheckCase
+  use AshCredo.CheckCase, clear_cache: true
 
   alias AshCredo.Check.Design.MissingIdentity
-  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   # Tests reference real fixture modules from `test/support/fixtures/ash_fixtures.ex`:
   #
@@ -10,11 +9,6 @@ defmodule AshCredo.Check.Design.MissingIdentityTest do
   #     attributes, no identities. Failure-path fixture for the migration.
   #   * `AshCredoFixtures.Accounts.Profile` - has `:email` attribute AND
   #     `:unique_email` identity covering it. Happy-path fixture.
-
-  setup do
-    CompiledIntrospection.clear_cache()
-    :ok
-  end
 
   test "reports an issue per uncovered candidate attribute" do
     source = """

@@ -1,5 +1,5 @@
 defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
-  use AshCredo.CheckCase
+  use AshCredo.CheckCase, clear_cache: true
 
   alias AshCredo.Cache
   alias AshCredo.Check.Refactor.UseCodeInterface
@@ -16,11 +16,6 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
   #
   # The check resolves each referenced name to an atom and then queries the
   # compiled-BEAM introspection, exercising the real classification path.
-
-  setup do
-    CompiledIntrospection.clear_cache()
-    :ok
-  end
 
   # ── AST short-circuits (no introspection needed) ──────────────────────────
 

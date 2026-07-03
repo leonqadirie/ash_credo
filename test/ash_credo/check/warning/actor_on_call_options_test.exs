@@ -50,8 +50,7 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptionsTest do
     assert [_, _] = issues
     assert find_by_trigger(issues, "actor")
     assert find_by_trigger(issues, "tenant")
-    assert Enum.all?(issues, &(&1.line_no == 5))
-    assert Enum.all?(issues, &(&1.line_no == 5))
+    assert sorted_lines(issues) == [5, 5]
   end
 
   test "reports actor: when the built query is bound to a variable" do

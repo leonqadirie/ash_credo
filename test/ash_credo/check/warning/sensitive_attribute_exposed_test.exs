@@ -54,7 +54,7 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposedTest do
     issues = run_check(SensitiveAttributeExposed, source)
     assert [_, _, _] = issues
     assert sorted_triggers(issues) == ~w(api_key password token)
-    assert issues |> Enum.map(& &1.line_no) |> Enum.sort() == [6, 7, 8]
+    assert sorted_lines(issues) == [6, 7, 8]
   end
 
   test "ignores non-sensitive attributes" do

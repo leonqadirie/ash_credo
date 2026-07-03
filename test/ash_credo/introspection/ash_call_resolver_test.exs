@@ -7,15 +7,9 @@ defmodule AshCredo.Introspection.AshCallResolverTest do
   call shapes below. They all resolve against the loadable fixture
   `AshCredoFixtures.Blog.Post` (primary key `:id`, primary `:read` action).
   """
-  use AshCredo.CheckCase
+  use AshCredo.CheckCase, clear_cache: true
 
   alias AshCredo.Introspection.AshCallResolver
-  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
-
-  setup do
-    CompiledIntrospection.clear_cache()
-    :ok
-  end
 
   defp sites(source), do: source |> source_file() |> AshCallResolver.sites()
 

@@ -1,13 +1,29 @@
 defmodule AshCredo.CheckCase do
   @moduledoc false
 
-  defmacro __using__(_opts) do
+  alias AshCredo.Introspection.Compiled
+
+  # `clear_cache: true` resets the compiled-introspection cache before each
+  # test - the shared setup for every test module exercising checks that
+  # query compiled fixture modules. The setup body calls through the
+  # imported helper below so the quoted code stays alias-free.
+  defmacro __using__(opts) do
     quote do
       use ExUnit.Case
 
       import AshCredo.CheckCase
+
+      if unquote(opts[:clear_cache]) do
+        setup do
+          clear_compiled_cache()
+          :ok
+        end
+      end
     end
   end
+
+  # The `clear_cache: true` setup target.
+  def clear_compiled_cache, do: Compiled.clear_cache()
 
   # Raises on unparsable source: Credo returns an `:invalid` SourceFile
   # for broken code and this suite's AST-walking checks then report zero
@@ -54,4 +70,9 @@ defmodule AshCredo.CheckCase do
   # Returns the issue triggers as a sorted list - convenient for ordered
   # equality assertions when the exact issue ordering is irrelevant.
   def sorted_triggers(entries), do: entries |> Enum.map(& &1.trigger) |> Enum.sort()
+
+  # Returns the issue line numbers as a sorted list. Comparing against the
+  # full expected list pins both the anchors and the issue count - prefer
+  # `sorted_lines(issues) == [5, 5]` over an `Enum.all?` on `line_no`.
+  def sorted_lines(records), do: records |> Enum.map(& &1.line_no) |> Enum.sort()
 end

@@ -1,18 +1,12 @@
 defmodule AshCredo.Check.Design.MissingTimestampsTest do
-  use AshCredo.CheckCase
+  use AshCredo.CheckCase, clear_cache: true
 
   alias AshCredo.Check.Design.MissingTimestamps
-  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   # Tests reference real fixture modules from `test/support/fixtures/ash_fixtures.ex`:
   #
   #   * `AshCredoFixtures.Blog.Post`    - has no timestamps (failure-path).
   #   * `AshCredoFixtures.Blog.Article` - uses `timestamps()` (happy-path).
-
-  setup do
-    CompiledIntrospection.clear_cache()
-    :ok
-  end
 
   # Note: the test source needs `data_layer:` set so the AST-level
   # `has_data_layer?/1` guard fires. The check then introspects the real

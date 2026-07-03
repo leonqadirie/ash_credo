@@ -236,7 +236,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     issues = run_check(AuthorizeFalse, source)
     assert [_, _] = issues
     assert Enum.all?(issues, &(&1.trigger == "authorize?: false"))
-    assert issues |> Enum.map(& &1.line_no) |> Enum.sort() == [5, 6]
+    assert sorted_lines(issues) == [5, 6]
   end
 
   test "no issue for action with authorize?: true" do
