@@ -56,7 +56,7 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
   end
 
   defp flag_missing_primaries(actions, module_ast, context, issue_meta) do
-    actions_line = actions_section_line(module_ast, context)
+    actions_line = Introspection.actions_section_line(module_ast, context)
     {counts, primaries} = summarise_actions(actions)
 
     for type <- @action_types,
@@ -83,11 +83,5 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
 
       {next_counts, next_primaries}
     end)
-  end
-
-  defp actions_section_line(module_ast, context) do
-    actions_ast = Introspection.find_dsl_section(module_ast, :actions)
-
-    Introspection.section_issue_line(actions_ast, context.use_line, 1)
   end
 end
