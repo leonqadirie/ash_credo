@@ -410,6 +410,39 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
     end
   end
 
+  describe "excluded_paths" do
+    test "skips files under test directories by default" do
+      source = """
+      defmodule MyApp.Factory do
+        def post do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :published)
+        end
+      end
+      """
+
+      assert [] =
+               run_check(UseCodeInterface, source, __filename__: "test/support/factory.ex")
+    end
+
+    test "can be overridden to also scan test files" do
+      source = """
+      defmodule MyApp.Factory do
+        def post do
+          Ash.read!(AshCredoFixtures.Blog.Post, action: :published)
+        end
+      end
+      """
+
+      assert [issue] =
+               run_check(UseCodeInterface, source,
+                 __filename__: "test/support/factory.ex",
+                 excluded_paths: []
+               )
+
+      assert issue.message =~ "published_posts"
+    end
+  end
+
   # ── Long-tail suggestion families ──────────────────────────────────────────
   #
   # These exercise the message variants that only appear with specific

@@ -6,6 +6,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     param_defaults: [
       enforce_code_interface_in_domain: true,
       enforce_code_interface_outside_domain: true,
+      excluded_paths: [~r"/test/", "test"],
       prefer_interface_scope: :auto
     ],
     explanations: [
@@ -67,6 +68,9 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
           always suggests a resource-level interface (useful if you only
           define code interfaces on resources). `:domain` always suggests a
           domain-level interface.
+        * `excluded_paths` (defaults to test directories) - raw `Ash.*`
+          calls in tests and factories are idiomatic setup code, not
+          missing interfaces. Override (e.g. to `[]`) to scan tests too.
 
       Example - a team that allows raw calls inside their domain and only
       defines interfaces on resources:
@@ -98,6 +102,8 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
           "Flag raw `Ash.*` calls whose caller shares a domain with the resource. Set to `false` to leave same-domain callers alone (useful for teams that consider raw calls inside `Change`/`Preparation`/`Validation` modules acceptable).",
         enforce_code_interface_outside_domain:
           "Flag raw `Ash.*` calls whose caller is not in the resource's domain. This covers different known domains, plain callers (controller, LiveView, worker), callers that are an `Ash.Resource` with no `:domain`, and resources that cannot be loaded. Set to `false` to silence all of them.",
+        excluded_paths:
+          "Paths or regexes to skip. Defaults to test directories, where raw `Ash.*` calls are idiomatic setup code.",
         prefer_interface_scope:
           "Controls which interface the check points at. `:auto` (default) follows the \"in-domain → resource, outside-domain → domain\" heuristic. `:resource` always suggests a resource-level interface. `:domain` always suggests a domain-level interface."
       ]
@@ -105,6 +111,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   alias AshCredo.Introspection.{AshCallResolver, AshCallSite}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
+  alias AshCredo.PathFilter
 
   @impl AshCredo.CompiledCheck
   def active?(_source_file, params) do
@@ -114,12 +121,18 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   @impl AshCredo.CompiledCheck
   def run_compiled(source_file, params) do
-    issue_meta = IssueMeta.for(source_file, params)
-    config = load_config(params)
+    excluded_paths = Params.get(params, :excluded_paths, __MODULE__)
 
-    source_file
-    |> AshCallResolver.sites()
-    |> Enum.flat_map(&check_site(&1, issue_meta, config))
+    if PathFilter.excluded?(source_file.filename, excluded_paths) do
+      []
+    else
+      issue_meta = IssueMeta.for(source_file, params)
+      config = load_config(params)
+
+      source_file
+      |> AshCallResolver.sites()
+      |> Enum.flat_map(&check_site(&1, issue_meta, config))
+    end
   end
 
   defp load_config(params) do

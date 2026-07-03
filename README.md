@@ -214,6 +214,7 @@ The following checks accept custom parameters:
 | `Refactor.RaisingCall` | `flag_bang_only_apis` | `false` | When `true`, also flag bangs whose non-bang counterpart doesn't exist (e.g. `Ash.stream!`, `Ash.Seed.seed!`) with a generic "ensure failures are properly handled" message. Default is `false` since the suggested non-bang twin wouldn't exist for these calls; opt in only if your team policy is "no bare bang calls anywhere" |
 | `Refactor.UseCodeInterface` | `enforce_code_interface_in_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
 | `Refactor.UseCodeInterface` | `enforce_code_interface_outside_domain` | `true` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
+| `Refactor.UseCodeInterface` | `excluded_paths` | `[~r"/test/", "test"]` | Paths or regexes to skip. Binary entries match as path segments or full file paths. Defaults to test directories, where raw `Ash.*` calls are idiomatic setup code |
 | `Refactor.UseCodeInterface` | `prefer_interface_scope` | `:auto` | See [Adapting UseCodeInterface](#adapting-usecodeinterface-to-your-teams-conventions) below |
 | `Design.MissingCodeInterface` | `excluded_actions` | `[]` | List of `"Module.action_name"` strings whose missing interface should be suppressed (e.g. `AshAuthentication`-generated actions) |
 | `Design.MissingIdentity` | `identity_candidates` | `~w(email username slug handle phone)a` | Attribute names to suggest adding identities for |
