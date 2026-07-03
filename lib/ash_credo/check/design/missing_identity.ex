@@ -16,8 +16,10 @@ defmodule AshCredo.Check.Design.MissingIdentity do
           end
 
       An attribute that is the sole primary key is already unique and is
-      not flagged. Members of a composite primary key still are: only the
-      key tuple is unique there, not the attribute itself.
+      not flagged - for uniqueness enforcement an identity adds nothing
+      there. Define one anyway if you want to reference it by name, e.g.
+      via `upsert_identity:`. Members of a composite primary key are still
+      flagged: only the key tuple is unique, not the attribute itself.
 
       This check uses Ash's runtime introspection (`Ash.Resource.Info`) to
       see the fully-resolved attribute and identity lists - including
@@ -76,9 +78,10 @@ defmodule AshCredo.Check.Design.MissingIdentity do
     |> Enum.map(&missing_identity_issue(&1, resource, issue_line, issue_meta))
   end
 
-  # A sole primary-key attribute is already unique - an identity would be
-  # redundant. Members of a composite key stay flagged: only the tuple is
-  # unique there, so the attribute itself may still want an identity.
+  # A sole primary-key attribute is already unique, so no identity is
+  # needed for uniqueness enforcement (named identities for e.g.
+  # `upsert_identity:` are a deliberate choice, not a lint gap). Members
+  # of a composite key stay flagged: only the tuple is unique there.
   defp sole_primary_key?(%{name: name}, primary_key), do: primary_key == [name]
 
   defp collect_identity_fields(identities) do
