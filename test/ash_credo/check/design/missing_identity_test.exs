@@ -82,4 +82,30 @@ defmodule AshCredo.Check.Design.MissingIdentityTest do
     assert issue.message =~ "Could not load"
     assert issue.message =~ "Totally.Fake.Resource"
   end
+
+  test "no issue when the candidate attribute is the sole primary key" do
+    # EmailKey's :email IS the primary key - already unique, identity
+    # would be redundant.
+    source = """
+    defmodule AshCredoFixtures.Accounts.EmailKey do
+      use Ash.Resource, domain: AshCredoFixtures.Accounts
+    end
+    """
+
+    assert [] = run_check(MissingIdentity, source)
+  end
+
+  test "still flags a candidate that is only part of a composite primary key" do
+    # TenantEmailKey's key is {tenant_id, email} - the tuple is unique,
+    # :email alone is not.
+    source = """
+    defmodule AshCredoFixtures.Accounts.TenantEmailKey do
+      use Ash.Resource, domain: AshCredoFixtures.Accounts
+    end
+    """
+
+    assert [issue] = run_check(MissingIdentity, source)
+    assert issue.trigger == "email"
+    assert issue.message =~ "unique_email"
+  end
 end

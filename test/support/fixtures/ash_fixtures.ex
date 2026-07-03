@@ -150,6 +150,48 @@ defmodule AshCredoFixtures.Accounts.Profile do
   end
 end
 
+defmodule AshCredoFixtures.Accounts.EmailKey do
+  @moduledoc """
+  `MissingIdentity` sole-primary-key fixture: `:email` IS the primary key,
+  so it is already unique and an identity would be redundant.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Accounts,
+    validate_domain_inclusion?: false
+
+  actions do
+    defaults [:read]
+    default_accept []
+  end
+
+  attributes do
+    attribute :email, :string, primary_key?: true, allow_nil?: false, public?: true
+  end
+end
+
+defmodule AshCredoFixtures.Accounts.TenantEmailKey do
+  @moduledoc """
+  `MissingIdentity` composite-primary-key fixture: `:email` is one member
+  of a composite key - only the tuple is unique, so the identity
+  suggestion still applies to the attribute.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Accounts,
+    validate_domain_inclusion?: false
+
+  actions do
+    defaults [:read]
+    default_accept []
+  end
+
+  attributes do
+    attribute :tenant_id, :uuid, primary_key?: true, allow_nil?: false, public?: true
+    attribute :email, :string, primary_key?: true, allow_nil?: false, public?: true
+  end
+end
+
 defmodule AshCredoFixtures.Accounts.EmbeddedContact do
   @moduledoc """
   `MissingIdentity` embedded-resource fixture: declares `data_layer: :embedded`
@@ -236,6 +278,8 @@ defmodule AshCredoFixtures.Accounts do
     resource AshCredoFixtures.Accounts.Member
     resource AshCredoFixtures.Accounts.Profile
     resource AshCredoFixtures.Accounts.Account
+    resource AshCredoFixtures.Accounts.EmailKey
+    resource AshCredoFixtures.Accounts.TenantEmailKey
   end
 end
 
