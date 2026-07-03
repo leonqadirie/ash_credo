@@ -1,6 +1,43 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.16.0](https://github.com/leonqadirie/ash_credo/compare/v0.15.0...v0.16.0) (2026-07-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* The minimum supported Elixir version is now 1.17 (previously 1.15). Lexical scope is resolved through the `Macro.Env` define/expand APIs introduced in Elixir 1.17.
+
+### Features
+
+* add excluded_paths to the accept-list security checks ([#182](https://github.com/leonqadirie/ash_credo/issues/182)) ([3776099](https://github.com/leonqadirie/ash_credo/commit/37760995abf5171f316bb6dfbe8a3880f25b3499)) by [@leonqadirie](https://github.com/leonqadirie)
+* add excluded_paths to UseCodeInterface ([#208](https://github.com/leonqadirie/ash_credo/issues/208)) ([97407f2](https://github.com/leonqadirie/ash_credo/commit/97407f2496f14d0b31ceb4183b0cd719a2c01e30)) by [@leonqadirie](https://github.com/leonqadirie)
+* support regex entries in SensitiveFieldInAccept dangerous_fields ([#181](https://github.com/leonqadirie/ash_credo/issues/181)) ([31643ff](https://github.com/leonqadirie/ash_credo/commit/31643ff0e11c9402d50fcf417c040d22bdfe00b3)) by [@leonqadirie](https://github.com/leonqadirie)
+
+
+### Bug Fixes
+
+* check accept lists on soft destroy actions ([#199](https://github.com/leonqadirie/ash_credo/issues/199)) ([87a4b51](https://github.com/leonqadirie/ash_credo/commit/87a4b51a8f7989efd6b04cfd703aba4438a9e018)) by [@leonqadirie](https://github.com/leonqadirie)
+* compile before running the lint alias ([#204](https://github.com/leonqadirie/ash_credo/issues/204)) ([3204f17](https://github.com/leonqadirie/ash_credo/commit/3204f17c1f1e28b1be8d2d039b90a49668c02cf6)) by [@leonqadirie](https://github.com/leonqadirie)
+* emit the missing-table hint exactly once under concurrent access ([#202](https://github.com/leonqadirie/ash_credo/issues/202)) ([31e4d89](https://github.com/leonqadirie/ash_credo/commit/31e4d89f247424e4f0e8f5eb7fef354f130e4b0f)) by [@leonqadirie](https://github.com/leonqadirie)
+* flag call-time actor on aggregate functions ([#200](https://github.com/leonqadirie/ash_credo/issues/200)) ([9c1d967](https://github.com/leonqadirie/ash_credo/commit/9c1d967df3db0b2648dd81eb103216a6f6ebcc27)) by [@leonqadirie](https://github.com/leonqadirie)
+* flag frozen Ash.UUIDv7.generate() defaults in CompileTimeDefault ([#193](https://github.com/leonqadirie/ash_credo/issues/193)) ([7f8a563](https://github.com/leonqadirie/ash_credo/commit/7f8a56365f36cb3ee2c18e98e9f3686b4cfacbd8)) by [@leonqadirie](https://github.com/leonqadirie)
+* flag pinned Time.utc_now in expressions ([#212](https://github.com/leonqadirie/ash_credo/issues/212)) ([d7aa9eb](https://github.com/leonqadirie/ash_credo/commit/d7aa9eb5b3897147a0a2e4497ecf38f4ba6e0301)) by [@leonqadirie](https://github.com/leonqadirie)
+* model the alias a defmodule creates instead of guessing nesting ([#207](https://github.com/leonqadirie/ash_credo/issues/207)) ([3b519a3](https://github.com/leonqadirie/ash_credo/commit/3b519a3d2f3743afb4a29288eb19830ab35216d3)) by [@leonqadirie](https://github.com/leonqadirie)
+* name the missing timestamp side and the domain opt-out ([#210](https://github.com/leonqadirie/ash_credo/issues/210)) ([aa3025e](https://github.com/leonqadirie/ash_credo/commit/aa3025ebda192a79a9ed5cc9780b29838b33b79e)) by [@leonqadirie](https://github.com/leonqadirie)
+* resolve alias __MODULE__.X targets instead of crashing the resolver ([#195](https://github.com/leonqadirie/ash_credo/issues/195)) ([59ae1ff](https://github.com/leonqadirie/ash_credo/commit/59ae1ff8c5aea1f1a9dfa2727d5ed060de089d2d)) by [@leonqadirie](https://github.com/leonqadirie)
+* respect policy_group conditions and forbid guards in OverlyPermissivePolicy ([#197](https://github.com/leonqadirie/ash_credo/issues/197)) ([b4649c5](https://github.com/leonqadirie/ash_credo/commit/b4649c5bbb7256f5feff166b59cb64e6f93f365c)) by [@leonqadirie](https://github.com/leonqadirie)
+* silence default_accept warnings without an inheriting action ([#213](https://github.com/leonqadirie/ash_credo/issues/213)) ([a77830e](https://github.com/leonqadirie/ash_credo/commit/a77830e988c5142ee7953733194262fc8a81d204)) by [@leonqadirie](https://github.com/leonqadirie)
+* skip argument-backed fields in RedundantValidation ([#196](https://github.com/leonqadirie/ash_credo/issues/196)) ([861ecea](https://github.com/leonqadirie/ash_credo/commit/861ecea65680ae5ff8de4bb3223ac1cc9a7b3ab4)) by [@leonqadirie](https://github.com/leonqadirie)
+* skip identity suggestion for a sole primary-key attribute ([#209](https://github.com/leonqadirie/ash_credo/issues/209)) ([6100355](https://github.com/leonqadirie/ash_credo/commit/61003551a684535ed19f019301a1185ba174b463)) by [@leonqadirie](https://github.com/leonqadirie)
+* stop PinnedTimeInExpression flagging expr in function bodies ([#194](https://github.com/leonqadirie/ash_credo/issues/194)) ([2cd2d25](https://github.com/leonqadirie/ash_credo/commit/2cd2d25dfc653b3ab9145bd6e561ac52061b4dd4)) by [@leonqadirie](https://github.com/leonqadirie)
+* treat require ... as: as the alias it creates ([#198](https://github.com/leonqadirie/ash_credo/issues/198)) ([b957355](https://github.com/leonqadirie/ash_credo/commit/b9573552951a6f24ef17febaf6d2a9fdfc4bbccd)) by [@leonqadirie](https://github.com/leonqadirie)
+
+
+### Code Refactoring
+
+* resolve lexical scope through Macro.Env ([4d86b0a](https://github.com/leonqadirie/ash_credo/commit/4d86b0ac06dccfe6fe3690347931d0f15e02d084)) by [@leonqadirie](https://github.com/leonqadirie)
+
 ## [0.15.0](https://github.com/leonqadirie/ash_credo/compare/v0.14.0...v0.15.0) (2026-06-12)
 
 
