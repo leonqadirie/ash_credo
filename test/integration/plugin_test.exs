@@ -5,8 +5,10 @@ defmodule AshCredo.PluginIntegrationTest do
   Boots Credo programmatically against `test/integration/fixtures/plugin_smoke/`,
   pointing at that fixture's own `.credo.exs` (which uses `{AshCredo, []}`).
   Verifies the plugin's wiring as a whole: `register_default_config` is honored,
-  the embedded check on/off toggles in `lib/ash_credo.ex` are applied, and the
-  enabled checks actually run end-to-end.
+  the embedded check on/off toggles in `lib/ash_credo.ex` are applied, the
+  enabled checks actually run end-to-end, and a user-enabled compiled check
+  delivers issues built from `Ash.Resource.Info` introspection through the
+  whole pipeline (regression guard for issue #187).
 
   This complements the per-check unit tests under `test/ash_credo/check/`,
   which all bypass `Credo.Plugin` orchestration by calling
@@ -26,7 +28,7 @@ defmodule AshCredo.PluginIntegrationTest do
     :ok
   end
 
-  test "plugin registers, default-on checks fire, default-off checks don't" do
+  test "plugin registers, default-on checks fire, default-off checks don't, compiled checks deliver" do
     # Credo writes per-issue lines via a globally-registered GenServer
     # (`Credo.CLI.Output.Shell`) whose group leader was set at app boot, so
     # `ExUnit.CaptureIO` cannot intercept them. The shell exposes
@@ -79,6 +81,34 @@ defmodule AshCredo.PluginIntegrationTest do
            `UseCodeInterface` is `false` in the plugin's embedded config and
            must not fire by default.
            Triggered checks: #{inspect(MapSet.to_list(triggered))}
+           """
+
+    # User-enabled compiled check: the fixture's `.credo.exs` enables
+    # `MissingCodeInterface` (default-off in the plugin's embedded config) via
+    # `checks: %{extra: [...]}`, the way a user would. The fixture's
+    # `lib/post.ex` has a deliberately minimal body - the interface-less
+    # actions the check reports on (e.g. `:draft`) exist only on the compiled
+    # `AshCredoFixtures.Blog.Post` from `test/support/fixtures/`. Issues
+    # naming them prove that compiled-introspection results survive the whole
+    # Credo pipeline (regression guard for issue #187, which alleged they are
+    # silently dropped).
+    code_interface_issues =
+      Enum.filter(issues, &(&1.check == AshCredo.Check.Design.MissingCodeInterface))
+
+    assert code_interface_issues != [],
+           """
+           Expected the user-enabled compiled check `MissingCodeInterface` to
+           deliver issues end-to-end through the plugin pipeline.
+           Triggered checks: #{inspect(MapSet.to_list(triggered))}
+           Issues: #{inspect(Enum.map(issues, &{&1.check, &1.message}))}
+           """
+
+    assert Enum.any?(code_interface_issues, &(&1.message =~ ":draft")),
+           """
+           Expected an issue for action `:draft`, which is visible only via
+           `Ash.Resource.Info` on the compiled fixture module - not in the
+           analyzed source file.
+           Messages: #{inspect(Enum.map(code_interface_issues, & &1.message))}
            """
 
     # `AshCredo.ClearCacheTask` is appended to the `:halt_execution` pipeline
