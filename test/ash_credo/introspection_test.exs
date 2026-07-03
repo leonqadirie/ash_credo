@@ -233,7 +233,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = AshCallScanner.calls(source_file(source))
-      assert [_] = calls
+      assert [{{:., _, [{:__aliases__, _, [:Ash]}, :read!]}, _, [_]}] = calls
     end
 
     test "finds direct Ash calls" do
@@ -246,7 +246,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = AshCallScanner.calls(source_file(source))
-      assert [_] = calls
+      assert [{{:., _, [{:__aliases__, _, [:Ash]}, :read!]}, _, [_]}] = calls
     end
 
     test "finds aliased Ash calls" do
@@ -261,7 +261,8 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = AshCallScanner.calls(source_file(source))
-      assert [_] = calls
+      # The raw AST keeps the alias spelling; expansion happens at detection.
+      assert [{{:., _, [{:__aliases__, _, [:A]}, :read!]}, _, [_]}] = calls
     end
 
     test "finds function-local aliases before the call site" do
@@ -275,7 +276,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = AshCallScanner.calls(source_file(source))
-      assert [_] = calls
+      assert [{{:., _, [{:__aliases__, _, [:A]}, :read!]}, _, [_]}] = calls
     end
 
     test "finds calls aliased via require ... as:" do
@@ -325,7 +326,8 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = AshCallScanner.calls(source_file(source))
-      assert [_] = calls
+      # Only the call after the alias is visible; `before_alias` is not.
+      assert [{{:., _, [{:__aliases__, _, [:A]}, :read!]}, _, [_]}] = calls
     end
 
     test "does not find non-Ash calls" do
@@ -357,7 +359,11 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = AshCallScanner.calls(source_file(source))
-      assert [_, _] = calls
+
+      assert [
+               {{:., _, [{:__aliases__, _, [:Ash]}, :read!]}, _, _},
+               {{:., _, [{:__aliases__, _, [:Ash]}, :create!]}, _, _}
+             ] = calls
     end
   end
 
@@ -400,7 +406,7 @@ defmodule AshCredo.IntrospectionTest do
       """
 
       calls = AshCallScanner.calls_with_module(source_file(source))
-      assert [_] = calls
+      assert [{{{:., _, [{:__aliases__, _, [:A]}, :read!]}, _, _}, [:Ash]}] = calls
     end
   end
 
@@ -559,7 +565,7 @@ defmodule AshCredo.IntrospectionTest do
     test "finds all attribute entities" do
       attrs = first_resource_section(@ash_resource, :attributes)
       attributes = Introspection.entities(attrs, :attribute)
-      assert [_, _] = attributes
+      assert [{:attribute, _, [:title | _]}, {:attribute, _, [:body | _]}] = attributes
     end
 
     test "returns empty list for nil section" do
@@ -746,8 +752,11 @@ defmodule AshCredo.IntrospectionTest do
 
       actions = first_resource_section(source, :actions)
 
-      assert [_, _] = Introspection.action_entities(actions, [:read, :create])
-      assert [_, _, _] = Introspection.action_entities(actions)
+      typed = Introspection.action_entities(actions, [:read, :create])
+      assert Enum.map(typed, &Introspection.entity_name/1) == [:read, :create]
+
+      all = Introspection.action_entities(actions)
+      assert Enum.map(all, &Introspection.entity_name/1) == [:create, :read, :custom]
     end
   end
 
@@ -1020,7 +1029,7 @@ defmodule AshCredo.IntrospectionTest do
 
       policies = first_resource_section(source, :policies)
       entities = Introspection.policy_entities(policies)
-      assert [_, _] = entities
+      assert [{:policy, _, _}, {:bypass, _, _}] = entities
     end
 
     test "finds policies nested inside policy_group" do
@@ -1040,7 +1049,7 @@ defmodule AshCredo.IntrospectionTest do
 
       policies = first_resource_section(source, :policies)
       entities = Introspection.policy_entities(policies)
-      assert [_] = entities
+      assert [{:policy, _, _}] = entities
     end
 
     test "returns empty list for nil" do

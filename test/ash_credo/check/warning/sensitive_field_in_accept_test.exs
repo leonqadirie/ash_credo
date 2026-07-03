@@ -39,6 +39,8 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAcceptTest do
     triggers = Enum.map(issues, & &1.trigger)
     assert "is_admin" in triggers
     assert "permissions" in triggers
+    assert Enum.all?(issues, &(&1.line_no == 6))
+    assert Enum.all?(issues, &(&1.line_no == 6))
   end
 
   test "reports issue for inline accept with dangerous fields" do
@@ -157,6 +159,8 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAcceptTest do
     triggers = Enum.map(issues, & &1.trigger)
     assert "reset_token" in triggers
     assert "api_token" in triggers
+    assert Enum.all?(issues, &(&1.line_no == 6))
+    assert Enum.all?(issues, &(&1.line_no == 6))
   end
 
   test "regex and atom entries can be mixed" do

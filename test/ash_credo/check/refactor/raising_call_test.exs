@@ -113,7 +113,9 @@ defmodule AshCredo.Check.Refactor.RaisingCallTest do
     end
     """
 
-    assert [_] = run_check(RaisingCall, source)
+    assert [issue] = run_check(RaisingCall, source)
+    assert issue.trigger == "Ash.read!"
+    assert issue.line_no == 2
     assert [] = run_check(RaisingCall, source, excluded_functions: [{Ash, :read!}])
   end
 
@@ -297,7 +299,8 @@ defmodule AshCredo.Check.Refactor.RaisingCallTest do
       end
       """
 
-      assert [_] = run_check(RaisingCall, source, __filename__: "lib/my_app/accounts.ex")
+      assert [issue] = run_check(RaisingCall, source, __filename__: "lib/my_app/accounts.ex")
+      assert issue.trigger == "Ash.read!"
     end
 
     test "respects an empty excluded_paths override" do
@@ -305,11 +308,13 @@ defmodule AshCredo.Check.Refactor.RaisingCallTest do
       Ash.read!(MyApp.User)
       """
 
-      assert [_] =
+      assert [issue] =
                run_check(RaisingCall, source,
                  __filename__: "test/my_app/user_test.exs",
                  excluded_paths: []
                )
+
+      assert issue.trigger == "Ash.read!"
     end
 
     test "respects a custom excluded_paths list" do
