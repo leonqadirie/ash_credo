@@ -164,6 +164,67 @@ defmodule AshCredoFixtures.Accounts.EmbeddedContact do
   end
 end
 
+defmodule AshCredoFixtures.Accounts.Account do
+  @moduledoc """
+  `UseCodeInterface` fixture for the long-tail suggestion families:
+
+    * `get_account_by_email` uses `get_by_identity: :unique_email` - the
+      suggestion must resolve the identity to its keys to match a
+      `Ash.get!(Account, %{email: ...})` lookup.
+    * `fetch_account_by_id` sets `not_found_error?: false` - the suggested
+      call must NOT carry the trailing `not_found_error?: false` argument.
+    * `:activate` is a generic action with an interface - builder calls via
+      `Ash.ActionInput.for_action/3` must suggest the `input_to_*` helper.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Accounts,
+    validate_domain_inclusion?: false
+
+  code_interface do
+    define :get_account_by_email, action: :read, get_by_identity: :unique_email
+    define :fetch_account_by_id, action: :read, get_by: [:id], not_found_error?: false
+    define :activate
+  end
+
+  actions do
+    defaults [:read]
+    default_accept []
+
+    action :activate do
+      run fn _input, _ -> :ok end
+    end
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :email, :string, public?: true
+  end
+
+  identities do
+    identity :unique_email, [:email]
+  end
+end
+
+defmodule AshCredoFixtures.Standalone do
+  @moduledoc """
+  Resource without a domain: `UseCodeInterface` has no domain interface to
+  point at, so both the `:auto` and the `prefer_interface_scope: :domain`
+  paths must fall back to suggesting a resource-level interface.
+  """
+
+  use Ash.Resource, domain: nil, validate_domain_inclusion?: false
+
+  actions do
+    defaults [:read]
+    default_accept []
+  end
+
+  attributes do
+    uuid_primary_key :id
+  end
+end
+
 defmodule AshCredoFixtures.Accounts do
   @moduledoc "Fixture domain for cross-domain tests."
 
@@ -173,6 +234,7 @@ defmodule AshCredoFixtures.Accounts do
     resource AshCredoFixtures.Accounts.User
     resource AshCredoFixtures.Accounts.Member
     resource AshCredoFixtures.Accounts.Profile
+    resource AshCredoFixtures.Accounts.Account
   end
 end
 
