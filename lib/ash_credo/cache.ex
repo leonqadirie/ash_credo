@@ -187,13 +187,27 @@ defmodule AshCredo.Cache do
 
   # One hint per VM, tracked outside the (missing) table: a no-plugin run
   # would otherwise repeat the message once per accessor call per file.
-  # Concurrent first callers may rarely both emit; best-effort is fine here.
+  # The flag check and set are not atomic on their own, and Credo dispatches
+  # its first wave of check tasks simultaneously - many processes can pass
+  # the flag check before any of them sets it. Serialize the first emission
+  # through a :global lock and re-check the flag inside the critical section;
+  # after the flag is set, callers take the lock-free fast path.
   defp warn_missing_table do
-    if not :persistent_term.get(@hint_emitted_key, false) do
+    if not hint_emitted?() do
+      :global.trans({@hint_emitted_key, self()}, &emit_hint_if_first/0)
+    end
+
+    :ok
+  end
+
+  defp emit_hint_if_first do
+    if not hint_emitted?() do
       :persistent_term.put(@hint_emitted_key, true)
       IO.puts(:stderr, @missing_table_hint)
     end
   end
+
+  defp hint_emitted?, do: :persistent_term.get(@hint_emitted_key, false)
 
   # ── GenServer callbacks ──
 
