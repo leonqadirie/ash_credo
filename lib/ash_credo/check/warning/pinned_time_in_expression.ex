@@ -34,10 +34,14 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
   alias AshCredo.Introspection.Block
   alias Credo.Code.Name
 
+  # `Time.utc_now` maps to `nil`: Ash has no expression builtin returning
+  # the current time of day, so the message advises passing the value in
+  # instead of naming a replacement.
   @time_calls %{
     {[:Date], :utc_today} => "today()",
     {[:DateTime], :utc_now} => "now()",
-    {[:NaiveDateTime], :utc_now} => "now()"
+    {[:NaiveDateTime], :utc_now} => "now()",
+    {[:Time], :utc_now} => nil
   }
 
   @impl true
@@ -54,18 +58,16 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
       ast,
       fn
         {:^, meta, [{{:., _, [{:__aliases__, _, module}, func]}, _, _}]} = node, acc ->
-          case Map.get(@time_calls, {module, func}) do
-            nil ->
+          case Map.fetch(@time_calls, {module, func}) do
+            :error ->
               {node, acc}
 
-            replacement ->
+            {:ok, replacement} ->
               pinned = "^#{Name.full(module)}.#{func}()"
 
               issue =
                 format_issue(issue_meta,
-                  message:
-                    "Use `#{replacement}` instead of `#{pinned}` in Ash expressions. " <>
-                      "The pinned call is evaluated at compile time and never updates.",
+                  message: pinned_message(replacement, pinned),
                   trigger: pinned,
                   line_no: meta[:line]
                 )
@@ -78,6 +80,17 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
       end,
       []
     )
+  end
+
+  defp pinned_message(nil, pinned) do
+    "`#{pinned}` is evaluated at compile time and never updates, and no " <>
+      "expression builtin returns the current time of day. Pass the value " <>
+      "as an action argument, or compare datetimes with `now()`."
+  end
+
+  defp pinned_message(replacement, pinned) do
+    "Use `#{replacement}` instead of `#{pinned}` in Ash expressions. " <>
+      "The pinned call is evaluated at compile time and never updates."
   end
 
   defp module_expr_issues(module_ast, issue_meta) do

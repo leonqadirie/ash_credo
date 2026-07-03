@@ -287,4 +287,27 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpressionTest do
 
     assert [] = run_check(PinnedTimeInExpression, source)
   end
+
+  test "flags pinned Time.utc_now with pass-the-value advice" do
+    # No expression builtin returns the current time of day, so the
+    # message advises an argument instead of naming a replacement.
+    source = """
+    defmodule MyApp.Venue do
+      use Ash.Resource, domain: MyApp.Places
+
+      actions do
+        read :open_now do
+          filter expr(opens_at <= ^Time.utc_now())
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(PinnedTimeInExpression, source)
+    assert issue.trigger == "^Time.utc_now()"
+    assert issue.line_no == 6
+    assert issue.message =~ "never updates"
+    assert issue.message =~ "action argument"
+    refute issue.message =~ "Use `"
+  end
 end
