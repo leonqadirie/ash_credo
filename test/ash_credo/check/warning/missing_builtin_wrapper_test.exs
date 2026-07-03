@@ -58,8 +58,7 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapperTest do
       """
 
       issues = run_check(MissingBuiltinWrapper, source)
-      assert [_, _] = issues
-      assert Enum.all?(issues, &(&1.trigger == "set_attribute"))
+      assert sorted_triggers(issues) == ["set_attribute", "set_attribute"]
       assert sorted_lines(issues) == [6, 10]
     end
 
@@ -276,8 +275,7 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapperTest do
       """
 
       issues = run_check(MissingBuiltinWrapper, source)
-      assert [_, _] = issues
-      assert Enum.all?(issues, &(&1.trigger == "set_context"))
+      assert sorted_triggers(issues) == ["set_context", "set_context"]
       assert Enum.all?(issues, &(&1.message =~ "`prepare` wrapper"))
       assert sorted_lines(issues) == [6, 10]
     end

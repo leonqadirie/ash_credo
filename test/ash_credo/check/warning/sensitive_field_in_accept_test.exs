@@ -35,10 +35,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAcceptTest do
     """
 
     issues = run_check(SensitiveFieldInAccept, source)
-    assert [_, _] = issues
-    triggers = Enum.map(issues, & &1.trigger)
-    assert "is_admin" in triggers
-    assert "permissions" in triggers
+    assert sorted_triggers(issues) == ~w(is_admin permissions)
     assert sorted_lines(issues) == [6, 6]
   end
 
@@ -154,10 +151,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAcceptTest do
     """
 
     issues = run_check(SensitiveFieldInAccept, source, dangerous_fields: [~r/_token$/])
-    assert [_, _] = issues
-    triggers = Enum.map(issues, & &1.trigger)
-    assert "reset_token" in triggers
-    assert "api_token" in triggers
+    assert sorted_triggers(issues) == ~w(api_token reset_token)
     assert sorted_lines(issues) == [6, 6]
   end
 
@@ -175,9 +169,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAcceptTest do
     """
 
     issues = run_check(SensitiveFieldInAccept, source, dangerous_fields: [:is_admin, ~r/_token$/])
-    triggers = Enum.map(issues, & &1.trigger)
-    assert "is_admin" in triggers
-    assert "reset_token" in triggers
+    assert sorted_triggers(issues) == ~w(is_admin reset_token)
   end
 
   test "no issue for safe fields" do

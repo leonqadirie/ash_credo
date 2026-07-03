@@ -19,8 +19,7 @@ defmodule AshCredo.Check.Design.MissingIdentityTest do
 
     issues = run_check(MissingIdentity, source)
 
-    triggers = issues |> MapSet.new(& &1.trigger)
-    assert MapSet.equal?(triggers, MapSet.new(~w(email username)))
+    assert MapSet.equal?(trigger_set(issues), MapSet.new(~w(email username)))
 
     for issue <- issues do
       assert issue.message =~ "AshCredoFixtures.Accounts.Member"
