@@ -338,6 +338,13 @@ defmodule AshCredo.Introspection do
     section_line(section_ast) || line || fallback
   end
 
+  @doc "Returns the best issue anchor line for a module's `actions` section, falling back to the `use` line and then line 1."
+  def actions_section_line(module_ast, %ResourceContext{use_line: use_line}) do
+    module_ast
+    |> find_dsl_section(:actions)
+    |> section_issue_line(use_line, 1)
+  end
+
   @doc "Returns the best issue anchor line for a resource section, falling back to the `use` line and then `fallback`."
   def resource_issue_line(resource_context, section_ast \\ nil, fallback \\ 1)
 

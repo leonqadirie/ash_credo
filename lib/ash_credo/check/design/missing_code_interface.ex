@@ -101,7 +101,7 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
          issue_meta,
          excluded_actions
        ) do
-    actions_line = actions_section_line(module_ast, context)
+    actions_line = Introspection.actions_section_line(module_ast, context)
 
     actions
     |> Enum.reject(fn action ->
@@ -129,11 +129,5 @@ defmodule AshCredo.Check.Design.MissingCodeInterface do
       trigger: "#{action.name}",
       line_no: line
     )
-  end
-
-  defp actions_section_line(module_ast, context) do
-    actions_ast = Introspection.find_dsl_section(module_ast, :actions)
-
-    Introspection.section_issue_line(actions_ast, context.use_line, 1)
   end
 end
