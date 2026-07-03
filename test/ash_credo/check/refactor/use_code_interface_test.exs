@@ -415,6 +415,115 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
     end
   end
 
+  # ── Long-tail suggestion families ──────────────────────────────────────────
+  #
+  # These exercise the message variants that only appear with specific
+  # interface configurations on `AshCredoFixtures.Accounts.Account`,
+  # `AshCredoFixtures.Blog.Article`, and `AshCredoFixtures.Standalone`.
+
+  describe "suggestion long tail" do
+    test "Ash.get! with a map lookup matches a get_by_identity interface via its identity keys" do
+      source = """
+      defmodule MyApp.Signups do
+        def find(email) do
+          Ash.get!(AshCredoFixtures.Accounts.Account, %{email: email})
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.get!"
+      assert issue.line_no == 3
+
+      assert issue.message =~
+               "AshCredoFixtures.Accounts.Account.get_account_by_email!(email, not_found_error?: false)"
+
+      refute issue.message =~ "fetch_account_by_id"
+    end
+
+    test "an interface with not_found_error?: false is suggested without the trailing option" do
+      source = """
+      defmodule MyApp.Signups do
+        def find(id) do
+          Ash.get(AshCredoFixtures.Accounts.Account, id)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.get"
+      assert issue.line_no == 3
+      assert issue.message =~ "AshCredoFixtures.Accounts.Account.fetch_account_by_id(id)"
+      refute issue.message =~ "not_found_error?"
+    end
+
+    test "Ash.ActionInput.for_action suggests the input_to_* helper" do
+      source = """
+      defmodule MyApp.Signups do
+        def activation_input do
+          Ash.ActionInput.for_action(AshCredoFixtures.Accounts.Account, :activate)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.ActionInput.for_action"
+      assert issue.line_no == 3
+      assert issue.message =~ "AshCredoFixtures.Accounts.Account.input_to_activate"
+    end
+
+    test "outside-domain Ash.get! without any interface suggests a get-by define on the domain" do
+      source = """
+      defmodule MyApp.Web.ArticleController do
+        def show(id) do
+          Ash.get!(AshCredoFixtures.Blog.Article, id)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.get!"
+      assert issue.line_no == 3
+      assert issue.message =~ "Prefer a get-by code interface on `AshCredoFixtures.Blog`"
+      assert issue.message =~ "define :get_by_id, action: :read, get_by: [:id]"
+
+      assert issue.message =~
+               "`resource AshCredoFixtures.Blog.Article do ... end` block of the domain"
+    end
+
+    test "a domainless resource falls back to a resource-level define under :auto" do
+      source = """
+      defmodule MyApp.Web.StandaloneController do
+        def list do
+          Ash.read!(AshCredoFixtures.Standalone)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.read!"
+      assert issue.line_no == 3
+      assert issue.message =~ "Prefer a code interface on `AshCredoFixtures.Standalone`"
+      assert issue.message =~ "define :read"
+      assert issue.message =~ "inside the resource's `code_interface` block"
+    end
+
+    test "a domainless resource falls back to a resource-level define even under :domain scope" do
+      source = """
+      defmodule MyApp.Web.StandaloneController do
+        def list do
+          Ash.read!(AshCredoFixtures.Standalone)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source, prefer_interface_scope: :domain)
+      assert issue.message =~ "Prefer a code interface on `AshCredoFixtures.Standalone`"
+      assert issue.message =~ "inside the resource's `code_interface` block"
+      refute issue.message =~ "domain"
+    end
+  end
+
   # ── Implicit submodule alias ───────────────────────────────────────────────
 
   describe "implicit submodule alias" do
