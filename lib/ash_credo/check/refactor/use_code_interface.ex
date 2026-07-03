@@ -6,6 +6,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     param_defaults: [
       enforce_code_interface_in_domain: true,
       enforce_code_interface_outside_domain: true,
+      excluded_paths: [~r"/test/", "test"],
       prefer_interface_scope: :auto
     ],
     explanations: [
@@ -48,7 +49,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
       ## Configuration
 
-      Three params let you adapt the check to a team's code-interface
+      These params adapt the check to a team's code-interface
       conventions:
 
         * `enforce_code_interface_in_domain` (default `true`) - when
@@ -67,6 +68,9 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
           always suggests a resource-level interface (useful if you only
           define code interfaces on resources). `:domain` always suggests a
           domain-level interface.
+        * `excluded_paths` (defaults to test directories) - raw `Ash.*`
+          calls in tests and factories are idiomatic setup code, not
+          missing interfaces. Override (e.g. to `[]`) to scan tests too.
 
       Example - a team that allows raw calls inside their domain and only
       defines interfaces on resources:
@@ -98,6 +102,8 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
           "Flag raw `Ash.*` calls whose caller shares a domain with the resource. Set to `false` to leave same-domain callers alone (useful for teams that consider raw calls inside `Change`/`Preparation`/`Validation` modules acceptable).",
         enforce_code_interface_outside_domain:
           "Flag raw `Ash.*` calls whose caller is not in the resource's domain. This covers different known domains, plain callers (controller, LiveView, worker), callers that are an `Ash.Resource` with no `:domain`, and resources that cannot be loaded. Set to `false` to silence all of them.",
+        excluded_paths:
+          "Paths or regexes to skip. Defaults to test directories, where raw `Ash.*` calls are idiomatic setup code.",
         prefer_interface_scope:
           "Controls which interface the check points at. `:auto` (default) follows the \"in-domain → resource, outside-domain → domain\" heuristic. `:resource` always suggests a resource-level interface. `:domain` always suggests a domain-level interface."
       ]
@@ -105,11 +111,20 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   alias AshCredo.Introspection.{AshCallResolver, AshCallSite}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
+  alias AshCredo.PathFilter
 
+  # Path filtering lives here rather than in `run_compiled/2` so an
+  # excluded file cannot emit the Ash-missing diagnostic either - the
+  # guard consults `active?/2` before checking Ash availability.
   @impl AshCredo.CompiledCheck
-  def active?(_source_file, params) do
-    Params.get(params, :enforce_code_interface_in_domain, __MODULE__) or
-      Params.get(params, :enforce_code_interface_outside_domain, __MODULE__)
+  def active?(source_file, params) do
+    enforcing? =
+      Params.get(params, :enforce_code_interface_in_domain, __MODULE__) or
+        Params.get(params, :enforce_code_interface_outside_domain, __MODULE__)
+
+    excluded_paths = Params.get(params, :excluded_paths, __MODULE__)
+
+    enforcing? and not PathFilter.excluded?(source_file.filename, excluded_paths)
   end
 
   @impl AshCredo.CompiledCheck
