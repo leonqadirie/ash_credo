@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.16.1](https://github.com/leonqadirie/ash_credo/compare/v0.16.0...v0.16.1) (2026-07-04)
+
+
+### Performance Improvements
+
+* replace global lock with name-registration claim for hint dedup ([#215](https://github.com/leonqadirie/ash_credo/issues/215)) ([0d4486e](https://github.com/leonqadirie/ash_credo/commit/0d4486eace2f0ac2d32bed4218848a2528e83065)) by [@leonqadirie](https://github.com/leonqadirie)
+
 ## [0.16.0](https://github.com/leonqadirie/ash_credo/compare/v0.15.0...v0.16.0) (2026-07-03)
 
 
