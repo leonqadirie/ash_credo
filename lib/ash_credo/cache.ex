@@ -189,22 +189,47 @@ defmodule AshCredo.Cache do
   # would otherwise repeat the message once per accessor call per file.
   # The flag check and set are not atomic on their own, and Credo dispatches
   # its first wave of check tasks simultaneously - many processes can pass
-  # the flag check before any of them sets it. Serialize the first emission
-  # through a :global lock and re-check the flag inside the critical section;
-  # after the flag is set, callers take the lock-free fast path.
+  # the flag check before any of them sets it. Resolve the race through
+  # atomic name registration: each racer spawns a fresh helper that tries
+  # to register a claim name, and only the winner re-checks the flag, sets
+  # it, and prints. Losers exit immediately - no lock, no backoff sleeps
+  # (:global.trans here would put every racer through randomized retry
+  # sleeps). After the flag is set, callers take the claim-free fast path.
   defp warn_missing_table do
     if not hint_emitted?() do
-      :global.trans({@hint_emitted_key, self()}, &emit_hint_if_first/0)
+      claim_and_emit_hint()
     end
 
     :ok
   end
 
-  defp emit_hint_if_first do
-    if not hint_emitted?() do
-      :persistent_term.put(@hint_emitted_key, true)
-      IO.puts(:stderr, @missing_table_hint)
+  # The helper is a spawned process rather than the caller itself because a
+  # process can hold only one registered name and the caller may already
+  # have one. The caller awaits the helper so the hint is on stderr before
+  # the triggering accessor returns. The flag is set before the winner
+  # exits (freeing the name), so a later claimant always finds it set.
+  # This orders emission at-most-once: a winner that crashes between
+  # setting the flag and printing suppresses the hint rather than letting
+  # another process print it twice.
+  defp claim_and_emit_hint do
+    {pid, ref} =
+      spawn_monitor(fn ->
+        if claim_registered?() and not hint_emitted?() do
+          :persistent_term.put(@hint_emitted_key, true)
+          IO.puts(:stderr, @missing_table_hint)
+        end
+      end)
+
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
     end
+  end
+
+  defp claim_registered? do
+    Process.register(self(), __MODULE__.MissingTableHintClaim)
+    true
+  rescue
+    ArgumentError -> false
   end
 
   defp hint_emitted?, do: :persistent_term.get(@hint_emitted_key, false)
