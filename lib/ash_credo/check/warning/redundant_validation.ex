@@ -34,7 +34,7 @@ defmodule AshCredo.Check.Warning.RedundantValidation do
       add a real constraint. Fields shadowed by a same-named `argument` on
       an update or destroy action are skipped too. In the atomic execution
       path - the default for those action types (`require_atomic?`
-      defaults to `true`) - `Ash.Resource.Validation.Present` validates
+      defaults to `true`) - the built-in `present` validation validates
       the argument instead of the attribute, so the validation enforces
       "the caller supplied the argument" regardless of the attribute
       constraint. (The non-atomic path falls back to the attribute when
