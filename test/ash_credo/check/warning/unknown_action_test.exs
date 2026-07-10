@@ -54,6 +54,43 @@ defmodule AshCredo.Check.Warning.UnknownActionTest do
       assert [] = run_check(UnknownAction, source)
     end
 
+    test "fires for Ash.read_one and Ash.read_first variants" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def a, do: Ash.read_one(AshCredoFixtures.Blog.Post, action: :publishd)
+        def b, do: Ash.read_one!(AshCredoFixtures.Blog.Post, action: :publishd)
+        def c, do: Ash.read_first(AshCredoFixtures.Blog.Post, action: :publishd)
+        def d, do: Ash.read_first!(AshCredoFixtures.Blog.Post, action: :publishd)
+      end
+      """
+
+      assert Enum.map(run_check(UnknownAction, source), & &1.trigger) == [
+               "Ash.read_one",
+               "Ash.read_one!",
+               "Ash.read_first",
+               "Ash.read_first!"
+             ]
+    end
+
+    test "Ash.get/3 still reads the action from options after a keyword identifier" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def find do
+          Ash.get!(
+            AshCredoFixtures.Accounts.Account,
+            [action: "activate"],
+            action: :readd
+          )
+        end
+      end
+      """
+
+      assert [issue] = run_check(UnknownAction, source)
+      assert issue.trigger == "Ash.get!"
+      assert issue.message =~ ":readd"
+      assert issue.message =~ ":read"
+    end
+
     test "fires for an Ash.Query.for_read builder (pattern D)" do
       source = """
       defmodule AshCredoFixtures.Blog do

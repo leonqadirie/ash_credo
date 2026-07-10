@@ -13,7 +13,7 @@ defmodule AshCredo.Introspection.AshCallSite do
       unreachable, `:not_a_resource` for non-Ash modules, or `:ash_missing`
       when Ash itself is not loaded.
     * `:action_name` - atom of the action this call targets (literal `:action`
-      keyword for `Ash.read/get/stream!`, positional arg for `bulk_*`/builders,
+      keyword for `Ash.read/get/read_one/read_first/stream!`, positional arg for `bulk_*`/builders,
       or the resource's primary `:read` for the bare-form Ash.read! shape).
     * `:fun_name` - the function called (e.g. `:read!`, `:bulk_create`).
     * `:module` - alias-expanded segments of the called module.
@@ -25,8 +25,8 @@ defmodule AshCredo.Introspection.AshCallSite do
     * `:builder_prefix` - `:changeset_to | :query_to | :input_to | nil` for
       the corresponding `for_*` builder shape, otherwise `nil`.
     * `:call_kind` - high-level call shape used to pick the right interface
-      suggestion (`:read_many`, `:get_one`, `:stream_many`, `:builder`,
-      `:bulk`, or `nil`).
+      suggestion (`:read_many`, `:read_one`, `:read_first`, `:get_one`,
+      `:stream_many`, `:builder`, `:bulk`, or `nil`).
     * `:lookup_keys` - the list of attribute names a `get_one` call looks up
       by (from a literal map / kw arg, or the resource's single-key primary
       key); `nil` for non-`:get_one` calls.
@@ -72,7 +72,15 @@ defmodule AshCredo.Introspection.AshCallSite do
           call_meta: keyword(),
           call_info: map(),
           builder_prefix: :changeset_to | :query_to | :input_to | nil,
-          call_kind: :read_many | :get_one | :stream_many | :builder | :bulk | nil,
+          call_kind:
+            :read_many
+            | :read_one
+            | :read_first
+            | :get_one
+            | :stream_many
+            | :builder
+            | :bulk
+            | nil,
           lookup_keys: [atom()] | nil
         }
 end

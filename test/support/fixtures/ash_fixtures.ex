@@ -214,8 +214,14 @@ defmodule AshCredoFixtures.Accounts.Account do
     * `get_account_by_email` uses `get_by_identity: :unique_email` - the
       suggestion must resolve the identity to its keys to match a
       `Ash.get!(Account, %{email: ...})` lookup.
+    * `get_account_by_action` covers an identity whose key is literally
+      `:action`, which must not be confused with `Ash.get/3` call options.
     * `fetch_account_by_id` sets `not_found_error?: false` - the suggested
       call must NOT carry the trailing `not_found_error?: false` argument.
+    * `single_account` is a no-key `get?: true` interface suitable for
+      replacing `Ash.read_one`, but not `Ash.read_first`.
+    * `action_single_account` targets a read action whose own `get?: true`
+      makes the otherwise plain interface return one record.
     * `:activate` is a generic action with an interface - builder calls via
       `Ash.ActionInput.for_action/3` must suggest the `input_to_*` helper.
   """
@@ -226,13 +232,18 @@ defmodule AshCredoFixtures.Accounts.Account do
 
   code_interface do
     define :get_account_by_email, action: :read, get_by_identity: :unique_email
+    define :get_account_by_action, action: :read, get_by_identity: :unique_action
     define :fetch_account_by_id, action: :read, get_by: [:id], not_found_error?: false
+    define :single_account, action: :read, get?: true, not_found_error?: false
+    define :action_single_account, action: :singleton
     define :activate
   end
 
   actions do
     defaults [:read]
     default_accept []
+
+    read :singleton, get?: true
 
     action :activate do
       run fn _input, _ -> :ok end
@@ -242,10 +253,12 @@ defmodule AshCredoFixtures.Accounts.Account do
   attributes do
     uuid_primary_key :id
     attribute :email, :string, public?: true
+    attribute :action, :string, public?: true
   end
 
   identities do
     identity :unique_email, [:email]
+    identity :unique_action, [:action]
   end
 end
 
