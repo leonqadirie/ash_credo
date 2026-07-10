@@ -22,6 +22,40 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicyTest do
     assert issue.line_no == 5
   end
 
+  test "reports issue when authorize_if always() carries trailing options" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy always() do
+          authorize_if always(), name: "everyone"
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(OverlyPermissivePolicy, source)
+    assert issue.message =~ "Unscoped policy"
+    assert issue.trigger == "authorize_if always()"
+  end
+
+  test "no issue when another authorize_if check carries trailing options" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog, authorizers: [Ash.Policy.Authorizer]
+
+      policies do
+        policy always() do
+          authorize_if actor_attribute_equals(:admin, true), name: "admins"
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(OverlyPermissivePolicy, source)
+  end
+
   test "reports issue when policy uses expr(true) as guard" do
     source = """
     defmodule MyApp.Post do
