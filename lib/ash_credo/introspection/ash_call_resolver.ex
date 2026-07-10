@@ -9,7 +9,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
   Four dispatch patterns are recognised:
 
     * Pattern A - resource at arg 0, `:action` in keyword opts (`Ash.read!`,
-      `Ash.get`, `Ash.stream!`, ...). When no `:action` is present, read-like
+      `Ash.get`, `Ash.read_one`, `Ash.stream!`, ...). When no `:action` is present, read-like
       calls resolve to the resource's primary `:read` action, but still carry
       their original call shape so checks can preserve list/get/stream
       semantics in suggestions.
@@ -46,7 +46,8 @@ defmodule AshCredo.Introspection.AshCallResolver do
   @sites_key_tag {__MODULE__, :sites}
 
   # Pattern A: resource at arg 0, action in keyword opts (:action key).
-  @action_in_opts ~w(read read! get get! stream!)a
+  @action_in_opts ~w(read read! get get! read_one read_one! read_first read_first! stream!)a
+  @get_funs ~w(get get!)a
 
   # Pattern B: bulk_create - resource at arg 1, action at arg 2.
   @bulk_create_funs ~w(bulk_create bulk_create!)a
@@ -167,7 +168,7 @@ defmodule AshCredo.Introspection.AshCallResolver do
   defp extract_action_in_opts(args, ctx) do
     with {:ok, resource_ast} <- arg_at(args, 0),
          {:ok, segs} <- literal_segments(resource_ast, ast_context(ctx.call_info)) do
-      case action_in_opts(args) do
+      case action_in_opts(args, ctx.fun_name) do
         {:literal, action} -> [build_site(segs, action, ctx)]
         :absent -> implicit_read_sites(segs, ctx)
         # `:action` is present but not a literal atom (e.g. a bound variable).
@@ -230,6 +231,8 @@ defmodule AshCredo.Introspection.AshCallResolver do
 
   defp call_kind([:Ash], fun_name) when fun_name in [:read, :read!], do: :read_many
   defp call_kind([:Ash], fun_name) when fun_name in [:get, :get!], do: :get_one
+  defp call_kind([:Ash], fun_name) when fun_name in [:read_one, :read_one!], do: :read_one
+  defp call_kind([:Ash], fun_name) when fun_name in [:read_first, :read_first!], do: :read_first
   defp call_kind([:Ash], :stream!), do: :stream_many
   defp call_kind([:Ash], fun_name) when fun_name in @bulk_create_funs, do: :bulk
   defp call_kind([:Ash], fun_name) when fun_name in @bulk_query_funs, do: :bulk
@@ -257,7 +260,6 @@ defmodule AshCredo.Introspection.AshCallResolver do
     if Keyword.keyword?(keys) do
       keys
       |> Keyword.keys()
-      |> Enum.reject(&(&1 == :action))
       |> case do
         [] -> nil
         literal_keys -> literal_keys
@@ -445,12 +447,24 @@ defmodule AshCredo.Introspection.AshCallResolver do
 
   defp arg_at(args, idx), do: Enum.fetch(args, idx)
 
-  defp action_in_opts(args) do
-    with [kwl | _] when is_list(kwl) <- Enum.reverse(args),
-         {:ok, value} <- Keyword.fetch(kwl, :action) do
-      if is_atom(value) and not is_nil(value), do: {:literal, value}, else: :non_literal
-    else
-      _ -> :absent
+  # `Ash.get/2`'s second argument is always the identifier, even when it is a
+  # keyword list containing an `:action` attribute. Only `Ash.get/3` has call
+  # options. The other Pattern A functions take options at index 1.
+  defp action_in_opts(args, fun_name) do
+    opts_idx = if fun_name in @get_funs, do: 2, else: 1
+
+    case arg_at(args, opts_idx) do
+      {:ok, opts} when is_list(opts) -> action_from_literal_opts(opts)
+      {:ok, _dynamic_or_invalid_opts} -> :non_literal
+      :error -> :absent
+    end
+  end
+
+  defp action_from_literal_opts(opts) do
+    case Keyword.fetch(opts, :action) do
+      {:ok, value} when is_atom(value) and not is_nil(value) -> {:literal, value}
+      {:ok, _value} -> :non_literal
+      :error -> :absent
     end
   end
 end

@@ -26,15 +26,34 @@ defmodule AshCredo.Introspection.AshCallResolverTest do
       assert site.lookup_keys == [:id]
     end
 
-    test "extracts keys from a keyword id, ignoring :action" do
+    test "treats :action in an Ash.get/2 keyword identifier as a lookup key" do
       source = """
       defmodule M do
-        def f, do: Ash.get!(AshCredoFixtures.Blog.Post, action: :read, id: 1)
+        def f, do: Ash.get!(AshCredoFixtures.Accounts.Account, action: "activate")
       end
       """
 
       assert [site] = sites(source)
-      assert site.lookup_keys == [:id]
+      assert site.action_name == :read
+      assert site.lookup_keys == [:action]
+    end
+
+    test "reads :action from Ash.get/3 options, not from its keyword identifier" do
+      source = """
+      defmodule M do
+        def f do
+          Ash.get!(
+            AshCredoFixtures.Accounts.Account,
+            [action: "activate"],
+            action: :missing
+          )
+        end
+      end
+      """
+
+      assert [site] = sites(source)
+      assert site.action_name == :missing
+      assert site.lookup_keys == [:action]
     end
 
     test "falls back to the resource's single primary key when the id is opaque" do
@@ -46,6 +65,26 @@ defmodule AshCredo.Introspection.AshCallResolverTest do
 
       assert [site] = sites(source)
       assert site.lookup_keys == [:id]
+    end
+  end
+
+  describe "single-record reads" do
+    test "resolves read_one and read_first variants with distinct call kinds" do
+      source = """
+      defmodule M do
+        def a, do: Ash.read_one(AshCredoFixtures.Blog.Post, action: :published)
+        def b, do: Ash.read_one!(AshCredoFixtures.Blog.Post, action: :published)
+        def c, do: Ash.read_first(AshCredoFixtures.Blog.Post, action: :published)
+        def d, do: Ash.read_first!(AshCredoFixtures.Blog.Post, action: :published)
+      end
+      """
+
+      assert Enum.map(sites(source), &{&1.fun_name, &1.call_kind, &1.action_name}) == [
+               {:read_one, :read_one, :published},
+               {:read_one!, :read_one, :published},
+               {:read_first, :read_first, :published},
+               {:read_first!, :read_first, :published}
+             ]
     end
   end
 

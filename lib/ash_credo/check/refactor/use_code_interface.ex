@@ -43,6 +43,11 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       `query_to_*` / `changeset_to_*` / `input_to_*` helper that Ash
       generates for code interfaces.
 
+      `Ash.read_one` calls only match no-key interfaces configured with
+      `get?: true`. `Ash.read_first` calls are intentionally not flagged:
+      generated get interfaces use `Ash.read_one` and therefore do not
+      preserve `read_first`'s behavior when several records match.
+
       Detection of references to actions that do not exist on the resource
       lives in `AshCredo.Check.Warning.UnknownAction` - enable that check
       separately if you want typo detection.
@@ -145,10 +150,19 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     }
   end
 
+  # A generated read code interface either lists records or uses `Ash.read_one`
+  # when configured with `get?: true`. It cannot preserve `Ash.read_first`'s
+  # "take the first record even when several match" semantics.
+  defp check_site(
+         %AshCallSite{call_kind: :read_first, resolution: {:ok, _resource, _info}},
+         _issue_meta,
+         _config
+       ), do: []
+
   defp check_site(%AshCallSite{resolution: {:ok, resource, info}} = site, issue_meta, config) do
     case CompiledIntrospection.action(resource, site.action_name) do
       {:ok, action} ->
-        classification = classify(resource, site.action_name, action.type, info, site, config)
+        classification = classify(resource, site.action_name, action, info, site, config)
 
         if enforced?(classification, config) do
           classification
@@ -186,7 +200,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   defp enforced?(%{same_domain?: true}, %{in_domain: in_domain}), do: in_domain
   defp enforced?(%{same_domain?: false}, %{outside_domain: outside}), do: outside
 
-  defp classify(resource, action_name, action_type, info, site, config) do
+  defp classify(resource, action_name, action, info, site, config) do
     caller = caller_atom(site.call_info)
     caller_domain = caller_domain(caller)
     resource_domain = info.domain
@@ -198,10 +212,10 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     %{
       resource: resource,
       action: action_name,
-      action_type: action_type,
+      action_type: action.type,
       resource_domain: resource_domain,
-      resource_iface: matching_interface(info.interfaces, action_name, site, info),
-      domain_iface: domain_interface(resource_domain, resource, action_name, site, info),
+      resource_iface: matching_interface(info.interfaces, action_name, action, site, info),
+      domain_iface: domain_interface(resource_domain, resource, action_name, action, site, info),
       same_domain?: same_domain?,
       scope: config.scope,
       bang?: AshCallResolver.bang?(site),
@@ -209,21 +223,23 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       call_kind: site.call_kind,
       fun_name: site.fun_name,
       lookup_keys: site.lookup_keys,
-      identities: info.identities
+      identities: info.identities,
+      not_found_error?: read_one_not_found_error(site)
     }
   end
 
-  defp domain_interface(nil, _resource, _action_name, _site, _info), do: nil
+  defp domain_interface(nil, _resource, _action_name, _action, _site, _info), do: nil
 
-  defp domain_interface(domain, resource, action_name, site, info) do
+  defp domain_interface(domain, resource, action_name, action, site, info) do
     domain
     |> CompiledIntrospection.domain_interfaces(resource)
-    |> matching_interface(action_name, site, info)
+    |> matching_interface(action_name, action, site, info)
   end
 
-  defp matching_interface(interfaces, action_name, site, info) do
+  defp matching_interface(interfaces, action_name, action, site, info) do
     Enum.find(interfaces, fn iface ->
-      interface_action?(iface, action_name) and interface_matches_site?(iface, site, info)
+      interface_action?(iface, action_name) and
+        interface_matches_site?(iface, action, site, info)
     end)
   end
 
@@ -231,20 +247,30 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     (iface.action || iface.name) == action_name
   end
 
-  defp interface_matches_site?(iface, %{call_kind: :get_one, lookup_keys: keys}, info) do
+  defp interface_matches_site?(iface, _action, %{call_kind: :get_one, lookup_keys: keys}, info) do
     get_interface_for_keys?(iface, keys, info)
   end
 
-  defp interface_matches_site?(iface, %{call_kind: kind}, _info)
+  defp interface_matches_site?(iface, action, %{call_kind: :read_one}, info) do
+    effective_get_interface?(iface, action) and is_nil(interface_lookup_keys(iface, info)) and
+      no_required_interface_args?(iface)
+  end
+
+  defp interface_matches_site?(iface, _action, %{call_kind: kind}, _info)
        when kind in [:read_many, :stream_many] do
     not get_interface?(iface)
   end
 
-  defp interface_matches_site?(iface, %{builder_prefix: prefix}, _info) when not is_nil(prefix) do
+  defp interface_matches_site?(iface, _action, %{builder_prefix: prefix}, _info)
+       when not is_nil(prefix) do
     not get_interface?(iface)
   end
 
-  defp interface_matches_site?(_iface, _site, _info), do: true
+  defp interface_matches_site?(_iface, _action, _site, _info), do: true
+
+  defp effective_get_interface?(iface, action) do
+    get_interface?(iface) or Map.get(action, :get?) == true
+  end
 
   defp get_interface_for_keys?(_iface, keys, _info) when keys in [nil, []], do: false
 
@@ -277,6 +303,28 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   defp get_interface?(iface) do
     iface.get? == true or not is_nil(iface.get_by) or not is_nil(iface.get_by_identity)
+  end
+
+  defp no_required_interface_args?(iface) do
+    Enum.all?(iface.args || [], &match?({:optional, _}, &1))
+  end
+
+  defp read_one_not_found_error(%{call_kind: :read_one, call_info: %{args: args}}) do
+    case Enum.fetch(args, 1) do
+      {:ok, opts} when is_list(opts) -> literal_not_found_error(opts)
+      {:ok, _dynamic_opts} -> :dynamic
+      :error -> false
+    end
+  end
+
+  defp read_one_not_found_error(_site), do: nil
+
+  defp literal_not_found_error(opts) do
+    case Keyword.fetch(opts, :not_found_error?) do
+      {:ok, value} when is_boolean(value) -> value
+      {:ok, _dynamic_value} -> :dynamic
+      :error -> false
+    end
   end
 
   defp caller_atom(%{enclosing_module_segments: segs}) when is_list(segs) and segs != [] do
@@ -324,6 +372,8 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
   end
 
   defp pick_suggestion(%{call_kind: :get_one, lookup_keys: keys}) when keys in [nil, []], do: nil
+
+  defp pick_suggestion(%{call_kind: :read_one, not_found_error?: :dynamic}), do: nil
 
   # `:resource` preference: always direct at the resource, even across domains.
   defp pick_suggestion(%{scope: :resource, resource_iface: iface}) when not is_nil(iface),
@@ -381,6 +431,26 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     fun = interface_call(iface, classification)
 
     "Prefer `#{inspect(domain)}.#{fun}` over `#{qualified}/#{arity}`."
+  end
+
+  defp format_message(
+         {:define, :resource},
+         %{resource: resource, action: action, call_kind: :read_one},
+         qualified,
+         arity
+       ) do
+    "Prefer a get code interface on `#{inspect(resource)}` over `#{qualified}/#{arity}`. " <>
+      "Define one with `define :#{action}, get?: true` inside the resource's `code_interface` block."
+  end
+
+  defp format_message(
+         {:define, :domain},
+         %{resource: resource, resource_domain: domain, action: action, call_kind: :read_one},
+         qualified,
+         arity
+       ) do
+    "Prefer a get code interface on `#{inspect(domain)}` over `#{qualified}/#{arity}`. " <>
+      "Define one with `define :some_name, action: :#{action}, get?: true` inside the `resource #{inspect(resource)} do ... end` block of the domain."
   end
 
   defp format_message(
@@ -443,6 +513,13 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     "#{fun}(#{Enum.join(args, ", ")})"
   end
 
+  defp interface_call(iface, %{call_kind: :read_one} = classification) do
+    fun = interface_function_name(iface.name, classification.builder_prefix, classification.bang?)
+    args = read_one_call_args(iface, classification.not_found_error?)
+
+    "#{fun}(#{Enum.join(args, ", ")})"
+  end
+
   defp interface_call(iface, %{call_kind: :stream_many} = classification) do
     fun = interface_function_name(iface.name, classification.builder_prefix, true)
 
@@ -462,6 +539,16 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
       args ++ ["not_found_error?: false"]
     end
   end
+
+  defp read_one_call_args(iface, not_found_error?) when is_boolean(not_found_error?) do
+    if interface_not_found_error?(iface) == not_found_error? do
+      []
+    else
+      ["not_found_error?: #{not_found_error?}"]
+    end
+  end
+
+  defp interface_not_found_error?(iface), do: Map.get(iface, :not_found_error?) != false
 
   defp get_define_name(:read, keys), do: "get_by_#{keys_suffix(keys)}"
   defp get_define_name(action, keys), do: "get_#{action}_by_#{keys_suffix(keys)}"

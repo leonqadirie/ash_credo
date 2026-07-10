@@ -136,6 +136,113 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       assert issue.message =~ "AshCredoFixtures.Blog.Post.all_posts!(stream?: true)"
     end
 
+    test "Ash.read_one uses only a no-key get interface" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def one_account do
+          Ash.read_one!(AshCredoFixtures.Accounts.Account, action: :read)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.read_one!"
+      assert issue.message =~ "AshCredoFixtures.Accounts.Account.single_account!()"
+      refute issue.message =~ "get_account_by_email"
+    end
+
+    test "Ash.read_one treats action-level get? as an effective get interface" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def one_account do
+          Ash.read_one!(AshCredoFixtures.Accounts.Account, action: :singleton)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.read_one!"
+
+      assert issue.message =~
+               "AshCredoFixtures.Accounts.Account.action_single_account!(not_found_error?: false)"
+    end
+
+    test "Ash.read_one preserves an explicit not_found_error? override" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def one_account do
+          Ash.read_one!(
+            AshCredoFixtures.Accounts.Account,
+            action: :read,
+            not_found_error?: true
+          )
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "single_account!(not_found_error?: true)"
+    end
+
+    test "Ash.read_one is ignored when not_found_error? is dynamic" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def one_account(not_found_error?) do
+          Ash.read_one!(
+            AshCredoFixtures.Accounts.Account,
+            action: :read,
+            not_found_error?: not_found_error?
+          )
+        end
+      end
+      """
+
+      assert [] = run_check(UseCodeInterface, source)
+    end
+
+    test "Ash.read_one does not suggest a list or keyed interface" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def one_post do
+          Ash.read_one!(AshCredoFixtures.Blog.Post, action: :read)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "define :read, get?: true"
+      refute issue.message =~ "all_posts"
+      refute issue.message =~ "get_post_by_id"
+    end
+
+    test "Ash.read_first is ignored because code interfaces cannot preserve its semantics" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def first_account do
+          Ash.read_first!(AshCredoFixtures.Accounts.Account, action: :read)
+        end
+      end
+      """
+
+      assert [] = run_check(UseCodeInterface, source)
+    end
+
+    test "Ash.get/2 can match an identity whose key is :action" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def find(action) do
+          Ash.get!(AshCredoFixtures.Accounts.Account, action: action)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.trigger == "Ash.get!"
+
+      assert issue.message =~
+               "AshCredoFixtures.Accounts.Account.get_account_by_action!(action, not_found_error?: false)"
+    end
+
     test "bare Ash.read!(Unloadable) still emits the :not_loadable diagnostic" do
       source = """
       defmodule SomeController do
