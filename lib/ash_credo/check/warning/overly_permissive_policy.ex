@@ -89,7 +89,7 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
       {forbid, _, _}, _acc when forbid in [:forbid_if, :forbid_unless] ->
         {:halt, false}
 
-      {:authorize_if, _, [{:always, _, _}]}, _acc ->
+      {:authorize_if, _, [{:always, _, _} | _opts]}, _acc ->
         {:halt, true}
 
       _other, acc ->
