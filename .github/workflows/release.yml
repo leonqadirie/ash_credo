@@ -40,8 +40,8 @@ jobs:
         if: steps.release.outputs.pr
         run: |
           VERSION=$(jq -r '.["."]' .release-please-manifest.json)
-          MAJOR_MINOR="${VERSION%.*}"
-          sed -Ei "s/\{:ash_credo, \"~> [0-9]+\.[0-9]+\"/\{:ash_credo, \"~> ${MAJOR_MINOR}\"/" README.md
+          sed -Ei "s/(mix igniter\.install ash_credo)@[0-9]+\.[0-9]+\.[0-9]+/\1@${VERSION}/" README.md
+          sed -Ei "s/\{:ash_credo, \"~> [0-9]+\.[0-9]+\.[0-9]+\"/\{:ash_credo, \"~> ${VERSION}\"/" README.md
 
       - name: Commit and push
         if: steps.release.outputs.pr
