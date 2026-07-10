@@ -21,9 +21,10 @@ defmodule AshCredo.Check.Warning.UnknownAction do
       action either exists on the resource or it doesn't. There's nothing
       to configure.
 
-      It runs against the same call sites that `UseCodeInterface` does -
-      `Ash.read!`/`Ash.get!`/`Ash.bulk_*`/`Ash.Changeset.for_*`/
-      `Ash.Query.for_read`/`Ash.ActionInput.for_action` - whenever both
+      It runs against the same resolved Ash call-site pipeline as
+      `UseCodeInterface`, including
+      `Ash.read!`/`Ash.get!`/`Ash.read_one!`/`Ash.read_first!`/`Ash.bulk_*`/
+      `Ash.Changeset.for_*`/`Ash.Query.for_read`/`Ash.ActionInput.for_action` - whenever both
       the resource and the action argument are literal values that can be
       resolved at lint time.
 
