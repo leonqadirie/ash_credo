@@ -89,5 +89,12 @@ defmodule AshCredo.Introspection.CompiledTest do
       assert Compiled.authorizers(@plain) == {:error, :not_a_resource}
       assert Compiled.action(@plain, :read) == {:error, :not_a_resource}
     end
+
+    test "a module raising mid-introspection yields :not_loadable instead of crashing" do
+      half_purged = AshCredoFixtures.HalfPurgedResource
+
+      assert Compiled.inspect_module(half_purged) == {:error, :not_loadable}
+      assert Compiled.attributes(half_purged) == {:error, :not_loadable}
+    end
   end
 end

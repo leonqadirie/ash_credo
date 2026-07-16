@@ -666,6 +666,13 @@ defmodule AshCredo.Introspection.Compiled do
       {:error, _reason} ->
         {:error, :not_loadable}
     end
+  rescue
+    # The `Ash.Resource.Info` accessors bottom out in `Spark.Dsl.Extension`,
+    # which raises `ArgumentError` when `module` is not (or no longer) a Spark
+    # DSL module and `UndefinedFunctionError` when it was purged. Both can
+    # occur after `resource?/1` succeeded if the module is recompiled or
+    # purged mid-run; the memoized error also stops per-call re-raising.
+    _ in [ArgumentError, UndefinedFunctionError] -> {:error, :not_loadable}
   end
 
   # Policies live in `Ash.Policy.Info` (a separate module from `Ash.Resource.Info`).
