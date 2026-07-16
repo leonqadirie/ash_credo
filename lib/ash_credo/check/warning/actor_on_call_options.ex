@@ -2,7 +2,7 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
   use Credo.Check,
     base_priority: :high,
     category: :warning,
-    tags: [:ash],
+    tags: [:ash, :security],
     explanations: [
       check: """
       `actor:` and `tenant:` belong on the query/changeset/input, set when it
