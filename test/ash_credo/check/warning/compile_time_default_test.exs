@@ -40,6 +40,26 @@ defmodule AshCredo.Check.Warning.CompileTimeDefaultTest do
     assert issue.line_no == 6
   end
 
+  test "reports a frozen default in a second attributes block" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      attributes do
+        uuid_primary_key :id
+      end
+
+      attributes do
+        attribute :scheduled_at, :utc_datetime, default: DateTime.utc_now()
+      end
+    end
+    """
+
+    assert [issue] = run_check(CompileTimeDefault, source)
+    assert issue.trigger == "DateTime.utc_now()"
+    assert issue.line_no == 9
+  end
+
   test "reports frozen update_default" do
     source = """
     defmodule MyApp.Post do
@@ -150,6 +170,81 @@ defmodule AshCredo.Check.Warning.CompileTimeDefaultTest do
 
     assert [issue] = run_check(CompileTimeDefault, source)
     assert issue.trigger == "DateTime.utc_now()"
+  end
+
+  test "reports frozen default called through an alias rename" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      alias DateTime, as: DT
+
+      attributes do
+        attribute :scheduled_at, :utc_datetime, default: DT.utc_now()
+      end
+    end
+    """
+
+    assert [issue] = run_check(CompileTimeDefault, source)
+    assert issue.trigger == "DT.utc_now()"
+    assert issue.line_no == 7
+    assert issue.message =~ "&DT.utc_now/0"
+  end
+
+  test "reports frozen default called through a plain alias" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      alias Ash.UUID
+
+      attributes do
+        attribute :token, :uuid, default: UUID.generate()
+      end
+    end
+    """
+
+    assert [issue] = run_check(CompileTimeDefault, source)
+    assert issue.trigger == "UUID.generate()"
+    assert issue.line_no == 7
+  end
+
+  test "reports Elixir-prefixed forms, aliased and fully qualified" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      alias Elixir.DateTime
+
+      attributes do
+        attribute :scheduled_at, :utc_datetime, default: DateTime.utc_now()
+        attribute :expires_at, :utc_datetime, default: Elixir.DateTime.utc_now()
+      end
+    end
+    """
+
+    assert [first, second] = run_check(CompileTimeDefault, source)
+    assert first.trigger == "DateTime.utc_now()"
+    assert first.line_no == 7
+    assert second.trigger == "Elixir.DateTime.utc_now()"
+    assert second.line_no == 8
+  end
+
+  test "no issue for a differently-named module's utc_now" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      alias MyApp.Clock
+
+      attributes do
+        attribute :scheduled_at, :utc_datetime, default: Clock.utc_now()
+        attribute :expires_at, :utc_datetime, default: MyApp.Clock.utc_now()
+      end
+    end
+    """
+
+    assert [] = run_check(CompileTimeDefault, source)
   end
 
   test "no issue for zero-arity captures" do

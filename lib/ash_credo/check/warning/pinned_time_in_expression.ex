@@ -31,17 +31,21 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Introspection.Aliases
   alias AshCredo.Introspection.Block
+  alias AshCredo.Introspection.LexicalScopeWalker
   alias Credo.Code.Name
 
-  # `Time.utc_now` maps to `nil`: Ash has no expression builtin returning
-  # the current time of day, so the message advises passing the value in
-  # instead of naming a replacement.
+  # Keyed on the module resolved through the lexical environment, so
+  # aliased forms (`alias DateTime, as: DT`) match too. `Time.utc_now`
+  # maps to `nil`: Ash has no expression builtin returning the current
+  # time of day, so the message advises passing the value in instead of
+  # naming a replacement.
   @time_calls %{
-    {[:Date], :utc_today} => "today()",
-    {[:DateTime], :utc_now} => "now()",
-    {[:NaiveDateTime], :utc_now} => "now()",
-    {[:Time], :utc_now} => nil
+    {Date, :utc_today} => "today()",
+    {DateTime, :utc_now} => "now()",
+    {NaiveDateTime, :utc_now} => "now()",
+    {Time, :utc_now} => nil
   }
 
   @impl true
@@ -53,17 +57,17 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
     |> Enum.flat_map(&module_expr_issues(&1, issue_meta))
   end
 
-  defp find_pinned_time_calls(ast, issue_meta) do
+  defp find_pinned_time_calls(ast, env, issue_meta) do
     Credo.Code.prewalk(
       ast,
       fn
-        {:^, meta, [{{:., _, [{:__aliases__, _, module}, func]}, _, _}]} = node, acc ->
-          case Map.fetch(@time_calls, {module, func}) do
+        {:^, meta, [{{:., _, [{:__aliases__, _, segments}, func]}, _, _}]} = node, acc ->
+          case time_call(segments, func, env) do
             :error ->
               {node, acc}
 
             {:ok, replacement} ->
-              pinned = "^#{Name.full(module)}.#{func}()"
+              pinned = "^#{Name.full(segments)}.#{func}()"
 
               issue =
                 format_issue(issue_meta,
@@ -82,6 +86,15 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
     )
   end
 
+  # Resolves the pinned call's target module through the env visible at
+  # the enclosing `expr`, so an aliased `^DT.utc_now()` matches and an
+  # unrelated module's `utc_now` does not.
+  defp time_call(segments, func, env) do
+    with {:ok, module} <- Aliases.expand_to_module(segments, env) do
+      Map.fetch(@time_calls, {module, func})
+    end
+  end
+
   defp pinned_message(nil, pinned) do
     "`#{pinned}` is evaluated at compile time and never updates, and no " <>
       "expression builtin returns the current time of day. Pass the value " <>
@@ -94,17 +107,41 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
   end
 
   defp module_expr_issues(module_ast, issue_meta) do
+    envs = expr_envs(module_ast)
+
     module_ast
     |> Block.module_body()
     |> Enum.reject(&match?({:defmodule, _, _}, &1))
-    |> Enum.flat_map(&expr_issues(&1, issue_meta))
+    |> Enum.flat_map(&expr_issues(&1, envs, issue_meta))
+  end
+
+  # Maps each `expr(...)` node in the module to the `Macro.Env` visible at
+  # it, so pinned calls resolve through the directives lexically in scope.
+  # Keyed on the node itself: its meta carries line/column, so structural
+  # equality identifies the call site.
+  defp expr_envs(module_ast) do
+    {envs, _scope} =
+      LexicalScopeWalker.traverse(
+        module_ast,
+        %{},
+        fn
+          {:expr, _, [_body]} = node, scope, acc ->
+            Map.put_new(acc, node, LexicalScopeWalker.env(scope))
+
+          _node, _scope, acc ->
+            acc
+        end,
+        fn _node, _scope, acc -> acc end
+      )
+
+    envs
   end
 
   # Heads whose bodies run after compilation: the pinned call inside them
   # is re-evaluated per invocation, so the freeze bug does not exist there.
   @deferred_heads ~w(def defp defmacro defmacrop fn &)a
 
-  defp expr_issues(ast, issue_meta) do
+  defp expr_issues(ast, envs, issue_meta) do
     Credo.Code.prewalk(
       ast,
       fn
@@ -122,7 +159,8 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
           {:pruned, acc}
 
         {:expr, _meta, [body]} = node, acc ->
-          {node, find_pinned_time_calls(body, issue_meta) ++ acc}
+          env = Map.get(envs, node, Aliases.base_env())
+          {node, find_pinned_time_calls(body, env, issue_meta) ++ acc}
 
         node, acc ->
           {node, acc}
