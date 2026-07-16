@@ -37,6 +37,23 @@ defmodule AshCredo.Check.Design.MissingPrimaryActionTest do
     assert [] = run_check(MissingPrimaryAction, source)
   end
 
+  test "reports embedded resources too - Ash casts embeds via primary actions" do
+    # EmbeddedAddress shadows the injected `:update` default without marking
+    # it primary, leaving two non-primary updates. `Ash.EmbeddableType`
+    # resolves updates via `primary_action!/2`, so this raises at runtime -
+    # embedded resources are deliberately not exempt from this check, unlike
+    # in the sibling Design checks (identities and code interfaces have no
+    # effect on embedded resources; primary actions do).
+    source = """
+    defmodule AshCredoFixtures.Accounts.EmbeddedAddress do
+      use Ash.Resource, data_layer: :embedded
+    end
+    """
+
+    assert [issue] = run_check(MissingPrimaryAction, source)
+    assert issue.trigger == "update"
+  end
+
   test "reports an issue when multiple creates exist without primary" do
     # Blog.Tag has :create_basic and :create_with_slug, neither primary.
     source = """

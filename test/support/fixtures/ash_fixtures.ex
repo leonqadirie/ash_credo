@@ -207,6 +207,31 @@ defmodule AshCredoFixtures.Accounts.EmbeddedContact do
   end
 end
 
+defmodule AshCredoFixtures.Accounts.EmbeddedAddress do
+  @moduledoc """
+  `MissingPrimaryAction` embedded-resource fixture: two `:update` actions,
+  neither primary. Naming one `:update` shadows the primary default Ash
+  injects into embedded resources (`SetPrimaryActions.add_defaults/1` skips
+  a default whose name is taken), so the resource ends up with no primary
+  update. Embedded resources are deliberately covered by the check -
+  `Ash.EmbeddableType` resolves the primary `create`/`read`/`update`/
+  `destroy` via `Ash.Resource.Info.primary_action!/2` when casting embeds,
+  which raises in exactly this state.
+  """
+
+  use Ash.Resource, data_layer: :embedded
+
+  actions do
+    update :update
+    update :update_city
+  end
+
+  attributes do
+    attribute :street, :string, public?: true
+    attribute :city, :string, public?: true
+  end
+end
+
 defmodule AshCredoFixtures.Accounts.Account do
   @moduledoc """
   `UseCodeInterface` fixture for the long-tail suggestion families:

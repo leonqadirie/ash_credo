@@ -25,6 +25,13 @@ defmodule AshCredo.Check.Design.MissingPrimaryAction do
       Spark transformers and extensions - so it catches cases where a
       transformer adds an action that breaks the primary-action invariant.
 
+      Embedded resources are deliberately covered: when casting embedded
+      values, Ash resolves the primary action of each CRUD type via
+      `Ash.Resource.Info.primary_action!/2`, so a missing primary raises at
+      runtime there as well. Ash injects primary defaults into embedded
+      resources, but defining an action that shadows a default's name (e.g.
+      `update :update`) without `primary?: true` removes that safety net.
+
       ## Requirements
 
       Your project must be compiled before running `mix credo` so that the
