@@ -92,14 +92,12 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
       |> Introspection.resource_contexts()
       |> Enum.flat_map(fn %ResourceContext{} = context ->
         context
-        |> Introspection.resource_section(:actions)
+        |> Introspection.resource_sections(:actions)
         |> action_authorize_false_lines()
       end)
 
     Enum.sort(Enum.uniq(call_lines ++ action_lines))
   end
-
-  defp action_authorize_false_lines(nil), do: []
 
   defp action_authorize_false_lines(actions_ast) do
     for action <- Introspection.action_entities(actions_ast),

@@ -66,10 +66,9 @@ defmodule AshCredo.Check.Warning.CompileTimeDefault do
   end
 
   defp section_issues(context, section_name, issue_meta) do
-    case Introspection.resource_section(context, section_name) do
-      nil -> []
-      section_ast -> default_option_issues(section_ast, issue_meta)
-    end
+    context
+    |> Introspection.resource_sections(section_name)
+    |> Enum.flat_map(&default_option_issues(&1, issue_meta))
   end
 
   # Collects default/update_default occurrences in both forms: inline

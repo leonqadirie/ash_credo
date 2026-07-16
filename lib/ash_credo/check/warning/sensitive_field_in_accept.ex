@@ -65,12 +65,10 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
     |> Introspection.resource_contexts()
     |> Enum.flat_map(fn %ResourceContext{} = context ->
       context
-      |> Introspection.resource_section(:actions)
+      |> Introspection.resource_sections(:actions)
       |> check_actions(dangerous, issue_meta)
     end)
   end
-
-  defp check_actions(nil, _dangerous, _issue_meta), do: []
 
   defp check_actions(actions_ast, dangerous, issue_meta) do
     action_issues =

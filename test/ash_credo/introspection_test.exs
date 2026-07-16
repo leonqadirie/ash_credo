@@ -36,6 +36,24 @@ defmodule AshCredo.IntrospectionTest do
   end
   """
 
+  # Spark merges same-named top-level blocks, so the create in the second
+  # `actions` block belongs to the same section as the defaults in the first.
+  @duplicate_actions_resource """
+  defmodule MyApp.Post do
+    use Ash.Resource, domain: MyApp.Blog
+
+    actions do
+      defaults [:read]
+    end
+
+    actions do
+      create :create do
+        accept [:title]
+      end
+    end
+  end
+  """
+
   @plain_module """
   defmodule MyApp.Utils do
     def hello, do: :world
@@ -599,6 +617,55 @@ defmodule AshCredo.IntrospectionTest do
       assert nil == Introspection.find_dsl_section(outer, :actions)
       assert {:actions, _, _} = Introspection.find_dsl_section(inner, :actions)
     end
+
+    test "returns the first block when the section is declared twice" do
+      first = first_resource_section(@duplicate_actions_resource, :actions)
+
+      assert {:actions, meta, _} = first
+      assert meta[:line] == 4
+    end
+  end
+
+  describe "find_dsl_sections/2" do
+    test "returns all same-named top-level blocks in source order" do
+      sections =
+        @duplicate_actions_resource
+        |> first_resource_module()
+        |> Introspection.find_dsl_sections(:actions)
+
+      assert [{:actions, first_meta, _}, {:actions, second_meta, _}] = sections
+      assert first_meta[:line] < second_meta[:line]
+    end
+
+    test "returns an empty list for a missing section" do
+      sections =
+        @ash_resource
+        |> first_resource_module()
+        |> Introspection.find_dsl_sections(:policies)
+
+      assert [] == sections
+    end
+
+    test "finds entities declared in a later duplicate block" do
+      sections =
+        @duplicate_actions_resource
+        |> first_resource_module()
+        |> Introspection.find_dsl_sections(:actions)
+
+      assert Introspection.has_entity?(sections, :create)
+      assert [{:create, _, [:create | _]}] = Introspection.entities(sections, :create)
+      assert [{:create, _, _}] = Introspection.action_entities(sections)
+    end
+
+    test "raises on source files to avoid ambiguous lookups" do
+      sf = source_file(@ash_resource)
+
+      assert_raise ArgumentError,
+                   ~r/find_dsl_sections\/2 does not accept a SourceFile/,
+                   fn ->
+                     Introspection.find_dsl_sections(sf, :attributes)
+                   end
+    end
   end
 
   describe "has_entity?/2" do
@@ -750,6 +817,19 @@ defmodule AshCredo.IntrospectionTest do
 
       assert nil == Introspection.resource_section(outer, :actions)
       assert {:actions, _, _} = Introspection.resource_section(inner, :actions)
+    end
+  end
+
+  describe "resource_sections/2" do
+    test "returns all same-named section blocks from a resource context" do
+      [context] = Introspection.resource_contexts(source_file(@duplicate_actions_resource))
+
+      assert [{:actions, _, _}, {:actions, _, _}] =
+               Introspection.resource_sections(context, :actions)
+    end
+
+    test "returns an empty list for a non-context input" do
+      assert [] == Introspection.resource_sections(:not_a_context, :actions)
     end
   end
 

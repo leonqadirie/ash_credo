@@ -46,12 +46,10 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
     |> Introspection.resource_modules()
     |> Enum.flat_map(fn module_ast ->
       module_ast
-      |> Introspection.find_dsl_section(:attributes)
+      |> Introspection.find_dsl_sections(:attributes)
       |> check_sensitive_attrs(sensitive_names, issue_meta)
     end)
   end
-
-  defp check_sensitive_attrs(nil, _sensitive_names, _issue_meta), do: []
 
   defp check_sensitive_attrs(attrs_ast, sensitive_names, issue_meta) do
     attrs_ast

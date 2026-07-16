@@ -50,8 +50,6 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
   def run(%SourceFile{} = source_file, params),
     do: Orchestration.flat_map_resource_section(source_file, params, :policies, &check_policies/2)
 
-  defp check_policies(nil, _issue_meta), do: []
-
   defp check_policies(policies_ast, issue_meta) do
     policies_ast
     |> Introspection.policy_entities_with_conditions()
