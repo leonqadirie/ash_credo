@@ -36,20 +36,23 @@ defmodule AshCredo.Check.Warning.CompileTimeDefault do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Introspection.Aliases
+  alias AshCredo.Introspection.LexicalScopeWalker
   alias AshCredo.Orchestration
   alias Credo.Code.Name
 
   # Functions whose value is only meaningful when produced per record.
-  # Matched on literal alias segments, like the sibling
-  # PinnedTimeInExpression.
+  # Matched on the module resolved through the lexical environment, like
+  # the sibling PinnedTimeInExpression, so aliased forms
+  # (`alias DateTime, as: DT`) are caught too.
   @frozen_calls [
-    {[:Date], :utc_today},
-    {[:DateTime], :utc_now},
-    {[:NaiveDateTime], :utc_now},
-    {[:Time], :utc_now},
-    {[:Ash, :UUID], :generate},
-    {[:Ash, :UUIDv7], :generate},
-    {[:Ecto, :UUID], :generate}
+    {Date, :utc_today},
+    {DateTime, :utc_now},
+    {NaiveDateTime, :utc_now},
+    {Time, :utc_now},
+    {Ash.UUID, :generate},
+    {Ash.UUIDv7, :generate},
+    {Ecto.UUID, :generate}
   ]
 
   @default_options ~w(default update_default)a
@@ -61,40 +64,67 @@ defmodule AshCredo.Check.Warning.CompileTimeDefault do
   @impl true
   def run(%SourceFile{} = source_file, params) do
     Orchestration.flat_map_resource_context(source_file, params, fn context, issue_meta ->
-      Enum.flat_map(@sections, &section_issues(context, &1, issue_meta))
+      case Enum.flat_map(@sections, &Introspection.resource_sections(context, &1)) do
+        [] -> []
+        sections -> default_option_issues(context.module_ast, sections, issue_meta)
+      end
     end)
-  end
-
-  defp section_issues(context, section_name, issue_meta) do
-    context
-    |> Introspection.resource_sections(section_name)
-    |> Enum.flat_map(&default_option_issues(&1, issue_meta))
   end
 
   # Collects default/update_default occurrences in both forms: inline
   # keyword options (`default: value` - a 2-tuple in the AST) and do-block
-  # option calls (`default value`).
-  defp default_option_issues(section_ast, issue_meta) do
-    Credo.Code.prewalk(
-      section_ast,
-      fn
-        {option, _meta, [value]} = node, acc when option in @default_options ->
-          {node, frozen_call_issues(value, option, issue_meta) ++ acc}
+  # option calls (`default value`). The whole module is walked (rather
+  # than each section on its own) so directives at module top are already
+  # applied to the env by the time the sections are reached;
+  # `section_depth` gates collection to the sections.
+  defp default_option_issues(module_ast, sections, issue_meta) do
+    {state, _scope} =
+      LexicalScopeWalker.traverse(
+        module_ast,
+        %{issues: [], section_depth: 0, sections: sections},
+        &enter(&1, &2, &3, issue_meta),
+        &leave/3
+      )
 
-        {option, value} = node, acc when option in @default_options ->
-          {node, frozen_call_issues(value, option, issue_meta) ++ acc}
-
-        node, acc ->
-          {node, acc}
-      end,
-      []
-    )
+    Enum.reverse(state.issues)
   end
+
+  defp enter(node, scope, state, issue_meta) do
+    cond do
+      node in state.sections ->
+        %{state | section_depth: state.section_depth + 1}
+
+      state.section_depth == 0 ->
+        state
+
+      true ->
+        collect_option(node, LexicalScopeWalker.env(scope), state, issue_meta)
+    end
+  end
+
+  defp leave(node, _scope, state) do
+    if node in state.sections do
+      %{state | section_depth: state.section_depth - 1}
+    else
+      state
+    end
+  end
+
+  defp collect_option({option, _meta, [value]}, env, state, issue_meta)
+       when option in @default_options do
+    %{state | issues: frozen_call_issues(value, option, env, issue_meta) ++ state.issues}
+  end
+
+  defp collect_option({option, value}, env, state, issue_meta) when option in @default_options do
+    %{state | issues: frozen_call_issues(value, option, env, issue_meta) ++ state.issues}
+  end
+
+  defp collect_option(_node, _env, state, _issue_meta), do: state
 
   # Walks the option value for frozen calls, including inside containers
   # (`default: %{at: DateTime.utc_now()}` is just as frozen). Subtrees under
   # `fn` or `&` are pruned: there the call is deferred, which is the fix.
-  defp frozen_call_issues(value, option, issue_meta) do
+  defp frozen_call_issues(value, option, env, issue_meta) do
     {_ast, issues} =
       Macro.prewalk(value, [], fn
         {deferred, _, _}, acc when deferred in [:fn, :&] ->
@@ -102,7 +132,7 @@ defmodule AshCredo.Check.Warning.CompileTimeDefault do
 
         {{:., _, [{:__aliases__, _, segments}, fun]}, meta, args} = node, acc
         when is_list(args) ->
-          if {segments, fun} in @frozen_calls do
+          if frozen_call?(segments, fun, env) do
             {node, [frozen_issue(segments, fun, option, meta, issue_meta) | acc]}
           else
             {node, acc}
@@ -113,6 +143,13 @@ defmodule AshCredo.Check.Warning.CompileTimeDefault do
       end)
 
     issues
+  end
+
+  defp frozen_call?(segments, fun, env) do
+    case Aliases.expand_to_module(segments, env) do
+      {:ok, module} -> {module, fun} in @frozen_calls
+      :error -> false
+    end
   end
 
   defp frozen_issue(segments, fun, option, meta, issue_meta) do

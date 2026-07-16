@@ -66,6 +66,72 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpressionTest do
     assert issue.trigger =~ "^NaiveDateTime.utc_now()"
   end
 
+  test "reports pinned time called through an alias rename" do
+    source = """
+    defmodule MyApp.Session do
+      use Ash.Resource, domain: MyApp.Auth
+
+      alias DateTime, as: DT
+
+      actions do
+        read :active do
+          filter expr(expires_at >= ^DT.utc_now())
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(PinnedTimeInExpression, source)
+    assert issue.message =~ "now()"
+    assert issue.trigger == "^DT.utc_now()"
+    assert issue.line_no == 8
+  end
+
+  test "reports Elixir-prefixed pinned forms, aliased and fully qualified" do
+    source = """
+    defmodule MyApp.Session do
+      use Ash.Resource, domain: MyApp.Auth
+
+      alias Elixir.DateTime
+
+      actions do
+        read :active do
+          filter expr(expires_at >= ^DateTime.utc_now())
+        end
+
+        read :expired do
+          filter expr(expires_at < ^Elixir.DateTime.utc_now())
+        end
+      end
+    end
+    """
+
+    issues = run_check(PinnedTimeInExpression, source)
+    assert sorted_lines(issues) == [8, 12]
+
+    assert Enum.map(issues, & &1.trigger) |> Enum.sort() ==
+             ["^DateTime.utc_now()", "^Elixir.DateTime.utc_now()"]
+  end
+
+  test "no issue for a differently-named module's utc_now" do
+    source = """
+    defmodule MyApp.Venue do
+      use Ash.Resource, domain: MyApp.Places
+
+      alias MyApp.Clock
+
+      actions do
+        read :open_now do
+          filter expr(opens_at <= ^Clock.utc_now())
+          filter expr(closes_at >= ^MyApp.Clock.utc_now())
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(PinnedTimeInExpression, source)
+  end
+
   test "no issue when using today() in expr" do
     source = """
     defmodule MyApp.Subscription do
