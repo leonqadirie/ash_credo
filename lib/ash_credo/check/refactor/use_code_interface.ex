@@ -6,7 +6,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
     param_defaults: [
       enforce_code_interface_in_domain: true,
       enforce_code_interface_outside_domain: true,
-      excluded_paths: [~r"/test/", "test"],
+      excluded_paths: AshCredo.PathFilter.default_excluded_paths(),
       prefer_interface_scope: :auto
     ],
     explanations: [

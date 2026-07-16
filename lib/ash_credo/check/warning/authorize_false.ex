@@ -5,7 +5,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
     tags: [:ash, :security],
     param_defaults: [
       include_non_ash_calls: true,
-      excluded_paths: [~r"/test/", "test"]
+      excluded_paths: AshCredo.PathFilter.default_excluded_paths()
     ],
     explanations: [
       check: """
