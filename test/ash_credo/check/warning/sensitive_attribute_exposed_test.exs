@@ -227,4 +227,34 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposedTest do
       assert [] = run_check(SensitiveAttributeExposed, source)
     end
   end
+
+  describe "excluded_paths" do
+    @unmarked_password """
+    defmodule MyApp.User do
+      use Ash.Resource, domain: MyApp.Accounts
+
+      attributes do
+        uuid_primary_key :id
+        attribute :password, :string
+      end
+    end
+    """
+
+    test "files in test directories are excluded by default" do
+      assert [] =
+               run_check(SensitiveAttributeExposed, @unmarked_password,
+                 __filename__: "test/support/user_fixture.ex"
+               )
+    end
+
+    test "can be overridden to also scan test files" do
+      assert [issue] =
+               run_check(SensitiveAttributeExposed, @unmarked_password,
+                 __filename__: "test/support/user_fixture.ex",
+                 excluded_paths: []
+               )
+
+      assert issue.message =~ "password"
+    end
+  end
 end
