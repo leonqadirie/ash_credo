@@ -6,7 +6,7 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
     param_defaults: [
       sensitive_names:
         ~w(password hashed_password password_hash password_digest token access_token secret client_secret totp_secret api_key private_key ssn)a,
-      excluded_paths: [~r"/test/", "test"]
+      excluded_paths: AshCredo.PathFilter.default_excluded_paths()
     ],
     explanations: [
       check: """
@@ -45,7 +45,7 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
       ]
     ]
 
-  alias AshCredo.{Introspection, PathFilter}
+  alias AshCredo.{Introspection, NameFilter, PathFilter}
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
@@ -86,11 +86,8 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
   end
 
   defp sensitive_name?({:attribute, _meta, [name | _]}, sensitive_names) when is_atom(name) do
-    Enum.any?(sensitive_names, &name_matches?(name, &1))
+    NameFilter.matches_any?(name, sensitive_names)
   end
 
   defp sensitive_name?(_, _), do: false
-
-  defp name_matches?(name, %Regex{} = regex), do: Regex.match?(regex, Atom.to_string(name))
-  defp name_matches?(name, sensitive_name), do: name == sensitive_name
 end

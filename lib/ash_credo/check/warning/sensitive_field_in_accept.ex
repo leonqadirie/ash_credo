@@ -5,7 +5,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
     tags: [:ash, :security],
     param_defaults: [
       dangerous_fields: ~w(is_admin admin permissions api_key secret_key)a,
-      excluded_paths: [~r"/test/", "test"]
+      excluded_paths: AshCredo.PathFilter.default_excluded_paths()
     ],
     explanations: [
       check: """
@@ -39,7 +39,7 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
       ]
     ]
 
-  alias AshCredo.{Introspection, PathFilter}
+  alias AshCredo.{Introspection, NameFilter, PathFilter}
   alias AshCredo.Introspection.ResourceContext
 
   # For the `defaults` list only: `defaults [destroy: :*]` raises a DslError
@@ -164,12 +164,6 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
   end
 
   defp dangerous_field?(field, dangerous) do
-    Enum.any?(dangerous, &field_matches?(field, &1))
+    NameFilter.matches_any?(field, dangerous)
   end
-
-  defp field_matches?(field, %Regex{} = regex) when is_atom(field),
-    do: Regex.match?(regex, Atom.to_string(field))
-
-  defp field_matches?(_field, %Regex{}), do: false
-  defp field_matches?(field, name), do: field == name
 end

@@ -4,7 +4,7 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
     category: :warning,
     tags: [:ash, :security],
     param_defaults: [
-      excluded_paths: [~r"/test/", "test"]
+      excluded_paths: AshCredo.PathFilter.default_excluded_paths()
     ],
     explanations: [
       check: """

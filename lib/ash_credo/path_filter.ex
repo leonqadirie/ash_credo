@@ -2,6 +2,13 @@ defmodule AshCredo.PathFilter do
   @moduledoc "Shared `excluded_paths` matching used by checks that exempt test directories by default."
 
   @doc """
+  The shared `excluded_paths` default: test directories, where the
+  patterns these checks flag are typically intentional. Referenced from
+  each check's `param_defaults` so the checks cannot drift apart.
+  """
+  def default_excluded_paths, do: [~r"/test/", "test"]
+
+  @doc """
   Returns `true` when `filename` matches any entry in `excluded_paths`.
 
   Entries may be a `Regex` (matched against the full filename) or a binary.

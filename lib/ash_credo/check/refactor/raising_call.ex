@@ -5,7 +5,7 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
     tags: [:ash],
     param_defaults: [
       excluded_functions: [],
-      excluded_paths: [~r"/test/", "test"],
+      excluded_paths: AshCredo.PathFilter.default_excluded_paths(),
       flag_bang_only_apis: false
     ],
     explanations: [
