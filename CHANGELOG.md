@@ -1,6 +1,24 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.17.0](https://github.com/leonqadirie/ash_credo/compare/v0.16.1...v0.17.0) (2026-07-16)
+
+
+### Features
+
+* add excluded_paths to SensitiveAttributeExposed ([#229](https://github.com/leonqadirie/ash_credo/issues/229)) ([2d783df](https://github.com/leonqadirie/ash_credo/commit/2d783df681ca7eef1e82931dbb92e2707ddc4821)) by [@leonqadirie](https://github.com/leonqadirie)
+
+
+### Bug Fixes
+
+* constrain pre-1.0 installation versions ([#218](https://github.com/leonqadirie/ash_credo/issues/218)) ([dbd1c3b](https://github.com/leonqadirie/ash_credo/commit/dbd1c3bc9d382b7f4705ae781dec79c1ac381bc7)) by [@leonqadirie](https://github.com/leonqadirie)
+* enumerate all same-named DSL section blocks ([#225](https://github.com/leonqadirie/ash_credo/issues/225)) ([0a8ec17](https://github.com/leonqadirie/ash_credo/commit/0a8ec1794568ff5fb856081897aed05cb03c8cec)) by [@leonqadirie](https://github.com/leonqadirie)
+* handle options on permissive policy checks in OverlyPermissivePolicy ([#217](https://github.com/leonqadirie/ash_credo/issues/217)) ([fb7f5f1](https://github.com/leonqadirie/ash_credo/commit/fb7f5f12ddd3ed9c717357864e817a7a9956b352)) by [@leonqadirie](https://github.com/leonqadirie)
+* rescue mid-introspection raises in compiled inspection ([#224](https://github.com/leonqadirie/ash_credo/issues/224)) ([1555232](https://github.com/leonqadirie/ash_credo/commit/1555232ef1fdf0be5af86c5f0c786f1d1fe16951)) by [@leonqadirie](https://github.com/leonqadirie)
+* resolve aliases in the frozen-time checks CompileTimeDefault and PinnedTimeInExpression ([#226](https://github.com/leonqadirie/ash_credo/issues/226)) ([a646018](https://github.com/leonqadirie/ash_credo/commit/a646018023317023216c9faa87b5dda4479b2eca)) by [@leonqadirie](https://github.com/leonqadirie)
+* resolve single-record Ash calls in UseCodeInterface and UnknownAction ([#221](https://github.com/leonqadirie/ash_credo/issues/221)) ([18d182a](https://github.com/leonqadirie/ash_credo/commit/18d182a5b01b633b61a64a012154fead80678b2e)) by [@leonqadirie](https://github.com/leonqadirie)
+* tag ActorOnCallOptions as a security check ([#227](https://github.com/leonqadirie/ash_credo/issues/227)) ([08ac08a](https://github.com/leonqadirie/ash_credo/commit/08ac08a3dc644c65a382ffcbd9a9678cf27366c5)) by [@leonqadirie](https://github.com/leonqadirie)
+
 ## [0.16.1](https://github.com/leonqadirie/ash_credo/compare/v0.16.0...v0.16.1) (2026-07-04)
 
 
