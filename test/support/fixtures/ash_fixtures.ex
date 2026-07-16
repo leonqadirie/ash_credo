@@ -302,6 +302,18 @@ defmodule AshCredoFixtures.Plain do
   def hello, do: :world
 end
 
+defmodule AshCredoFixtures.HalfPurgedResource do
+  @moduledoc """
+  Passes the `Ash.Resource.Info.resource?/1` guard (via `spark_is/0`) but
+  defines none of the Spark DSL introspection functions, so every subsequent
+  `Ash.Resource.Info` accessor raises `ArgumentError`. Models a resource
+  purged or recompiled between the `resource?/1` guard and the accessor
+  calls, for the `Compiled.do_inspect/1` rescue tests.
+  """
+
+  def spark_is, do: Ash.Resource
+end
+
 defmodule AshCredoFixtures.Blog.Changes.Archive do
   @moduledoc """
   Fixture `Ash.Resource.Change` module used to exercise the "callback module
