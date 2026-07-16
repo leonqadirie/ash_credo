@@ -27,7 +27,7 @@ AshCredo requires [Credo](https://credo.hexdocs.pm) to already be installed in y
 If your project uses [Igniter](https://igniter.hexdocs.pm), a single command will add the dependency and register the plugin in your `.credo.exs`:
 
 ```bash
-mix igniter.install ash_credo@0.16.1
+mix igniter.install ash_credo@0.17.0
 ```
 
 The explicit version prevents Igniter from generating a broad pre-1.0 requirement. Igniter pins a three-part version exactly; use the manual requirement below if you prefer compatible patch updates. The installer scopes `ash_credo` to `:dev`/`:test` and sets `runtime: false` automatically, matching how `credo` itself is typically declared. Pass `--only dev,test` if you'd like an early error when running from another `MIX_ENV`.
@@ -39,7 +39,7 @@ Add `ash_credo` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:ash_credo, "~> 0.16.0", only: [:dev, :test], runtime: false}
+    {:ash_credo, "~> 0.17.0", only: [:dev, :test], runtime: false}
   ]
 end
 ```
