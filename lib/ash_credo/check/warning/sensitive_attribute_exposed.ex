@@ -5,7 +5,8 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
     tags: [:ash, :security],
     param_defaults: [
       sensitive_names:
-        ~w(password hashed_password password_hash password_digest token access_token secret client_secret totp_secret api_key private_key ssn)a
+        ~w(password hashed_password password_hash password_digest token access_token secret client_secret totp_secret api_key private_key ssn)a,
+      excluded_paths: [~r"/test/", "test"]
     ],
     explanations: [
       check: """
@@ -16,6 +17,11 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
 
       The `sensitive_names` param accepts atoms (exact name match) and regexes
       (matched against the attribute name), e.g. `[:ssn, ~r/_token$/]`.
+
+      Test directories are excluded by default, since throwaway resources in
+      test support often name attributes after sensitive fields without
+      carrying real data. Override `excluded_paths` to scope the check
+      differently.
 
       ## Limitations
 
@@ -31,14 +37,28 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
       params: [
         sensitive_names:
           "Attribute names considered sensitive. Atom entries match exactly; " <>
-            "`Regex` entries (e.g. `~r/_token$/`) match against the attribute name."
+            "`Regex` entries (e.g. `~r/_token$/`) match against the attribute name.",
+        excluded_paths:
+          "List of paths or regexes to exclude from this check. " <>
+            "Defaults to test directories, since fake sensitive attributes " <>
+            "are common in test resources."
       ]
     ]
 
-  alias AshCredo.Introspection
+  alias AshCredo.{Introspection, PathFilter}
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
+    excluded_paths = Params.get(params, :excluded_paths, __MODULE__)
+
+    if PathFilter.excluded?(source_file.filename, excluded_paths) do
+      []
+    else
+      find_issues(source_file, params)
+    end
+  end
+
+  defp find_issues(%SourceFile{} = source_file, params) do
     sensitive_names = Params.get(params, :sensitive_names, __MODULE__)
     issue_meta = IssueMeta.for(source_file, params)
 
