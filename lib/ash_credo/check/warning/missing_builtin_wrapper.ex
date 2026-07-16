@@ -209,10 +209,9 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
   end
 
   defp naked_global_section_issues(context, section_name, builtins, advice, issue_meta) do
-    case Introspection.resource_section(context, section_name) do
-      nil -> []
-      section_ast -> naked_builtin_calls(section_ast, builtins, advice, issue_meta)
-    end
+    context
+    |> Introspection.resource_sections(section_name)
+    |> Enum.flat_map(&naked_builtin_calls(&1, builtins, advice, issue_meta))
   end
 
   defp naked_builtin_section_issues(
@@ -221,14 +220,13 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
          advice,
          issue_meta
        ) do
-    with true <- MapSet.size(builtins) > 0,
-         section_ast when not is_nil(section_ast) <-
-           Introspection.resource_section(context, section_name) do
-      section_ast
+    if MapSet.size(builtins) > 0 do
+      context
+      |> Introspection.resource_sections(section_name)
       |> Introspection.action_entities(entity_names)
       |> Enum.flat_map(&naked_builtin_calls(&1, builtins, advice, issue_meta))
     else
-      _ -> []
+      []
     end
   end
 

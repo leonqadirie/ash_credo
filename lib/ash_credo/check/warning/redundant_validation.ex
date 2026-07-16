@@ -76,33 +76,23 @@ defmodule AshCredo.Check.Warning.RedundantValidation do
   end
 
   defp action_candidates(context) do
-    case Introspection.resource_section(context, :actions) do
-      nil ->
-        []
+    context
+    |> Introspection.resource_sections(:actions)
+    |> Introspection.action_entities(@changeset_action_types)
+    |> Enum.flat_map(fn action_ast ->
+      scope = {:action, Introspection.entity_name(action_ast)}
 
-      actions_ast ->
-        actions_ast
-        |> Introspection.action_entities(@changeset_action_types)
-        |> Enum.flat_map(fn action_ast ->
-          scope = {:action, Introspection.entity_name(action_ast)}
-
-          action_ast
-          |> Introspection.entity_body()
-          |> Enum.flat_map(&parse_validate(&1, scope))
-        end)
-    end
+      action_ast
+      |> Introspection.entity_body()
+      |> Enum.flat_map(&parse_validate(&1, scope))
+    end)
   end
 
   defp global_candidates(context) do
-    case Introspection.resource_section(context, :validations) do
-      nil ->
-        []
-
-      validations_ast ->
-        validations_ast
-        |> Introspection.action_entities([:validate])
-        |> Enum.flat_map(&parse_validate(&1, :global))
-    end
+    context
+    |> Introspection.resource_sections(:validations)
+    |> Introspection.action_entities([:validate])
+    |> Enum.flat_map(&parse_validate(&1, :global))
   end
 
   defp parse_validate({:validate, meta, [present_call | rest]}, scope) do

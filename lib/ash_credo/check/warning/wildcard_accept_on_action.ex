@@ -51,8 +51,6 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
     end
   end
 
-  defp check_actions(nil, _issue_meta), do: []
-
   defp check_actions(actions_ast, issue_meta) do
     explicit_action_issues(actions_ast, issue_meta) ++
       default_action_issues(actions_ast, issue_meta) ++

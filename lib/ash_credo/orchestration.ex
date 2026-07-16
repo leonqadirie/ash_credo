@@ -24,12 +24,17 @@ defmodule AshCredo.Orchestration do
     |> Enum.flat_map(&fun.(&1, issue_meta))
   end
 
-  @doc "Looks up a DSL section in each resource context, flat-mapping each through `fun.(section_ast, issue_meta)`."
+  @doc """
+  Looks up all same-named DSL section blocks in each resource context,
+  flat-mapping each context through `fun.(section_asts, issue_meta)`.
+  Spark merges duplicate top-level blocks into one section, so `fun`
+  receives the full list (empty when the section is absent).
+  """
   def flat_map_resource_section(%SourceFile{} = source_file, params, section_name, fun)
       when is_function(fun, 2) do
     flat_map_resource_context(source_file, params, fn context, issue_meta ->
       context
-      |> Introspection.resource_section(section_name)
+      |> Introspection.resource_sections(section_name)
       |> fun.(issue_meta)
     end)
   end

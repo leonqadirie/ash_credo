@@ -34,28 +34,28 @@ defmodule AshCredo.Check.Warning.EmptyDomain do
   end
 
   defp empty_domain_issues(module_ast, issue_meta) do
-    resources_ast = Introspection.find_dsl_section(module_ast, :resources)
+    resources_asts = Introspection.find_dsl_sections(module_ast, :resources)
     use_line = Introspection.find_use_line(module_ast, [:Ash, :Domain])
 
-    case resources_ast do
-      nil ->
+    case resources_asts do
+      [] ->
         [
           format_issue(issue_meta,
             message: "Domain has no `resources` block.",
             trigger: "use Ash.Domain",
-            line_no: Introspection.section_issue_line(resources_ast, use_line)
+            line_no: Introspection.section_issue_line(nil, use_line)
           )
         ]
 
-      resources_ast ->
-        if Introspection.section_has_entries?(resources_ast) do
+      [first_resources_ast | _] ->
+        if Introspection.section_has_entries?(resources_asts) do
           []
         else
           [
             format_issue(issue_meta,
               message: "Domain has an empty `resources` block.",
               trigger: "resources",
-              line_no: Introspection.section_issue_line(resources_ast, use_line)
+              line_no: Introspection.section_issue_line(first_resources_ast, use_line)
             )
           ]
         end

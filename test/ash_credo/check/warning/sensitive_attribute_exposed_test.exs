@@ -21,6 +21,27 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposedTest do
     assert issue.message =~ "sensitive?"
   end
 
+  test "reports issue for sensitive attribute in a second attributes block" do
+    source = """
+    defmodule MyApp.User do
+      use Ash.Resource, domain: MyApp.Accounts
+
+      attributes do
+        uuid_primary_key :id
+        attribute :email, :string
+      end
+
+      attributes do
+        attribute :hashed_password, :string
+      end
+    end
+    """
+
+    assert [issue] = run_check(SensitiveAttributeExposed, source)
+    assert issue.message =~ "hashed_password"
+    assert issue.line_no == 10
+  end
+
   test "no issue when sensitive attribute marked sensitive" do
     source = """
     defmodule MyApp.User do

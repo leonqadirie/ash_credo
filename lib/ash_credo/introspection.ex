@@ -201,16 +201,22 @@ defmodule AshCredo.Introspection do
     |> normalized_use_opts()
   end
 
-  @doc "Finds the AST node for a top-level DSL section (e.g. :attributes) in a module AST or resource/domain context."
+  @doc """
+  Finds the AST node of the first top-level DSL section (e.g. :attributes)
+  in a module AST or resource/domain context.
+
+  Suitable only for line anchoring: Spark merges multiple same-named
+  top-level blocks into one section, so entries may live in later blocks.
+  Use `find_dsl_sections/2` to enumerate entries.
+  """
   def find_dsl_section(%ResourceContext{module_ast: module_ast}, section_name) do
     find_dsl_section(module_ast, section_name)
   end
 
   def find_dsl_section({:defmodule, _, _} = module_ast, section_name) do
-    Enum.find(Block.module_body(module_ast), fn
-      {^section_name, _meta, [[do: _body]]} -> true
-      _ -> false
-    end)
+    module_ast
+    |> find_dsl_sections(section_name)
+    |> List.first()
   end
 
   def find_dsl_section(%SourceFile{}, _section_name) do
@@ -218,8 +224,35 @@ defmodule AshCredo.Introspection do
           "find_dsl_section/2 no longer accepts a SourceFile; pass a module AST or resource/domain context"
   end
 
-  @doc "Checks if an entity call exists inside a section AST node."
+  @doc """
+  Finds the AST nodes of all same-named top-level DSL sections (e.g.
+  :attributes) in a module AST or resource/domain context, in source order.
+
+  Spark merges multiple same-named top-level blocks into one section, so
+  entry enumeration must consider every block, not just the first.
+  """
+  def find_dsl_sections(%ResourceContext{module_ast: module_ast}, section_name) do
+    find_dsl_sections(module_ast, section_name)
+  end
+
+  def find_dsl_sections({:defmodule, _, _} = module_ast, section_name) do
+    Enum.filter(Block.module_body(module_ast), fn
+      {^section_name, _meta, [[do: _body]]} -> true
+      _ -> false
+    end)
+  end
+
+  def find_dsl_sections(%SourceFile{}, _section_name) do
+    raise ArgumentError,
+          "find_dsl_sections/2 does not accept a SourceFile; pass a module AST or resource/domain context"
+  end
+
+  @doc "Checks if an entity call exists inside a section AST node or list of section blocks."
   def has_entity?(nil, _), do: false
+
+  def has_entity?(section_asts, entity_name) when is_list(section_asts) do
+    Enum.any?(section_asts, &has_entity?(&1, entity_name))
+  end
 
   def has_entity?({_section, _, [[do: _body]]} = section_ast, entity_name) do
     section_ast
@@ -230,14 +263,18 @@ defmodule AshCredo.Introspection do
     end)
   end
 
-  @doc "Returns all entity AST nodes of a given name within a section."
+  @doc "Returns all entity AST nodes of a given name within a section or list of section blocks."
   def entities(nil, _), do: []
+
+  def entities(section_asts, entity_name) when is_list(section_asts) do
+    Enum.flat_map(section_asts, &entities(&1, entity_name))
+  end
 
   def entities({_section, _, [[do: _body]]} = section_ast, entity_name) do
     filter_entities(section_entries(section_ast), entity_name)
   end
 
-  @doc "Returns all explicit action entity AST nodes within an `actions` section."
+  @doc "Returns all explicit action entity AST nodes within an `actions` section or list of section blocks."
   def action_entities(actions_ast, action_types \\ @action_entities) do
     entries = section_entries(actions_ast)
 
@@ -326,12 +363,19 @@ defmodule AshCredo.Introspection do
 
   def module_line_count(_), do: nil
 
-  @doc "Finds a top-level DSL section from a resource context."
+  @doc "Finds the first top-level DSL section from a resource context. Suitable only for line anchoring; use `resource_sections/2` to enumerate entries."
   def resource_section(%ResourceContext{} = resource_context, section_name) do
     find_dsl_section(resource_context, section_name)
   end
 
   def resource_section(_, _section_name), do: nil
+
+  @doc "Finds all same-named top-level DSL section blocks from a resource context, in source order."
+  def resource_sections(%ResourceContext{} = resource_context, section_name) do
+    find_dsl_sections(resource_context, section_name)
+  end
+
+  def resource_sections(_, _section_name), do: []
 
   @doc "Returns the best issue anchor line for a section, falling back to `line` and then `fallback`."
   def section_issue_line(section_ast, line \\ nil, fallback \\ 1) do
@@ -372,6 +416,10 @@ defmodule AshCredo.Introspection do
   defp use_metadata_opt(%UseMetadata{opts: opts}, key), do: Keyword.get(opts, key)
   defp use_metadata_opt(_, _key), do: nil
 
+  defp section_entries(section_asts) when is_list(section_asts) do
+    Enum.flat_map(section_asts, &section_entries/1)
+  end
+
   defp section_entries(section_ast), do: Block.do_block_entries(section_ast)
 
   @doc "Extracts keyword options from an entity AST call."
@@ -396,9 +444,13 @@ defmodule AshCredo.Introspection do
     end
   end
 
-  @doc "Returns normalized option values with line numbers from inline opts and `do` blocks."
+  @doc "Returns normalized option values with line numbers from inline opts and `do` blocks. Accepts a single AST node or a list of nodes (e.g. duplicate section blocks)."
   def option_occurrences({_name, meta, _args} = ast, key) do
     normalized_option_occurrences(ast, key, meta[:line])
+  end
+
+  def option_occurrences(asts, key) when is_list(asts) do
+    Enum.flat_map(asts, &option_occurrences(&1, key))
   end
 
   def option_occurrences(_, _), do: []
@@ -442,8 +494,9 @@ defmodule AshCredo.Introspection do
     option_occurrences(entity_ast, key) != []
   end
 
-  @doc "Returns the flattened list of statements inside a section body."
+  @doc "Returns the flattened list of statements inside a section body or across a list of section blocks."
   def section_body({_section, _, [[do: _body]]} = section_ast), do: section_entries(section_ast)
+  def section_body(section_asts) when is_list(section_asts), do: section_entries(section_asts)
   def section_body(nil), do: []
 
   @doc "Returns true if a section contains at least one DSL entry."

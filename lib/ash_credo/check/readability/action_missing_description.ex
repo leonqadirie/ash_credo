@@ -30,8 +30,6 @@ defmodule AshCredo.Check.Readability.ActionMissingDescription do
         &check_descriptions/2
       )
 
-  defp check_descriptions(nil, _issue_meta), do: []
-
   defp check_descriptions(actions_ast, issue_meta) do
     actions_ast
     |> Introspection.action_entities(@action_types)

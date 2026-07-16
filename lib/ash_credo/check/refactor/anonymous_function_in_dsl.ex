@@ -85,32 +85,22 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
   end
 
   defp entity_body_issues(context, section_name, entity_names, issue_meta) do
-    case Introspection.resource_section(context, section_name) do
-      nil ->
-        []
-
-      section_ast ->
-        section_ast
-        |> Introspection.action_entities(entity_names)
-        |> Enum.flat_map(fn entity_ast ->
-          entity_ast
-          |> Introspection.entity_body()
-          |> Enum.flat_map(&anonymous_wrapper_issues(&1, issue_meta))
-        end)
-    end
+    context
+    |> Introspection.resource_sections(section_name)
+    |> Introspection.action_entities(entity_names)
+    |> Enum.flat_map(fn entity_ast ->
+      entity_ast
+      |> Introspection.entity_body()
+      |> Enum.flat_map(&anonymous_wrapper_issues(&1, issue_meta))
+    end)
   end
 
   defp entity_section_issues(context, issue_meta) do
     Enum.flat_map(@entity_sections, fn section_name ->
-      case Introspection.resource_section(context, section_name) do
-        nil ->
-          []
-
-        section_ast ->
-          section_ast
-          |> Introspection.action_entities(@wrappers)
-          |> Enum.flat_map(&anonymous_wrapper_issues(&1, issue_meta))
-      end
+      context
+      |> Introspection.resource_sections(section_name)
+      |> Introspection.action_entities(@wrappers)
+      |> Enum.flat_map(&anonymous_wrapper_issues(&1, issue_meta))
     end)
   end
 
@@ -118,15 +108,10 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
   # (`calculate :name, :type, fn ... end`), unlike the wrappers, where it
   # is the first.
   defp calculation_issues(context, issue_meta) do
-    case Introspection.resource_section(context, :calculations) do
-      nil ->
-        []
-
-      section_ast ->
-        section_ast
-        |> Introspection.action_entities([:calculate])
-        |> Enum.flat_map(&calculate_entity_issues(&1, issue_meta))
-    end
+    context
+    |> Introspection.resource_sections(:calculations)
+    |> Introspection.action_entities([:calculate])
+    |> Enum.flat_map(&calculate_entity_issues(&1, issue_meta))
   end
 
   defp calculate_entity_issues(

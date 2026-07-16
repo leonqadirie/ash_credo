@@ -26,8 +26,6 @@ defmodule AshCredo.Check.Readability.BelongsToMissingAllowNil do
         &check_belongs_to/2
       )
 
-  defp check_belongs_to(nil, _issue_meta), do: []
-
   defp check_belongs_to(rels_ast, issue_meta) do
     rels_ast
     |> Introspection.entities(:belongs_to)
