@@ -7,9 +7,9 @@ defmodule AshCredo.Check.Warning.RedundantValidation do
       check: """
       Flags `validate present(...)` where every referenced field is an
       attribute that already has `allow_nil? false`. The attribute
-      constraint guarantees presence on its own, so the validation can only
-      ever duplicate an error the changeset already carries. Straight from
-      Ash's usage rules: avoid validations that duplicate attribute
+      constraint guarantees presence on its own, so the validation can
+      only ever duplicate an error the changeset already carries. Straight
+      from Ash's usage rules: avoid validations that duplicate attribute
       constraints.
 
           # Bad - allow_nil? false already rejects nil
@@ -28,29 +28,35 @@ defmodule AshCredo.Check.Warning.RedundantValidation do
             attribute :name, :string, allow_nil?: false
           end
 
-      Fields opened up via `allow_nil_input` on an action are skipped:
-      there the attribute may legitimately be nil at validation time (for
-      example filled by the data layer during an upsert), so `present` does
-      add a real constraint. Fields shadowed by a same-named `argument` on
-      an update or destroy action are skipped too. In the atomic execution
-      path - the default for those action types (`require_atomic?`
-      defaults to `true`) - the built-in `present` validation validates
-      the argument instead of the attribute, so the validation enforces
-      "the caller supplied the argument" regardless of the attribute
-      constraint. (The non-atomic path falls back to the attribute when
-      the argument is nil, where the validation is indeed vacuous - but
-      advising removal would silently drop the atomic-path constraint, so
-      the check stays silent.) Create actions never execute atomically, so
-      a same-named argument on a create does not rescue the validation and
-      no escape applies there. Validations in read and generic actions are
-      also skipped, because `present` resolves against action arguments
-      there, not attributes.
+      Fields an action opens up via `allow_nil_input` are skipped: there
+      the attribute may legitimately be nil at validation time (for
+      example filled by the data layer during an upsert), so `present`
+      does add a real constraint.
+
+      The check also skips a field when an update or destroy action has a
+      same-named `argument`. The atomic execution path is the default for
+      those action types (`require_atomic?` defaults to `true`), and in
+      that path the built-in `present` validation validates the argument
+      instead of the attribute. The validation then enforces that the
+      caller supplied the argument, regardless of the attribute
+      constraint.
+
+      In the non-atomic path the validation falls back to the attribute
+      when the argument is nil, where it is indeed vacuous. But advising
+      removal would silently drop the atomic-path constraint, so the check
+      stays silent.
+
+      Create actions never execute atomically, so a same-named argument on
+      a create does not rescue the validation and no escape applies there.
+      Validations in read and generic actions are not examined either,
+      because `present` resolves against action arguments there, not
+      attributes.
 
       ## Requirements
 
       Your project must be compiled before running `mix credo`. If Ash is
-      not available in the VM running Credo, the check is a no-op and emits
-      a single diagnostic.
+      not available in the VM running Credo, the check is a no-op and
+      emits a single diagnostic.
       """
     ]
 
@@ -139,8 +145,9 @@ defmodule AshCredo.Check.Warning.RedundantValidation do
   # validation meaningful again, so action-level candidates always apply.
   defp scope_applies?(_rest, {:action, _name}), do: true
 
-  # Global validations default to `on: [:create, :update]`; an explicit `on`
-  # must stay within changeset action types for attribute presence to apply.
+  # Global validations default to `on: [:create, :update]`; an explicit
+  # `on` must stay within the changeset action types for attribute
+  # presence to apply.
   defp scope_applies?(rest, :global) do
     case find_on_option(rest) do
       nil -> true
@@ -200,12 +207,13 @@ defmodule AshCredo.Check.Warning.RedundantValidation do
   # non-atomic path falls back to the attribute, but removal would drop
   # the atomic-path constraint, so skip conservatively). Only update and
   # destroy actions have an atomic path (`require_atomic?` exists on
-  # neither create struct nor create execution), so on creates the
+  # neither the create struct nor the create execution), so on creates the
   # argument never rescues the validation and no escape applies.
   defp no_input_overrides?(fields, {:action, action_name}, actions) do
     case Enum.find(actions, &(&1.name == action_name)) do
-      # Source names an action the compiled module does not have (stale
-      # build or fragment drift) - do not flag what we cannot resolve.
+      # The source names an action the compiled module does not have (a
+      # stale build or fragment drift) - do not flag what we cannot
+      # resolve.
       nil -> false
       action -> Enum.all?(fields, &(&1 not in overriding_inputs(action)))
     end

@@ -10,8 +10,8 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
     explanations: [
       check: """
       Actions that `accept` privilege-related fields like `:is_admin` or
-      `:permissions` can allow users to escalate their own permissions.
-      Set these fields via `change` modules instead.
+      `:permissions` can let users escalate their own permissions. Set
+      these fields via `change` modules instead.
 
           create :register do
             accept [:name, :email]
@@ -19,19 +19,19 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAccept do
             change set_attribute(:role, :user)
           end
 
-      Create, update, and soft destroy actions are checked. Hard destroy
-      actions are not: Ash resets their `accept` to `[]` at compile time,
-      so an accept list there takes no input.
+      The check covers create, update, and soft destroy actions. Hard
+      destroy actions are not checked: Ash resets their `accept` to `[]`
+      at compile time, so an accept list there takes no input.
 
-      Test directories are excluded by default, since test factories and seeds
-      often accept these fields on purpose. Override `excluded_paths` to scope
-      the check differently.
+      The check excludes test directories by default, since test factories
+      and seeds often accept these fields on purpose. Override
+      `excluded_paths` to scope the check differently.
       """,
       params: [
         dangerous_fields:
           "Field names that should not appear in accept lists. Atom entries " <>
-            "match exactly; `Regex` entries (e.g. `~r/_token$/`) match against " <>
-            "the field name.",
+            "match exactly; `Regex` entries (for example `~r/_token$/`) match " <>
+            "against the field name.",
         excluded_paths:
           "List of paths or regexes to exclude from this check. " <>
             "Defaults to test directories, since accepting these fields is " <>

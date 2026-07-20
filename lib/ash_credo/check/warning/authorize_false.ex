@@ -9,9 +9,9 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
     ],
     explanations: [
       check: """
-      Using `authorize?: false` bypasses Ash authorization entirely, making it
-      easy to accidentally skip policy checks. Instead, use system actors with
-      bypass policies so that authorization is always enforced and auditable.
+      Passing `authorize?: false` bypasses Ash authorization entirely, which
+      makes it easy to skip policy checks by accident. Use system actors with
+      bypass policies instead, so authorization stays enforced and auditable.
 
           # Bad - skips all authorization
           Ash.read!(query, authorize?: false)
@@ -24,30 +24,32 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
             authorize_if always()
           end
 
-      For code inside action changes/validations that needs to read related data,
-      use `scope: context` to inherit the caller's authorization context:
+      Code inside action changes or validations sometimes needs to read
+      related data. There, use `scope: context` to inherit the caller's
+      authorization context:
 
           Ash.get!(Resource, id, scope: context)
 
-      **Note:** By default this check flags `authorize?: false` anywhere it appears as a
-      literal - Ash API calls, action DSL definitions, variable assignments, and
-      wrapper functions. Set `include_non_ash_calls: false` to restrict detection
-      to Ash API calls and action DSL definitions only.
+      By default, the check flags `authorize?: false` anywhere it appears as
+      a literal: Ash API calls, action DSL definitions, variable assignments,
+      and wrapper functions. Set `include_non_ash_calls: false` to restrict
+      detection to Ash API calls and action DSL definitions.
 
-      Test directories are excluded by default, since bypassing authorization in
-      test setup and factories is typically intentional. Override `excluded_paths`
-      to scope the check differently.
+      The check excludes test directories by default, since bypassing
+      authorization in test setup and factories is usually intentional.
+      Override `excluded_paths` to scope the check differently.
 
-      In either mode the check is purely syntactic: it cannot follow values through
-      variables, config lookups, or function return values.
+      In either mode, the check is purely syntactic: it cannot follow values
+      through variables, config lookups, or function return values.
       """,
       params: [
         include_non_ash_calls:
-          "When `true` (default), flags `authorize?: false` anywhere in source. " <>
-            "When `false`, only checks Ash API calls and action DSL definitions.",
+          "When `true` (the default), flags `authorize?: false` anywhere it appears " <>
+            "in the source. When `false`, only checks Ash API calls and " <>
+            "action DSL definitions.",
         excluded_paths:
-          "List of paths or regexes to exclude from this check. " <>
-            "Defaults to test directories, since `authorize?: false` is intentional in test setup."
+          "Paths or regexes to exclude from this check. Defaults to the test " <>
+            "directories, since `authorize?: false` is intentional in test setup."
       ]
     ]
 
@@ -129,7 +131,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
   defp has_authorize_false?(args) do
     Enum.any?(args, fn
       {:authorize?, false} -> true
-      # Bare `authorize?` variables have a 3-tuple AST ({:authorize?, meta, nil})
+      # A bare `authorize?` variable has a 3-tuple AST ({:authorize?, meta, nil})
       # that Keyword.get's :lists.keyfind would match, so only accept literal
       # 2-tuples here.
       kwl when is_list(kwl) -> Enum.any?(kwl, &match?({:authorize?, false}, &1))

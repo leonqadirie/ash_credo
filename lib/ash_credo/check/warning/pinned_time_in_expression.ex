@@ -5,9 +5,10 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
     tags: [:ash],
     explanations: [
       check: """
-      Using `^Date.utc_today()` or `^DateTime.utc_now()` inside an Ash expression
-      freezes the value at compile time. The pinned value never changes after
-      compilation, leading to subtle bugs that only manifest after time passes.
+      Using `^Date.utc_today()` or `^DateTime.utc_now()` inside an Ash
+      expression freezes the value at compile time. The pinned value never
+      changes after compilation, leading to subtle bugs that only show up
+      after time passes.
 
       Use Ash's built-in expression functions instead:
 
@@ -23,10 +24,10 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
           # Good
           filter expr(inserted_at >= now())
 
-      Only DSL-position expressions are checked. Inside function bodies
-      and anonymous functions the pin is re-evaluated on every call
+      Only expressions in DSL position are checked. Inside function
+      bodies and anonymous functions the pin is re-evaluated on every call
       (`Ash.Expr.expr/1` splices the pinned code into its call site), so
-      it is not frozen and is not flagged.
+      the value is not frozen there and is not flagged.
       """
     ]
 
@@ -38,7 +39,7 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
 
   # Keyed on the module resolved through the lexical environment, so
   # aliased forms (`alias DateTime, as: DT`) match too. `Time.utc_now`
-  # maps to `nil`: Ash has no expression builtin returning the current
+  # maps to `nil`: Ash has no expression builtin that returns the current
   # time of day, so the message advises passing the value in instead of
   # naming a replacement.
   @time_calls %{
@@ -138,7 +139,8 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
   end
 
   # Heads whose bodies run after compilation: the pinned call inside them
-  # is re-evaluated per invocation, so the freeze bug does not exist there.
+  # is re-evaluated per invocation, so the freeze bug does not exist
+  # there.
   @deferred_heads ~w(def defp defmacro defmacrop fn &)a
 
   defp expr_issues(ast, envs, issue_meta) do
@@ -146,7 +148,7 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpression do
       ast,
       fn
         # An immediately-invoked fn/capture runs while the DSL compiles, so
-        # its body is NOT deferred - unwrap it and keep walking the bodies.
+        # its body is NOT deferred: unwrap it and keep walking the bodies.
         # The call arguments evaluate at the call site too, so walk them
         # as well (`(fn e -> e end).(expr(^DateTime.utc_now()))`).
         {{:., _, [{:fn, _, clauses}]}, _meta, args}, acc when is_list(args) ->

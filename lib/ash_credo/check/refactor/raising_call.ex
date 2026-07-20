@@ -25,7 +25,7 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
           end
 
       Requires the host project to be compiled with Ash loaded - same
-      contract as `UseCodeInterface`, `MissingCodeInterface`, etc. When
+      contract as `UseCodeInterface` and `MissingCodeInterface`. When
       Ash isn't loadable the check emits one `:ash_missing` diagnostic
       and becomes a no-op.
 

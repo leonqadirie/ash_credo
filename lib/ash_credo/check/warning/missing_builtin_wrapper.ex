@@ -8,14 +8,14 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
       Builtin change, validation, preparation, and calculation functions
       like `set_attribute`, `present`, `build`, and `concat` must be
       wrapped in their DSL entity (`change`, `validate`, `prepare`,
-      `calculate ...`) when used inside an action body, a `pipeline` body,
-      or a global section (`changes`, `validations`, `preparations`,
-      `calculations`).
+      `calculate ...`) when you use them inside an action body, a
+      `pipeline` body, or a global section (`changes`, `validations`,
+      `preparations`, `calculations`).
 
-      These builtins are plain functions imported into the DSL scope.
-      Without the wrapper, the call returns a spec tuple that is silently
-      discarded - the change/validation/preparation never runs and no error
-      or warning is raised at compile time or runtime.
+      These builtins are plain functions that Ash imports into the DSL
+      scope. Without the wrapper, the call returns a spec tuple that is
+      silently discarded: the change, validation, or preparation never
+      runs, and no error or warning is raised at compile time or runtime.
 
           # Bad - compiles but silently does nothing
           create :register do
@@ -31,52 +31,54 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
             change set_attribute(:status, :draft)
           end
 
-      Each builtin family is only checked in the scopes that import it, so
-      a bare call the compiler already rejects is never flagged. The advice
-      is position-aware for `set_context`, which exists as both a change
-      and a preparation builtin: in pipelines it gets `change`, in read and
-      generic actions `prepare`.
+      The check examines each builtin family only in the scopes that import
+      it, so it never flags a bare call the compiler already rejects. The
+      advice is position-aware for `set_context`, which exists as both a
+      change and a preparation builtin: in a pipeline the advice is
+      `change`, in a read or generic action it is `prepare`.
 
-      The builtin names are read from Ash's `*.Builtins` modules at analysis
-      time, so builtins added in newer Ash versions are covered automatically.
-      Because some of them are common words (`present`, `compare`, `match`,
-      `build`, `load`, `select`), a bare call to a same-named local helper
-      inside an action body would be flagged too; silence such a call with
-      `# credo:disable-for-next-line`.
+      The check reads the builtin names from Ash's `*.Builtins` modules at
+      analysis time, so builtins added in newer Ash versions are covered
+      automatically. Because some builtin names are common words
+      (`present`, `compare`, `match`, `build`, `load`, `select`), a bare
+      call to a same-named local helper inside an action body gets flagged
+      too; silence such a call with `# credo:disable-for-next-line`.
       """
     ]
 
   alias AshCredo.Introspection
   alias AshCredo.Orchestration
 
-  # One entry per builtin family. The builtin NAMES are read at run time from
-  # `:builtins_module` via `__info__(:functions)`, so builtins added in newer
-  # Ash versions are covered without editing this file. Everything else is the
-  # hand-tuned scoping that decides where a family is flagged and which family
-  # owns names shared by more than one (`set_context`):
+  # One entry per builtin family. We read the builtin NAMES at run time
+  # from `:builtins_module` via `__info__(:functions)`, so builtins added
+  # in newer Ash versions are covered without editing this file. Everything
+  # else is hand-tuned scoping: it decides where we flag a family, and
+  # which family owns names shared by more than one (`set_context`):
   #
-  #   * changes - no :read or :action: those import only the Preparation and
-  #     Validation builtins. The one change builtin that compiles bare in a
-  #     generic action is `set_context` (via its Preparation.Builtins twin),
-  #     which the preparations family owns there, because generic actions
-  #     take `prepare`, not `change`. The `changes` global section imports
-  #     Change.Builtins (and Validation.Builtins), so the changes family
-  #     owns `set_context` there too.
+  #   * changes - not :read or :action: those actions import only the
+  #     Preparation and Validation builtins. The one change builtin that
+  #     compiles bare in a generic action is `set_context` (via its
+  #     Preparation.Builtins twin), and the preparations family owns it
+  #     there, because generic actions take `prepare`, not `change`. The
+  #     `changes` global section imports Change.Builtins (and
+  #     Validation.Builtins), so the changes family owns `set_context`
+  #     there.
   #   * validations - includes :read: read actions import
   #     Ash.Resource.Validation.Builtins and accept `validate` entities. All
   #     three global sections import Validation.Builtins.
   #   * preparations - only :read and :action import
   #     Ash.Resource.Preparation.Builtins; among the global sections, only
-  #     `preparations` does (so `set_context` is unambiguous there).
+  #     `preparations` does, so `set_context` is unambiguous there.
   #   * calculations - the `calculations` section imports
   #     Ash.Resource.Calculation.Builtins (just `concat`); the fix is a full
-  #     `calculate` entity, reflected in the usage_prefix.
+  #     `calculate` entity, which the usage_prefix reflects.
   #
-  # `:pipeline` controls flagging inside `pipeline` bodies, which import the
-  # change/validation/preparation families at once (but NOT the calculation
-  # builtins - a bare `concat` there is a compile error). The ambiguous
-  # `set_context` is owned by the changes family in pipelines (since they
-  # accept `change` entities), so the preparations family excludes it.
+  # `:pipeline` controls which names we flag in `pipeline` bodies. Those
+  # bodies import the change/validation/preparation families at once, but
+  # NOT the calculation builtins - a bare `concat` there is a compile
+  # error. In pipelines the changes family owns the ambiguous
+  # `set_context`, since pipelines accept `change` entities, so the
+  # preparations family excludes it.
   @families [
     %{
       builtins_module: Ash.Resource.Change.Builtins,
@@ -116,8 +118,8 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
     end)
   end
 
-  # Resolve the family's builtin names from Ash and assemble the keyword opts
-  # `naked_builtin_issues/3` expects.
+  # Resolve the family's builtin names from Ash and assemble the keyword
+  # opts that `naked_builtin_issues/3` expects.
   defp family_opts(family) do
     builtins = resolve_builtins(family.builtins_module)
 
@@ -130,10 +132,10 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
     ] ++ usage_prefix_opt(family)
   end
 
-  # Read builtin function names live from the family's Ash module so new
-  # builtins are picked up automatically. When the module is not loadable
-  # (Ash absent from the VM running Credo) the family simply does not flag -
-  # without Ash there is nothing Ash-specific to check.
+  # Read the builtin function names live from the family's Ash module, so
+  # new builtins are picked up automatically. When the module isn't
+  # loadable (Ash absent from the VM running Credo), the family simply
+  # doesn't flag: without Ash there is nothing Ash-specific to check.
   defp resolve_builtins(module) do
     if Code.ensure_loaded?(module) do
       module.__info__(:functions) |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
@@ -150,29 +152,32 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
   defp usage_prefix_opt(_family), do: []
 
   # Flags bare calls to configured builtin functions at statement position
-  # inside action bodies, `pipeline` bodies, and global sections, suggesting
-  # the matching DSL wrapper keyword. Ash's builtins are plain functions
-  # imported into the DSL scope that return spec tuples, so an unwrapped call
-  # is silently discarded and nothing warns at compile time or runtime.
+  # inside action bodies, `pipeline` bodies, and global sections,
+  # suggesting the matching DSL wrapper keyword. The DSL scope imports
+  # Ash's builtins as plain functions that return spec tuples, so an
+  # unwrapped call is silently discarded and nothing warns at compile time
+  # or runtime.
   #
   # Required `opts`:
   #
-  #   * `:builtins` - builtin function names to match
+  #   * `:builtins` - the builtin function names to match
   #   * `:wrapper` - the DSL keyword to suggest (e.g. `"change"`)
-  #   * `:action_types` - action entity types to scan; scoped to the actions
-  #     whose scope actually imports their builtin family, so a bare call
-  #     elsewhere is a compile error the compiler already catches
+  #   * `:action_types` - the action entity types to scan, limited to the
+  #     actions whose scope actually imports the builtin family, so a bare
+  #     call elsewhere is a compile error the compiler already catches
   #
   # Optional `opts`:
   #
-  #   * `:pipeline_builtins` - builtin names to also flag at statement position
-  #     inside `pipeline` bodies (defaults to `[]`). Pipeline bodies import all
-  #     three builtin families at once, so families split ownership of names
-  #     that exist in more than one family to avoid double-flagging.
-  #   * `:global_sections` - top-level DSL sections (e.g. `:validations`) whose
-  #     direct entries are scanned for bare builtin calls (defaults to `[]`).
-  #   * `:usage_prefix` - what to put before `builtin(...)` in the advice
-  #     (defaults to `"<wrapper> "`).
+  #   * `:pipeline_builtins` - builtin names to also flag at statement
+  #     position inside `pipeline` bodies (defaults to `[]`). Pipeline
+  #     bodies import all three builtin families at once, so for names that
+  #     exist in more than one family, exactly one family owns each name to
+  #     avoid double-flagging.
+  #   * `:global_sections` - top-level DSL sections (e.g. `:validations`)
+  #     whose direct entries we scan for bare builtin calls (defaults to
+  #     `[]`).
+  #   * `:usage_prefix` - the text to put before `builtin(...)` in the
+  #     advice (defaults to `"<wrapper> "`).
   defp naked_builtin_issues(source_file, params, opts) do
     builtins = opts |> Keyword.fetch!(:builtins) |> MapSet.new()
     wrapper = Keyword.fetch!(opts, :wrapper)
@@ -230,8 +235,8 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
     end
   end
 
-  # Works on any AST node with a do-block whose direct entries are statements:
-  # action entities, pipeline entities, and global sections.
+  # Works on any AST node with a do-block whose direct entries are
+  # statements: action entities, pipeline entities, and global sections.
   defp naked_builtin_calls(ast, builtins, advice, issue_meta) do
     for {func_name, meta, _} <- Introspection.entity_body(ast),
         MapSet.member?(builtins, func_name) do

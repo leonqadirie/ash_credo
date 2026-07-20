@@ -36,7 +36,7 @@ defmodule AshCredoTest do
   # Inline annotation used in the main checks table in README.md. Matched
   # loosely because some rows end with `.**` and others continue with
   # ` and **configurable**`.
-  @compiled_annotation "**Requires compiled project"
+  @compiled_annotation "**Requires a compiled project"
 
   # Discovers all check modules from the filesystem. Returns a sorted list of
   # `{category_module, check_module_name, file_path}` tuples - e.g.
@@ -170,7 +170,7 @@ defmodule AshCredoTest do
 
       bullet_block =
         case Regex.run(
-               ~r/\*\*Note: only the following checks are enabled by default.*?\n((?:- `[\w.]+`\n)+)/s,
+               ~r/\*\*Only the following checks are enabled by default.*?\n((?:- `[\w.]+`\n)+)/s,
                readme_content,
                capture: :all_but_first
              ) do

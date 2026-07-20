@@ -11,33 +11,37 @@ defmodule AshCredo.Check.Warning.SensitiveAttributeExposed do
     explanations: [
       check: """
       Attributes containing sensitive data should be marked with `sensitive?: true`.
-      This prevents them from being leaked in logs, error messages, and inspections.
+      This prevents them from leaking into logs, error messages, and inspections.
 
           attribute :password_hash, :string, sensitive?: true
 
-      The `sensitive_names` param accepts atoms (exact name match) and regexes
-      (matched against the attribute name), e.g. `[:ssn, ~r/_token$/]`.
+      The `sensitive_names` param accepts atoms (exact name match) and
+      regexes (matched against the attribute name), for example
+      `[:ssn, ~r/_token$/]`.
 
-      Test directories are excluded by default, since throwaway resources in
-      test support often name attributes after sensitive fields without
-      carrying real data. Override `excluded_paths` to scope the check
+      The check excludes test directories by default, since throwaway
+      resources in test support often use sensitive field names without
+      holding real data. Override `excluded_paths` to scope the check
       differently.
 
       ## Limitations
 
-      This check scans the source AST, so it only sees attributes written
+      The check scans the source AST, so it only sees attributes written
       literally in the `attributes` block. It cannot see attributes
-      contributed by Spark transformers or extensions - for example
-      `AshAuthentication`'s `:hashed_password` - and so will not flag them
-      even when they are unmarked. It also only inspects the `attribute`
-      entity: `belongs_to` foreign keys cannot be marked `sensitive?`
-      directly (declare the column as an explicit `attribute` if you need
-      that), and timestamps are not sensitive data, so neither is flagged.
+      contributed by Spark transformers or extensions, such as
+      `AshAuthentication`'s `:hashed_password`, and will not flag them
+      even when they are unmarked.
+
+      The check also only inspects the `attribute` entity: `belongs_to`
+      foreign keys cannot be marked `sensitive?` directly (declare the
+      column as an explicit `attribute` if you need that), and timestamps
+      are not sensitive data, so neither is flagged.
       """,
       params: [
         sensitive_names:
           "Attribute names considered sensitive. Atom entries match exactly; " <>
-            "`Regex` entries (e.g. `~r/_token$/`) match against the attribute name.",
+            "`Regex` entries (for example `~r/_token$/`) match against " <>
+            "the attribute name.",
         excluded_paths:
           "List of paths or regexes to exclude from this check. " <>
             "Defaults to test directories, since fake sensitive attributes " <>

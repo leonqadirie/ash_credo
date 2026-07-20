@@ -16,8 +16,7 @@ defmodule AshCredo.Check.Refactor.DirectiveInFunctionBody do
       `require` into every function that uses an `Ash.Query.*` or
       `Ash.Expr.*` macro, instead of requiring the module once at the top
       of the module. The result is files with three or four duplicated
-      directives, which is noisy, non-idiomatic, and a recognisable code
-      smell.
+      directives, which is noisy and not idiomatic Elixir.
 
           # Flagged
           defmodule MyApp.PostQueries do
@@ -54,7 +53,7 @@ defmodule AshCredo.Check.Refactor.DirectiveInFunctionBody do
       `directive_modules` defaults to `[Ash.Query, Ash.Expr]`. The check
       is general - any module you put in the list is checked the same way.
       Add Ash extension modules from your own codebase, or any third-party
-      module whose directives you want centralised:
+      module whose directives you want at module level:
 
           {AshCredo.Check.Refactor.DirectiveInFunctionBody,
            [directive_modules: [Ash.Query, Ash.Expr, MyApp.CustomMacros]]}
@@ -66,16 +65,16 @@ defmodule AshCredo.Check.Refactor.DirectiveInFunctionBody do
 
       The default reflects the most common cases in Ash codebases (the
       `require Ash.Query` and `require Ash.Expr` repetition AI assistants
-      love). The check itself is general; this plugin just ships
-      Ash-flavoured defaults.
+      produce). The check itself is general; this plugin just ships
+      Ash-flavored defaults.
       """,
       params: [
         directive_modules:
           "List of modules whose `require`/`import`/`alias` directives must " <>
             "live at module level rather than inside function bodies. Defaults " <>
             "to `[Ash.Query, Ash.Expr]` because those are the most common " <>
-            "offenders in Ash codebases. The check itself is general - add " <>
-            "any module whose directives your team wants centralised."
+            "cases in Ash codebases. The check itself is general - add " <>
+            "any module whose directives your team wants at module level."
       ]
     ]
 

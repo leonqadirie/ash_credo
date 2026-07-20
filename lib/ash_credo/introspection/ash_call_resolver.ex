@@ -2,39 +2,41 @@ defmodule AshCredo.Introspection.AshCallResolver do
   @moduledoc """
   Upper layer of the Ash call pipeline: consumes the call stream from
   `AshCredo.Introspection.AshCallScanner` and yields *resolved* Ash call
-  sites - calls where both the resource and the action arguments are
+  sites, calls where both the resource and the action arguments are
   literal values that map to a real module atom and a real action atom.
 
-  Knows the specific Ash API entry-point shapes; the lower layer doesn't.
-  Four dispatch patterns are recognised:
+  This module knows the specific Ash API entry-point shapes; the lower
+  layer doesn't. It recognises four dispatch patterns:
 
-    * Pattern A - resource at arg 0, `:action` in keyword opts (`Ash.read!`,
-      `Ash.get`, `Ash.read_one`, `Ash.stream!`, ...). When no `:action` is present, read-like
-      calls resolve to the resource's primary `:read` action, but still carry
-      their original call shape so checks can preserve list/get/stream
-      semantics in suggestions.
-    * Pattern B - `Ash.bulk_create/3` (resource at arg 1, action at arg 2).
-    * Pattern C - `Ash.bulk_update`/`bulk_destroy` (query/stream at arg 0,
-      action at arg 1, resource traced through the query origin).
-    * Pattern D - builders `Ash.Changeset.for_*`/`Ash.Query.for_read`/
+    * Pattern A - resource at arg 0, `:action` in the keyword opts
+      (`Ash.read!`, `Ash.get`, `Ash.read_one`, `Ash.stream!`, ...).
+      When no `:action` is present, read-like calls resolve to the
+      resource's primary `:read` action, but still carry their original
+      call shape so checks can preserve list/get/stream semantics in
+      suggestions.
+    * Pattern B - `Ash.bulk_create/3` (resource at arg 1, action at
+      arg 2).
+    * Pattern C - `Ash.bulk_update`/`bulk_destroy` (query/stream at
+      arg 0, action at arg 1, resource traced through the query origin).
+    * Pattern D - the builders `Ash.Changeset.for_*`/`Ash.Query.for_read`/
       `Ash.ActionInput.for_action` (resource at arg 0, action at arg 1).
 
-  For pattern D record-first builders (`for_update`/`for_destroy`) the
-  resolver additionally traces the first argument back through bindings
-  and pipe chains to find the originating literal resource.
+  For the pattern D record-first builders (`for_update`/`for_destroy`),
+  the resolver additionally traces the first argument back through
+  bindings and pipe chains to find the originating literal resource.
 
-  Each yielded site has the resource lookup result attached - either
+  Each yielded site has the resource lookup result attached, either
   `{:ok, atom, info}`, `{:not_loadable, atom}`, `:not_a_resource`, or
-  `:ash_missing` - so consumers can apply their own emission logic without
-  re-running `Compiled.inspect_module/1`.
+  `:ash_missing`, so consumers can apply their own emission logic
+  without re-running `Compiled.inspect_module/1`.
 
-  Used by:
+  Consumers:
 
-    * `AshCredo.Check.Refactor.UseCodeInterface` - interface-suggestion
-      logic on loaded resources plus the `:not_loadable` diagnostic for
-      unreachable modules.
-    * `AshCredo.Check.Warning.UnknownAction` - flags references to actions
-      that do not exist on the resolved resource.
+    * `AshCredo.Check.Refactor.UseCodeInterface` - the
+      interface-suggestion logic on loaded resources, plus the
+      `:not_loadable` diagnostic for unreachable modules.
+    * `AshCredo.Check.Warning.UnknownAction` - flags references to
+      actions that don't exist on the resolved resource.
   """
 
   alias AshCredo.Cache
@@ -67,8 +69,8 @@ defmodule AshCredo.Introspection.AshCallResolver do
                          {[:Ash, :ActionInput], :for_action}
                        ])
 
-  # Builders whose arg 0 is typically a record (struct or variable bound to
-  # one) rather than a literal resource module. For these we additionally
+  # Builders whose arg 0 is typically a record (a struct or a variable
+  # bound to one) rather than a literal resource module. For these we also
   # try to trace the argument's provenance back to a literal resource origin.
   @record_first_builders MapSet.new([
                            {[:Ash, :Changeset], :for_update},
@@ -76,20 +78,21 @@ defmodule AshCredo.Introspection.AshCallResolver do
                          ])
 
   # Origin calls from which a bound variable carries a single record whose
-  # resource type is the first argument (e.g. `post = Ash.get!(MyApp.Post, id)`).
-  # Only the bang variant qualifies: `Ash.get/3` returns `{:ok, record}`, so a
-  # binding like `post = Ash.get(Post, id)` holds a result tuple, not a record.
+  # resource type is the first argument (e.g.
+  # `post = Ash.get!(MyApp.Post, id)`). Only the bang variant qualifies:
+  # `Ash.get/3` returns `{:ok, record}`, so a binding like
+  # `post = Ash.get(Post, id)` holds a result tuple, not a record.
   @record_origin_funs ~w(get!)a
 
   @doc """
   Walks `source_file` and returns the list of resolved Ash call sites in
   source order.
 
-  Memoized in the run-scoped cache keyed on filename plus source hash, so
-  the scan-and-resolve pass runs once per file per Credo run instead of
-  once per consuming check. Safe to cache despite embedding compiled
-  resolution results: the compiled world is fixed within a run, and the
-  cache is cleared at run boundaries.
+  Memoized in the run-scoped cache, keyed on filename plus source hash,
+  so the scan-and-resolve pass runs once per file per Credo run instead
+  of once per consuming check. Safe to cache despite embedding compiled
+  resolution results: the compiled world is fixed within a run, and
+  `AshCredo.init/1` clears the cache at the run boundaries.
   """
   @spec sites(Credo.SourceFile.t()) :: [AshCallSite.t()]
   def sites(source_file) do
@@ -110,9 +113,9 @@ defmodule AshCredo.Introspection.AshCallResolver do
     do: Name.full(module) <> ".#{fun_name}"
 
   @doc """
-  Returns `true` if the call uses a bang-style function name (e.g. `read!`).
-  Builder calls (`changeset_to_*`/`query_to_*`/`input_to_*`) are never
-  bang-suffixed because their generated helpers do not raise.
+  Returns `true` if the call uses a bang-style function name (e.g.
+  `read!`). Builder calls (`changeset_to_*`/`query_to_*`/`input_to_*`)
+  are never bang-suffixed because their generated helpers don't raise.
   """
   @spec bang?(AshCallSite.t()) :: boolean()
   def bang?(%AshCallSite{builder_prefix: prefix}) when not is_nil(prefix), do: false
@@ -150,8 +153,8 @@ defmodule AshCredo.Introspection.AshCallResolver do
   defp dispatch_site([:Ash], fun_name, args, ctx) when fun_name in @bulk_query_funs,
     do: extract_bulk_query(args, ctx)
 
-  # `@positional_0_1_funs`/`@record_first_builders` are MapSets, so this case
-  # cannot be a function-head guard - it falls through to the catch-all.
+  # `@positional_0_1_funs`/`@record_first_builders` are MapSets, so this
+  # case cannot be a function-head guard; it falls through to the catch-all.
   defp dispatch_site(module, fun_name, args, ctx) do
     if MapSet.member?(@positional_0_1_funs, {module, fun_name}) do
       extract_positional(args, 0, 1, %{
@@ -171,9 +174,9 @@ defmodule AshCredo.Introspection.AshCallResolver do
       case action_in_opts(args, ctx.fun_name) do
         {:literal, action} -> [build_site(segs, action, ctx)]
         :absent -> implicit_read_sites(segs, ctx)
-        # `:action` is present but not a literal atom (e.g. a bound variable).
-        # Caller intends a specific runtime action; do not silently fall back
-        # to `:read`.
+        # `:action` is present but not a literal atom (e.g. a bound
+        # variable). The caller intends a specific runtime action, so
+        # don't silently fall back to `:read`.
         :non_literal -> []
       end
     else
@@ -184,8 +187,9 @@ defmodule AshCredo.Introspection.AshCallResolver do
   # `Ash.read!/get!/stream!` without an `:action` keyword dispatches to the
   # resource's primary :read action at runtime. Mirror that here so bare
   # `Ash.read!(MyApp.Post)` gets the same code-interface suggestion as the
-  # explicit `Ash.read!(MyApp.Post, action: :read)` form, and so a `:not_loadable`
-  # diagnostic still fires for projects that only ever call the bare shape.
+  # explicit `Ash.read!(MyApp.Post, action: :read)` form, and so a
+  # `:not_loadable` diagnostic still fires for projects that only ever call
+  # the bare shape.
   defp implicit_read_sites(segments, ctx) do
     case resolve_resource(segments) do
       {:ok, _resource, %{actions: actions}} = resolution ->
@@ -195,9 +199,9 @@ defmodule AshCredo.Introspection.AshCallResolver do
         end
 
       {:not_loadable, _resource} = resolution ->
-        # action_name is only used by the `{:ok, ...}` branch in checks; the
+        # Only the `{:ok, ...}` branch in checks uses action_name. The
         # `:not_loadable` branch ignores it. We pass `:read` as a stable
-        # placeholder rather than a sentinel so any future inspection reads
+        # placeholder, not a sentinel, so any future inspection reads
         # naturally.
         [build_site_with(ctx, :read, resolution)]
 
@@ -207,9 +211,9 @@ defmodule AshCredo.Introspection.AshCallResolver do
   end
 
   defp build_site_with(ctx, action_name, resolution) do
-    # `:trace_record?` is resolver-local scratch (drives resource_segments/3
-    # dispatch); it is not part of the AshCallSite contract, so drop it before
-    # building the struct.
+    # `:trace_record?` is resolver-local scratch (it drives the
+    # resource_segments/3 dispatch) and not part of the AshCallSite
+    # contract, so drop it before building the struct.
     fields =
       ctx
       |> Map.delete(:trace_record?)
@@ -365,14 +369,14 @@ defmodule AshCredo.Introspection.AshCallResolver do
     end
   end
 
-  # Struct literal: `%MyApp.Post{...}` - extract the inner alias AST.
+  # Struct literal like `%MyApp.Post{...}`: extract the inner alias AST.
   defp literal_segments({:%, _, [alias_ast, {:%{}, _, _}]}, context),
     do: literal_segments(alias_ast, context)
 
   defp literal_segments(_, _), do: :error
 
   # Builders that carry the record/changeset as arg0 may receive it via a
-  # pipeline or binding, so trace the origin back to a literal; plain
+  # pipeline or a binding, so trace the origin back to a literal; plain
   # positional calls name the resource directly.
   defp resource_segments(ast, context, %{trace_record?: true}) do
     case literal_segments(ast, context) do
@@ -447,9 +451,9 @@ defmodule AshCredo.Introspection.AshCallResolver do
 
   defp arg_at(args, idx), do: Enum.fetch(args, idx)
 
-  # `Ash.get/2`'s second argument is always the identifier, even when it is a
-  # keyword list containing an `:action` attribute. Only `Ash.get/3` has call
-  # options. The other Pattern A functions take options at index 1.
+  # `Ash.get/2`'s second argument is always the identifier, even when it is
+  # a keyword list containing an `:action` attribute. Only `Ash.get/3` has
+  # call options. The other Pattern A functions take options at index 1.
   defp action_in_opts(args, fun_name) do
     opts_idx = if fun_name in @get_funs, do: 2, else: 1
 

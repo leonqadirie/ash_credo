@@ -5,26 +5,29 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
     tags: [:ash, :security],
     explanations: [
       check: """
-      An unscoped policy using `authorize_if always()` allows anyone -
-      including unauthenticated requests - to perform all actions.
+      An unscoped policy using `authorize_if always()` allows anyone,
+      including unauthenticated requests, to perform all actions.
 
-      A policy is unscoped when its condition is `always()` or `expr(true)`,
-      when every element of a list condition is one of those, when it has no
-      condition at all (Ash defaults the condition to true), or when its only
-      body-level `condition` is `always()`/`expr(true)`. Conditions on
-      enclosing `policy_group`s count: Ash adds them to every policy the
-      group contains, so a policy inside `policy_group actor_attribute_equals(:role, :admin)`
+      A policy is unscoped when its condition is `always()` or
+      `expr(true)`, when every element of a list condition is one of
+      those, when it has no condition at all (Ash defaults the condition
+      to true), or when its only body-level `condition` is
+      `always()`/`expr(true)`.
+
+      Conditions on enclosing `policy_group`s count: Ash adds them to
+      every policy the group contains, so a policy inside
+      `policy_group actor_attribute_equals(:role, :admin)`
       is scoped even without a condition of its own.
 
-      Entity options do not scope: `policy description: "..." do` still
-      applies everywhere, and the condition is recognised whether passed
-      positionally or via the `condition:` option.
+      Entity options do not scope the policy: `policy description: "..." do`
+      still applies everywhere. The check recognizes the condition whether
+      you pass it positionally or via the `condition:` option.
 
       Checks apply top to bottom and the first one that reaches a decision
-      wins, so `authorize_if always()` preceded by a `forbid_if`/`forbid_unless`
-      is the deliberate allow-all-except pattern and is not flagged.
-      Guards that can never fire (`forbid_if never()`, `forbid_unless always()`,
-      boolean literals) do not count:
+      wins, so `authorize_if always()` after a `forbid_if` or
+      `forbid_unless` is the deliberate allow-all-except pattern and is
+      not flagged. Guards that can never deny do not count
+      (`forbid_if never()`, `forbid_unless always()`, boolean literals):
 
           policy always() do
             forbid_if actor_attribute_equals(:banned, true)
@@ -71,9 +74,9 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
 
   # Checks apply top to bottom and the first decision wins, so
   # `authorize_if always()` only grants unconditional access when no
-  # earlier `forbid_if`/`forbid_unless` can deny first - with one, this is
-  # the deliberate allow-all-except pattern. Guards that can never fire
-  # (`forbid_if never()`/`expr(false)`/`false`, `forbid_unless
+  # earlier `forbid_if`/`forbid_unless` can deny first; with such a guard,
+  # this is the deliberate allow-all-except pattern. Guards that can never
+  # fire (`forbid_if never()`/`expr(false)`/`false`, `forbid_unless
   # always()`/`expr(true)`/`true`) do not count. Checks accept a trailing
   # options list (`forbid_if never(), name: "..."`), which does not change
   # the check itself.
@@ -105,8 +108,8 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
 
   defp scoped_policy?({kind, _, args} = policy_ast) when kind in [:policy, :bypass] do
     case Enum.reject(args, &do_block?/1) do
-      # policy do ... end - Ash defaults the condition to static true, so the
-      # policy is only scoped if its body declares a restrictive `condition`
+      # For `policy do ... end`, Ash defaults the condition to static true, so
+      # the policy is only scoped if its body declares a restrictive `condition`
       [] -> scoped_body_condition?(policy_ast)
       [condition_or_opts | _] -> scoped_condition_arg?(condition_or_opts, policy_ast)
     end
@@ -119,7 +122,7 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
 
   # The condition arg is optional and the entity takes options
   # (`policy description: "..." do`), so a keyword list of known policy
-  # option keys is options, not a condition - the condition, if any, is
+  # option keys is options, not a condition; the condition, if any, is
   # its `:condition` key.
   @policy_option_keys ~w(description access_type condition error_message)a
 
@@ -155,7 +158,8 @@ defmodule AshCredo.Check.Warning.OverlyPermissivePolicy do
 
   # always() applies to everything; expr(true) and a bare `true` literal
   # (Ash accepts booleans as checks) are effectively unscoped. Anything
-  # else - action_type(:read), action([...]), actor checks - scopes.
+  # else (action_type(:read), action([...]), actor checks) scopes the
+  # policy.
   defp unscoped_condition?({:always, _, _}), do: true
   defp unscoped_condition?({:expr, _, [true]}), do: true
   defp unscoped_condition?(true), do: true

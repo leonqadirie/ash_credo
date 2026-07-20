@@ -25,9 +25,9 @@ defmodule AshCredo.Check.Design.MissingIdentity do
       see the fully-resolved attribute and identity lists - including
       contributions from extensions like `AshAuthentication`, which adds an
       `:email` attribute via a transformer that the AST scanner cannot see.
-      Migrating to compiled introspection turns this check from "scans the
-      source for known attribute names" into "catches concrete missing
-      identities on extension-contributed attributes too".
+      So rather than merely scanning the source for known attribute names,
+      the check also catches missing identities on extension-contributed
+      attributes.
 
       ## Requirements
 

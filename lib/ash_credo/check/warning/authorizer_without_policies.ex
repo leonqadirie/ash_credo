@@ -5,9 +5,9 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
     tags: [:ash, :security],
     explanations: [
       check: """
-      Resources that declare `Ash.Policy.Authorizer` but define no policies
-      will deny all actions by default. An empty `policies` block has the same
-      effect. This is almost always unintentional.
+      A resource that declares `Ash.Policy.Authorizer` but defines no
+      policies denies all actions by default. An empty `policies` block has
+      the same effect. This is almost always unintentional.
 
       Either add policies:
 
@@ -17,19 +17,20 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
             end
           end
 
-      Or remove the authorizer if authorization is not needed yet.
+      Or remove the authorizer if you don't need authorization yet.
 
-      This check uses Ash's runtime introspection (`Ash.Resource.Info.authorizers/1`
-      and `Ash.Policy.Info.policies/1`) to see the fully-resolved authorizer
-      and policy lists. That means it correctly handles authorizers added by
-      extensions and policies declared in `Spark.Dsl.Fragment` modules - cases
-      the AST scanner would silently miss.
+      The check uses Ash's runtime introspection
+      (`Ash.Resource.Info.authorizers/1` and `Ash.Policy.Info.policies/1`)
+      to read the fully resolved authorizer and policy lists, so it
+      correctly handles authorizers added by extensions and policies
+      declared in `Spark.Dsl.Fragment` modules - cases an AST scanner
+      cannot see.
 
       ## Requirements
 
-      Your project must be compiled before running `mix credo`. If Ash is
-      not available in the VM running Credo, the check is a no-op and emits
-      a single diagnostic.
+      Compile your project before running `mix credo`. If Ash is not
+      available in the VM running Credo, the check is a no-op and emits a
+      single diagnostic.
       """
     ]
 
@@ -55,13 +56,14 @@ defmodule AshCredo.Check.Warning.AuthorizerWithoutPolicies do
          context,
          issue_meta
        ) do
-    # `Ash.Policy.Authorizer` here is intentionally a bare atom literal, not
-    # a remote call - Elixir compiles it to `:"Elixir.Ash.Policy.Authorizer"`
-    # without ever needing the module loaded, so this file compiles cleanly
-    # in projects that don't depend on Ash. If you ever turn this into a
-    # remote call (e.g. `Ash.Policy.Authorizer.something()`), make sure
-    # `AshCredo.Introspection.Compiled`'s `@compile {:no_warn_undefined,
-    # ...}` list still covers it (it currently does, defensively).
+    # `Ash.Policy.Authorizer` here is deliberately a bare atom literal, not
+    # a remote call. Elixir compiles it to `:"Elixir.Ash.Policy.Authorizer"`
+    # without ever loading the module, so this file compiles cleanly in
+    # projects that don't depend on Ash. If you ever turn this into a
+    # remote call (e.g. `Ash.Policy.Authorizer.something()`), make sure the
+    # `@compile {:no_warn_undefined, ...}` list in
+    # `AshCredo.Introspection.Compiled` still covers it (it currently does,
+    # defensively).
     if Ash.Policy.Authorizer in authorizers and policies == [] do
       [missing_policies_issue(context, issue_meta)]
     else

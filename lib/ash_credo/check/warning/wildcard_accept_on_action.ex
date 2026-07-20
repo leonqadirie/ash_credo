@@ -8,9 +8,9 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
     ],
     explanations: [
       check: """
-      Using `accept :*` on create, update, or soft destroy actions accepts
-      all public attributes, which is a mass-assignment vulnerability.
-      Explicitly list the accepted attributes instead.
+      Using `accept :*` on a create, update, or soft destroy action
+      accepts all public attributes, which is a mass-assignment
+      vulnerability. Explicitly list the accepted attributes instead.
 
           create :create do
             accept [:title, :body]
@@ -21,9 +21,9 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
       destroys are updates under the hood and honor `accept` like any
       other writable action.
 
-      Test directories are excluded by default, since test factories and seeds
-      often use `accept :*` on purpose. Override `excluded_paths` to scope the
-      check differently.
+      The check excludes test directories by default, since test factories
+      and seeds often use `accept :*` on purpose. Override
+      `excluded_paths` to scope the check differently.
       """,
       params: [
         excluded_paths:
@@ -93,8 +93,8 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnAction do
   end
 
   # `default_accept` only reaches actions that can inherit it; on a
-  # resource with none (e.g. only reads and hard destroys) the option is
-  # dead configuration, not a mass-assignment surface.
+  # resource with none (for example only reads and hard destroys) the
+  # option is dead configuration, not a mass-assignment surface.
   defp default_accept_issues(actions_ast, issue_meta) do
     if Introspection.default_accept_inheritors?(actions_ast) do
       wildcard_default_accept_issues(actions_ast, issue_meta)

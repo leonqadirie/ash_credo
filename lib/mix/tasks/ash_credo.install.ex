@@ -6,7 +6,7 @@ if Code.ensure_loaded?(Igniter) do
     #{@shortdoc}
 
     Adds the `AshCredo` plugin to your `.credo.exs` configuration file.
-    If no `.credo.exs` exists, one will be created with sensible defaults.
+    If no `.credo.exs` exists, one is created with sensible defaults.
 
     ## Example
 
@@ -75,7 +75,7 @@ if Code.ensure_loaded?(Igniter) do
 
       # Each step returns `:error` when the config is not a literal it can
       # navigate. Igniter's updater contract has no clause for a bare
-      # `:error`, so without the `else` that crashes the whole install;
+      # `:error`, so without the `else` that would crash the whole install;
       # degrade to a warning with manual instructions instead.
       with {:ok, configs_zipper} <-
              Common.move_to_cursor(zipper, "%{configs: __cursor__()}"),

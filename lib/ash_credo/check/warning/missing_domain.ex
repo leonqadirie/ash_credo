@@ -11,8 +11,8 @@ defmodule AshCredo.Check.Warning.MissingDomain do
 
       Without it, code interfaces and domain configuration do not apply,
       and callers must supply the domain themselves. A resource shared
-      across domains can opt out explicitly with `domain: nil` - the
-      check accepts that and only flags a missing option.
+      across multiple domains can opt out explicitly with `domain: nil`;
+      the check accepts that value and only flags a missing option.
       """
     ]
 
