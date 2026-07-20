@@ -8,6 +8,9 @@ defmodule AshCredo.Introspection.AliasesTest do
   depends on this module, so the fallbacks are worth pinning.
   """
   use ExUnit.Case, async: true
+  use ExUnitProperties
+
+  import ExUnit.CaptureIO, only: [with_io: 2]
 
   alias AshCredo.Introspection.Aliases
 
@@ -115,6 +118,12 @@ defmodule AshCredo.Introspection.AliasesTest do
              )
     end
 
+    test "import of an unloadable module still registers the implied require" do
+      env = env_after(["import AshCredo.No.Such.Module"])
+
+      assert Macro.Env.required?(env, AshCredo.No.Such.Module)
+    end
+
     test "grouped require registers every suffix" do
       env = env_after(["require Ash.{Query, Expr}"])
 
@@ -209,6 +218,98 @@ defmodule AshCredo.Introspection.AliasesTest do
       segments = [{:__MODULE__, [], nil}, :Post]
 
       assert Aliases.expand_alias(segments, Aliases.base_env()) == segments
+    end
+  end
+
+  describe "imported_module/3" do
+    test "resolves functions and macros through a plain import" do
+      env = env_after(["import Ash.Query"])
+
+      assert Aliases.imported_module(env, :limit, 2) == {:ok, Ash.Query}
+      assert Aliases.imported_module(env, :filter, 2) == {:ok, Ash.Query}
+    end
+
+    test "honors an only: selection" do
+      env = env_after(["import Ash.Query, only: [sort: 2]"])
+
+      assert Aliases.imported_module(env, :sort, 2) == {:ok, Ash.Query}
+      assert Aliases.imported_module(env, :filter, 2) == :error
+    end
+
+    test "honors an except: selection per arity" do
+      env = env_after(["import Ash, except: [read!: 2]"])
+
+      assert Aliases.imported_module(env, :read!, 2) == :error
+      assert Aliases.imported_module(env, :read!, 1) == {:ok, Ash}
+    end
+
+    test "honors only: :macros and only: :functions" do
+      macros_env = env_after(["import Ash.Query, only: :macros"])
+
+      assert Aliases.imported_module(macros_env, :filter, 2) == {:ok, Ash.Query}
+      assert Aliases.imported_module(macros_env, :limit, 2) == :error
+
+      functions_env = env_after(["import Ash.Query, only: :functions"])
+
+      assert Aliases.imported_module(functions_env, :limit, 2) == {:ok, Ash.Query}
+      assert Aliases.imported_module(functions_env, :filter, 2) == :error
+    end
+
+    test "an unloadable module resolves nothing" do
+      env = env_after(["import AshCredo.No.Such.Module"])
+
+      assert Aliases.imported_module(env, :anything, 1) == :error
+    end
+
+    test "a non-literal selection falls back to the implied require" do
+      env = env_after(["import Ash.Query, only: @generated"])
+
+      assert Macro.Env.required?(env, Ash.Query)
+      assert Aliases.imported_module(env, :filter, 2) == :error
+    end
+
+    test "a stale only: naming a nonexistent export leaves only the implied require" do
+      # The compiler prints "cannot import Ash.Query.no_such_fun/9" to
+      # stderr regardless of `warn: false`; capture it to keep the suite
+      # output clean.
+      {env, stderr} =
+        with_io(:stderr, fn -> env_after(["import Ash.Query, only: [no_such_fun: 9]"]) end)
+
+      assert stderr =~ "cannot import Ash.Query.no_such_fun/9"
+      assert Macro.Env.required?(env, Ash.Query)
+      assert Aliases.imported_module(env, :no_such_fun, 9) == :error
+      assert Aliases.imported_module(env, :filter, 2) == :error
+    end
+
+    test "a grouped import registers each target" do
+      env = env_after(["import Ash.{Query, Expr}"])
+
+      assert Aliases.imported_module(env, :limit, 2) == {:ok, Ash.Query}
+      assert Aliases.imported_module(env, :expr, 1) == {:ok, Ash.Expr}
+    end
+
+    test "resolves Kernel auto-imports, so consumers must namespace-filter" do
+      assert Aliases.imported_module(Aliases.base_env(), :length, 1) == {:ok, Kernel}
+    end
+  end
+
+  # The unit tests above pin individual selections; this pins the general
+  # contract against the module's real export table: an `only:` list
+  # resolves exactly its members and nothing else.
+  property "only: selections resolve exactly the selected exports" do
+    exports = Ash.Query.__info__(:functions) ++ Ash.Query.__info__(:macros)
+
+    check all(selection <- uniq_list_of(member_of(exports), min_length: 1, max_length: 5)) do
+      only = Enum.map_join(selection, ", ", fn {name, arity} -> "#{name}: #{arity}" end)
+      env = env_after(["import Ash.Query, only: [#{only}]"])
+
+      for {name, arity} <- selection do
+        assert Aliases.imported_module(env, name, arity) == {:ok, Ash.Query}
+      end
+
+      for {name, arity} <- exports -- selection do
+        assert Aliases.imported_module(env, name, arity) == :error
+      end
     end
   end
 

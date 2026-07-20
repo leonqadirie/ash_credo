@@ -128,7 +128,14 @@ defmodule AshCredo.Introspection.AshCallResolver do
   defp resolve_site(
          %{call_ast: call_ast, expanded_module: expanded_module, args: args} = call_info
        ) do
-    {{:., _, [_, fun_name]}, call_meta, _raw_args} = call_ast
+    # Remote (`Ash.read!(...)`) and bare imported (`import Ash; read!(...)`)
+    # call shapes carry the function name in different positions; both
+    # resolve identically from here on.
+    {fun_name, call_meta} =
+      case call_ast do
+        {{:., _, [_, remote_fun]}, meta, _raw_args} -> {remote_fun, meta}
+        {bare_fun, meta, _raw_args} when is_atom(bare_fun) -> {bare_fun, meta}
+      end
 
     ctx = %{
       fun_name: fun_name,

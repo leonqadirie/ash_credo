@@ -76,9 +76,12 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
       Both detectors resolve aliases lexically. The common
       `alias __MODULE__.Foo` pattern is resolved using the enclosing
       `defmodule`, so `Foo.archive!()` and `MyApp.Blog.Foo.archive!()`
-      are treated identically. Unsupported call shapes that can never be
-      flagged: `apply/3`, variable modules (`mod.fun!()`), macro-generated
-      bang names, and bare `__MODULE__.fun!()` (no alias).
+      are treated identically. The Ash-bang detector also resolves bare
+      imported bangs: after `import Ash`, a `read!(query)` is flagged
+      like `Ash.read!(query)`, triggering on the bare name as written.
+      Unsupported call shapes that can never be flagged: `apply/3`,
+      variable modules (`mod.fun!()`), macro-generated bang names, and
+      bare `__MODULE__.fun!()` (no alias).
       """,
       params: [
         excluded_functions:
@@ -132,25 +135,58 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
     case call_ast do
       {{:., _, [module_ast, fun_name]}, meta, _args}
       when is_atom(fun_name) and is_list(meta) ->
-        module = Module.concat(expanded_module)
+        maybe_bang_issues(
+          module_ast,
+          expanded_module,
+          fun_name,
+          meta,
+          excluded_functions,
+          flag_bang_only,
+          issue_meta
+        )
 
-        with true <- bang?(fun_name),
-             false <- MapSet.member?(excluded_functions, {module, fun_name}) do
-          ash_call_issues(
-            non_bang_counterpart(module, fun_name),
-            module_ast,
-            expanded_module,
-            fun_name,
-            meta,
-            flag_bang_only,
-            issue_meta
-          )
-        else
-          _ -> []
-        end
+      # Bare imported bangs (`import Ash; read!(...)`): same resolution,
+      # no module AST - the trigger is the bare name as written in source.
+      {fun_name, meta, _args} when is_atom(fun_name) and is_list(meta) ->
+        maybe_bang_issues(
+          nil,
+          expanded_module,
+          fun_name,
+          meta,
+          excluded_functions,
+          flag_bang_only,
+          issue_meta
+        )
 
       _ ->
         []
+    end
+  end
+
+  defp maybe_bang_issues(
+         module_ast,
+         expanded_module,
+         fun_name,
+         meta,
+         excluded_functions,
+         flag_bang_only,
+         issue_meta
+       ) do
+    module = Module.concat(expanded_module)
+
+    with true <- bang?(fun_name),
+         false <- MapSet.member?(excluded_functions, {module, fun_name}) do
+      ash_call_issues(
+        non_bang_counterpart(module, fun_name),
+        module_ast,
+        expanded_module,
+        fun_name,
+        meta,
+        flag_bang_only,
+        issue_meta
+      )
+    else
+      _ -> []
     end
   end
 
@@ -350,10 +386,17 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
   end
 
   defp bang_issue(kind, module_ast, expanded_module, fun_name, meta, issue_meta) do
-    source_module_str = source_module_string(module_ast, expanded_module)
     canonical_module_str = module_string(expanded_module)
     fun_str = Atom.to_string(fun_name)
-    trigger = "#{source_module_str}.#{fun_str}"
+
+    # Bare imported calls (module_ast nil) trigger on the name alone -
+    # that is the text at the call site, which is what Credo anchors on.
+    trigger =
+      case source_module_string(module_ast, expanded_module) do
+        nil -> fun_str
+        source_module_str -> "#{source_module_str}.#{fun_str}"
+      end
+
     canonical_qualified = "#{canonical_module_str}.#{fun_str}"
 
     format_issue(issue_meta,
@@ -393,6 +436,7 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
     Enum.map_join(segments, ".", &Atom.to_string/1)
   end
 
+  defp source_module_string(nil, _expanded), do: nil
   defp source_module_string(_module_ast, expanded), do: module_string(expanded)
 
   defp module_string(segments), do: Enum.map_join(segments, ".", &Atom.to_string/1)

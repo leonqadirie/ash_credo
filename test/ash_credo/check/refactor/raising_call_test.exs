@@ -692,4 +692,49 @@ defmodule AshCredo.Check.Refactor.RaisingCallTest do
       assert [] = run_check(RaisingCall, source, flag_bang_only_apis: true)
     end
   end
+
+  describe "bare imported bangs" do
+    test "flags a bare imported Ash bang, triggering on the bare name" do
+      source = """
+      defmodule MyApp.Accounts do
+        import Ash
+
+        def list_users(query) do
+          read!(query)
+        end
+      end
+      """
+
+      assert [issue] = run_check(RaisingCall, source)
+      assert issue.trigger == "read!"
+      assert issue.line_no == 5
+      assert issue.message =~ "Prefer `Ash.read`"
+    end
+
+    test "does not flag a bare bang shadowed by a local def" do
+      source = """
+      defmodule MyApp.Accounts do
+        import Ash
+
+        def list_users(query), do: read!(query)
+
+        defp read!(query), do: query
+      end
+      """
+
+      assert [] = run_check(RaisingCall, source)
+    end
+
+    test "excluded_functions keys bare imported bangs by their resolved module" do
+      source = """
+      defmodule MyApp.Accounts do
+        import Ash
+
+        def list_users(query), do: read!(query)
+      end
+      """
+
+      assert [] = run_check(RaisingCall, source, excluded_functions: [{Ash, :read!}])
+    end
+  end
 end

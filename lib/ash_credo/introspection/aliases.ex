@@ -28,11 +28,17 @@ defmodule AshCredo.Introspection.Aliases do
   declaration time, which is where Elixir itself resolves it.
 
   `require Mod, as: Q` registers both the require and the alias.
-  `import Mod` is registered via `Macro.Env.define_require/4` rather
-  than `define_import/4`: consumers only ask whether a require holds at
-  a point (import implies require in Elixir), and `define_import/4`
-  raises for modules not loaded in the linting VM, which source-only
-  references regularly are.
+  `import Mod` is registered via `Macro.Env.define_import/4` when the
+  module is loaded in the linting VM (Ash framework modules always are
+  in a project running these checks), honoring literal `only:`/`except:`
+  selections, so `imported_module/3` can resolve bare calls. Modules
+  that are not loadable (user modules in a not-yet-compiled project) and
+  imports with non-literal selections (`only: @funs`) fall back to
+  `Macro.Env.define_require/4`. Consumers asking whether a require holds
+  at a point stay correct either way: import implies require in Elixir,
+  and a successful `define_import` marks the module required too
+  (verified empirically). They just cannot resolve bare calls through
+  that import.
   """
   def apply_directive(%Macro.Env{} = env, directive_ast, enclosing) do
     directive_ast
@@ -60,6 +66,28 @@ defmodule AshCredo.Introspection.Aliases do
   end
 
   def expand_to_module(_segments, %Macro.Env{}), do: :error
+
+  @doc """
+  Resolves a bare (unqualified) call to the module it is imported from,
+  via the compiler's own `Macro.Env.lookup_import/2`. Returns
+  `{:ok, module}` for the first matching import and `:error` when no
+  import in `env` exports `function/arity`, which includes imports that
+  were registered as plain requires because their module was not
+  loadable.
+
+  Callers must pass the effective arity: a piped call `q |> filter(expr)`
+  resolves as `filter/2`, not `filter/1`. Locals shadow imports (a
+  genuine conflict does not even compile), so callers that walk source
+  where the name/arity is also defined locally must check that before
+  trusting this result.
+  """
+  def imported_module(%Macro.Env{} = env, function, arity)
+      when is_atom(function) and is_integer(arity) and arity >= 0 do
+    case Macro.Env.lookup_import(env, {function, arity}) do
+      [{_kind, module} | _] -> {:ok, module}
+      [] -> :error
+    end
+  end
 
   @doc """
   Extracts the literal alias segments from a `defmodule` AST node, or
@@ -166,18 +194,22 @@ defmodule AshCredo.Introspection.Aliases do
   # ── Macro.Env directive machinery ──
 
   # Normalizes a directive AST node into `{kind, meta, target_segments,
-  # as_opts}` tuples. Grouped forms (`alias P.{A, B}`) yield one tuple per
-  # suffix; `require`/`import` share the same shapes. Anything else yields
-  # no tuples. `as_opts` is `[]`, `[as: Module]`, or the `:invalid` marker
-  # for a multi-segment `as:` (invalid Elixir), in which case the whole
-  # entry is skipped rather than misregistered under a guessed name.
+  # kind_opts}` tuples. Grouped forms (`alias P.{A, B}`) yield one tuple
+  # per suffix; `require`/`import` share the same shapes. Anything else
+  # yields no tuples. For `alias`/`require`, `kind_opts` is `[]`,
+  # `[as: Module]`, or the `:invalid` marker for a multi-segment `as:`
+  # (invalid Elixir), in which case the whole entry is skipped rather
+  # than misregistered under a guessed name. For `import`, it is the
+  # literal `only:`/`except:` selection, or `:dynamic` when the selection
+  # is not statically analyzable (the import then registers as a plain
+  # require).
   defp directive_targets({kind, meta, [target]}) when kind in @directive_kinds do
     directive_targets({kind, meta, [target, []]})
   end
 
   defp directive_targets({kind, meta, [{:__aliases__, _, segments}, opts]})
        when kind in @directive_kinds and is_list(opts) do
-    [{kind, meta, segments, as_option(opts)}]
+    [{kind, meta, segments, directive_opts(kind, opts)}]
   end
 
   defp directive_targets({kind, meta, [{{:., _, [prefix, :{}]}, _, suffixes}, opts]})
@@ -188,12 +220,48 @@ defmodule AshCredo.Introspection.Aliases do
 
       prefix_segments ->
         for {:__aliases__, _, suffix_segments} <- suffixes do
-          {kind, meta, prefix_segments ++ suffix_segments, []}
+          {kind, meta, prefix_segments ++ suffix_segments, grouped_directive_opts(kind, opts)}
         end
     end
   end
 
   defp directive_targets(_), do: []
+
+  defp directive_opts(:import, opts), do: import_opts(opts)
+  defp directive_opts(_kind, opts), do: as_option(opts)
+
+  # Grouped `alias P.{A, B}, as: ...` is invalid Elixir, so alias/require
+  # opts are dropped for grouped forms (preserving prior behavior); a
+  # grouped import keeps its selection.
+  defp grouped_directive_opts(:import, opts), do: import_opts(opts)
+  defp grouped_directive_opts(_kind, _opts), do: []
+
+  # Extracts the literal `only:`/`except:` selection from import opts.
+  # Returns a keyword of validated selections ([] when none), or
+  # `:dynamic` when a selection exists but is not a literal the linter
+  # can evaluate (`only: @funs`, `only: some_call()`).
+  defp import_opts(opts) do
+    opts
+    |> Enum.filter(&match?({key, _} when key in [:only, :except], &1))
+    |> Enum.reduce_while([], fn {key, value}, acc ->
+      case import_selection(value) do
+        {:ok, selection} -> {:cont, [{key, selection} | acc]}
+        :error -> {:halt, :dynamic}
+      end
+    end)
+  end
+
+  defp import_selection(kind) when kind in [:functions, :macros, :sigils], do: {:ok, kind}
+
+  defp import_selection(list) when is_list(list) do
+    if Enum.all?(list, &match?({name, arity} when is_atom(name) and is_integer(arity), &1)) do
+      {:ok, list}
+    else
+      :error
+    end
+  end
+
+  defp import_selection(_value), do: :error
 
   defp grouped_prefix_segments({:__aliases__, _, prefix_segments}), do: prefix_segments
   defp grouped_prefix_segments({:__MODULE__, _, _} = self_ref), do: [self_ref]
@@ -238,8 +306,37 @@ defmodule AshCredo.Introspection.Aliases do
     keep_on_error(env, Macro.Env.define_alias(env, meta, module, as_opts ++ [trace: false]))
   end
 
-  defp define(env, kind, meta, module, as_opts) when kind in [:require, :import] do
+  defp define(env, :require, meta, module, as_opts) do
     keep_on_error(env, Macro.Env.define_require(env, meta, module, as_opts ++ [trace: false]))
+  end
+
+  # A real import registration needs the module loaded (`define_import`
+  # reads its export table and raises otherwise - verified empirically)
+  # and a statically known selection. Anything else registers the require
+  # the import implies, which is exactly the pre-import-support behavior.
+  # A successful `define_import` also marks the module required, so
+  # `Macro.Env.required?/2` consumers see the same env either way.
+  defp define(env, :import, meta, module, selection) do
+    with selection when is_list(selection) <- selection,
+         true <- Code.ensure_loaded?(module),
+         {:ok, updated} <- try_define_import(env, meta, module, selection) do
+      updated
+    else
+      _ -> keep_on_error(env, Macro.Env.define_require(env, meta, module, trace: false))
+    end
+  end
+
+  # `define_import` validates the selection against the module's real
+  # exports. A stale `only:` naming a function the module no longer
+  # exports still returns `{:ok, env}`: the compiler prints a "cannot
+  # import" warning (`warn: false` does not silence it), drops the entry,
+  # and marks the module required, which is the same end state as the
+  # require fallback. Pathological input raises, and the rescue routes it
+  # through the with-else above.
+  defp try_define_import(env, meta, module, selection) do
+    Macro.Env.define_import(env, meta, module, selection ++ [trace: false, warn: false])
+  rescue
+    _ -> :error
   end
 
   defp keep_on_error(_env, {:ok, updated}), do: updated

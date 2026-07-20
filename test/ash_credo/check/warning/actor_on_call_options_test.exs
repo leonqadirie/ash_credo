@@ -314,4 +314,38 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptionsTest do
 
     assert [] = run_check(ActorOnCallOptions, source)
   end
+
+  describe "bare imported calls" do
+    test "flags actor: at call time on a piped bare imported call" do
+      source = """
+      defmodule MyApp.Accounts do
+        import Ash
+
+        def list_posts(current_user) do
+          MyApp.Post
+          |> Ash.Query.for_read(:read, %{})
+          |> read!(actor: current_user)
+        end
+      end
+      """
+
+      assert [issue] = run_check(ActorOnCallOptions, source)
+      assert issue.trigger == "actor"
+      assert issue.message =~ "Ash.read!"
+    end
+
+    test "sanctions a bare imported call whose subject was not built" do
+      source = """
+      defmodule MyApp.Accounts do
+        import Ash
+
+        def list_posts(current_user) do
+          read!(MyApp.Post, actor: current_user)
+        end
+      end
+      """
+
+      assert [] = run_check(ActorOnCallOptions, source)
+    end
+  end
 end

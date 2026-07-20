@@ -38,7 +38,9 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
       By default, the check flags `authorize?: false` anywhere it appears as
       a literal: Ash API calls, action DSL definitions, variable assignments,
       and wrapper functions. Set `include_non_ash_calls: false` to restrict
-      detection to Ash API calls and action DSL definitions.
+      detection to Ash API calls and action DSL definitions. Ash API calls
+      include bare imported forms: after `import Ash`, the check flags
+      `read!(query, authorize?: false)` in both modes.
 
       The check excludes test directories by default, since bypassing
       authorization in test setup and factories is usually intentional.

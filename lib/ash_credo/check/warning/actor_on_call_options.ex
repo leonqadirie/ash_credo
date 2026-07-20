@@ -32,6 +32,10 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
       context with the given actor itself. The check is purely syntactic:
       it follows pipes and simple variable bindings, but it cannot see a
       builder hidden behind a function call.
+
+      The check also recognizes bare imported calls: after `import Ash`,
+      it flags `|> read!(actor: current_user)` exactly like
+      `|> Ash.read!(actor: current_user)`.
       """
     ]
 
@@ -70,7 +74,7 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
   end
 
   defp check_call(%{expanded_module: [:Ash], call_ast: call_ast} = call_info, issue_meta) do
-    {{:., _, [_, fun_name]}, meta, _} = call_ast
+    {fun_name, meta} = call_fun_name(call_ast)
 
     with true <- fun_name in @action_funs,
          [subject | _] <- call_info.args,
@@ -83,6 +87,12 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
   end
 
   defp check_call(_call_info, _issue_meta), do: []
+
+  # The scanner yields both remote (`Ash.read!(...)`) and bare imported
+  # (`import Ash; read!(...)`) call shapes; the flagging logic is
+  # identical once the function name is extracted.
+  defp call_fun_name({{:., _, [_, fun_name]}, meta, _}), do: {fun_name, meta}
+  defp call_fun_name({fun_name, meta, _}) when is_atom(fun_name), do: {fun_name, meta}
 
   # Number of arguments (subject included, after pipe normalization) that
   # precede the optional trailing opts. Only a trailing keyword list beyond

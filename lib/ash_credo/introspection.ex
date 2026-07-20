@@ -40,13 +40,16 @@ defmodule AshCredo.Introspection do
 
   Source-AST lexical resolution is built on real `Macro.Env` values.
   `Aliases` applies `alias`/`require`/`import` nodes to an env via
-  `Macro.Env.define_alias/4` and `define_require/4`, and resolves
-  references via `Macro.Env.expand_alias/4` and `Macro.Env.required?/2`,
-  APIs Elixir 1.17 added for exactly this kind of tooling. The walkers
-  (`LexicalScopeWalker`, `AshCallScanner`) own only what an env cannot
-  know from source: scope-frame push and pop for blocks and branches,
-  quote suppression, and the `defmodule` module stack that substitutes
-  `__MODULE__` targets at declaration time.
+  `Macro.Env.define_alias/4`, `define_require/4`, and `define_import/4`
+  (for loadable modules with literal selections), and resolves
+  references via `Macro.Env.expand_alias/4`, `Macro.Env.required?/2`,
+  and `Macro.Env.lookup_import/2`, APIs Elixir 1.17 added for exactly
+  this kind of tooling. `lookup_import/2` powers bare imported-call
+  resolution, guarded against local shadowing by `LocalDefs`. The
+  walkers (`LexicalScopeWalker`, `AshCallScanner`) own only what an env
+  cannot know from source: scope-frame push and pop for blocks and
+  branches, quote suppression, and the `defmodule` module stack that
+  substitutes `__MODULE__` targets at declaration time.
   `Credo.Code.Module.aliases/1` remains unsuitable: it collects alias
   names flat across a module, dropping `as:` renames and lexical scope
   information.

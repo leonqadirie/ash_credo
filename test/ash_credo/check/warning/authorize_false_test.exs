@@ -389,4 +389,34 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
                )
     end
   end
+
+  describe "bare imported calls" do
+    test "strict mode flags `authorize?: false` on a bare imported call" do
+      source = """
+      defmodule MyApp.Accounts do
+        import Ash
+
+        def list_users do
+          read!(MyApp.User, authorize?: false)
+        end
+      end
+      """
+
+      assert [issue] = run_check(AuthorizeFalse, source, include_non_ash_calls: false)
+      assert issue.trigger == "authorize?: false"
+      assert issue.line_no == 5
+    end
+
+    test "strict mode still ignores a bare call that resolves to no import" do
+      source = """
+      defmodule MyApp.Accounts do
+        def list_users do
+          helper(MyApp.User, authorize?: false)
+        end
+      end
+      """
+
+      assert [] = run_check(AuthorizeFalse, source, include_non_ash_calls: false)
+    end
+  end
 end

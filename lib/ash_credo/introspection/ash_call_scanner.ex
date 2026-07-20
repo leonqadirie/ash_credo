@@ -5,6 +5,16 @@ defmodule AshCredo.Introspection.AshCallScanner do
   visible at that point - alias frames, binding frames, branch depth,
   pipe origins, and the enclosing `defmodule` segments.
 
+  "Every `Ash.*` call" includes bare imported calls: after `import Ash`,
+  a `read!(query)` resolves through the env's imports (via
+  `Aliases.imported_module/3`) and the scanner yields it with `[:Ash]`
+  as its expanded module, exactly like `Ash.read!(query)`. Resolution
+  honors literal `only:`/`except:` selections, effective pipe arity
+  (`q |> filter(expr)` resolves as `filter/2`), and local-def shadowing
+  (see `AshCredo.Introspection.LocalDefs`). Imports whose module is not
+  loadable in the linting VM cannot be resolved, so the scanner does not
+  yield their bare calls.
+
   This module knows nothing about specific Ash API entry points. The
   semantic interpretation ("this call has a literal resource at arg 0
   and an action in the keyword opts, resolve it to a real module")
@@ -19,7 +29,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
       `:enclosing_module_segments`
   """
 
-  alias AshCredo.Introspection.Aliases
+  alias AshCredo.Introspection.{Aliases, LocalDefs}
 
   @scope_keys ~w(do else after rescue catch)a
   @lexical_scope_nodes ~w(defmodule def defp defmacro defmacrop fn if unless case cond with try receive for)a
@@ -51,11 +61,12 @@ defmodule AshCredo.Introspection.AshCallScanner do
   end
 
   defp traverse(source_file, collect_fn, opts \\ []) do
+    ast = Credo.SourceFile.ast(source_file)
+
     {_, %{calls: calls}} =
-      source_file
-      |> Credo.SourceFile.ast()
-      |> Macro.traverse(
-        initial_state(opts),
+      Macro.traverse(
+        ast,
+        initial_state(ast, opts),
         &enter_node(&1, &2, collect_fn),
         &leave_node/2
       )
@@ -84,17 +95,22 @@ defmodule AshCredo.Introspection.AshCallScanner do
   end
 
   # `require ..., as:` sets up an alias too; `apply_directive/3` records
-  # exactly the shapes that create one. Unlike the walker, the scanner
-  # has no quote tracking: directives inside `quote do ... end` are
-  # recorded, preserving long-standing scanner behavior.
+  # exactly the shapes that create one, and `import` registers a real
+  # import (or its implied require) for bare-call resolution. Unlike the
+  # walker, the scanner has no quote tracking: directives inside
+  # `quote do ... end` are recorded, preserving long-standing scanner
+  # behavior.
   defp enter_node({directive, _, _} = ast, state, _collect_fn)
-       when directive in [:alias, :require] do
+       when directive in [:alias, :require, :import] do
     {ast, capture_directive(state, ast)}
   end
 
-  defp enter_node({:|>, _, [left, {{:., _, _}, meta, _}]} = ast, state, _collect_fn)
+  # Pipe origins are tracked for every call-shaped RHS (remote or bare):
+  # context flavors use them to normalize args, and bare-call resolution
+  # needs them in every flavor to compute the effective arity.
+  defp enter_node({:|>, _, [left, {_rhs_head, meta, _}]} = ast, state, _collect_fn)
        when is_list(meta) do
-    {ast, maybe_track_pipe_origin(state, meta, left)}
+    {ast, track_pipe_origin(state, meta, left)}
   end
 
   defp enter_node({{:., _, [module_ast, _fun_name]}, _meta, args} = call_ast, state, collect_fn)
@@ -105,6 +121,38 @@ defmodule AshCredo.Introspection.AshCallScanner do
       {call_ast, record_call(state, call_ast, expanded_module, collect_fn)}
     else
       {call_ast, state}
+    end
+  end
+
+  # Bare calls (`read!(query, opts)` after `import Ash`): yielded when the
+  # name at its effective arity resolves through the env's imports to an
+  # `Ash.*` module and is not shadowed by a local def. Everything
+  # 3-tuple-shaped that is not a call (operators, special forms) lands
+  # here too and is discarded by the same resolution - only a registered
+  # import can produce an `Ash.*` module.
+  defp enter_node({fun, meta, args} = call_ast, state, collect_fn)
+       when is_atom(fun) and is_list(meta) and is_list(args) do
+    arity = length(args) + pipe_arity_bonus(state, meta)
+
+    case imported_ash_module(state, fun, arity) do
+      {:ok, expanded_module} ->
+        {call_ast, record_call(state, call_ast, expanded_module, collect_fn)}
+
+      :error ->
+        {call_ast, state}
+    end
+  end
+
+  # A parens-less piped call (`query |> read!`) is variable-shaped
+  # (`{:read!, meta, nil}`); it is only a call when a pipe origin was
+  # recorded at its exact position, and then its effective arity is 1.
+  defp enter_node({fun, meta, nil} = call_ast, state, collect_fn)
+       when is_atom(fun) and is_list(meta) do
+    with true <- Map.has_key?(state.pipe_origins, call_key(meta)),
+         {:ok, expanded_module} <- imported_ash_module(state, fun, 1) do
+      {call_ast, record_call(state, call_ast, expanded_module, collect_fn)}
+    else
+      _ -> {call_ast, state}
     end
   end
 
@@ -144,7 +192,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   defp leave_node(ast, state), do: {ast, state}
 
-  defp initial_state(opts) do
+  defp initial_state(ast, opts) do
     %{
       env_frames: [Aliases.base_env()],
       binding_frames: [],
@@ -152,6 +200,8 @@ defmodule AshCredo.Introspection.AshCallScanner do
       calls: [],
       pipe_origins: %{},
       module_stack: [],
+      literal_module_stack: [],
+      local_defs: LocalDefs.index(ast),
       track_context?: Keyword.get(opts, :track_context?, false)
     }
   end
@@ -166,6 +216,18 @@ defmodule AshCredo.Introspection.AshCallScanner do
          state
        )
        when is_list(args) do
+    call_context(call_ast, expanded_module, args, call_meta, state)
+  end
+
+  # Bare imported calls; `args` is nil for the parens-less piped form
+  # (`query |> read!`), whose only argument is the piped subject that
+  # `normalized_call_args/3` prepends.
+  defp build_call_context({fun, call_meta, args} = call_ast, expanded_module, state)
+       when is_atom(fun) do
+    call_context(call_ast, expanded_module, args || [], call_meta, state)
+  end
+
+  defp call_context(call_ast, expanded_module, args, call_meta, state) do
     %{
       call_ast: call_ast,
       expanded_module: expanded_module,
@@ -176,6 +238,9 @@ defmodule AshCredo.Introspection.AshCallScanner do
     }
   end
 
+  # The literal stack mirrors the absolute one but keeps the raw literal
+  # segments - the shape `LocalDefs.path_key/1` expects, so shadow lookups
+  # agree with the pre-pass index by construction.
   defp push_module_stack(state, ast) do
     literal = Aliases.defmodule_literal_segments(ast)
 
@@ -187,10 +252,23 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
     absolute = Aliases.absolute_module_segments(literal, parent_absolute, current_env(state))
 
-    %{state | module_stack: [absolute | state.module_stack]}
+    %{
+      state
+      | module_stack: [absolute | state.module_stack],
+        literal_module_stack: [literal | state.literal_module_stack]
+    }
   end
 
-  defp pop_module_stack(%{module_stack: [_ | rest]} = state), do: %{state | module_stack: rest}
+  defp pop_module_stack(%{module_stack: [_ | rest]} = state) do
+    literal_rest =
+      case state.literal_module_stack do
+        [_ | tail] -> tail
+        [] -> []
+      end
+
+    %{state | module_stack: rest, literal_module_stack: literal_rest}
+  end
+
   defp pop_module_stack(state), do: state
 
   defp current_module_segments(%{module_stack: [top | _]}), do: top
@@ -214,11 +292,41 @@ defmodule AshCredo.Introspection.AshCallScanner do
     |> pop_alias_frame()
   end
 
-  defp maybe_track_pipe_origin(%{track_context?: false} = state, _meta, _left), do: state
-
-  defp maybe_track_pipe_origin(state, meta, left) do
+  defp track_pipe_origin(state, meta, left) do
     key = call_key(meta)
     %{state | pipe_origins: Map.put(state.pipe_origins, key, left)}
+  end
+
+  defp pipe_arity_bonus(state, meta) do
+    if Map.has_key?(state.pipe_origins, call_key(meta)), do: 1, else: 0
+  end
+
+  # Resolution order matters: the local-def check runs first because
+  # locals shadow imports (and a genuine conflict does not compile), then
+  # the env's imports, then the Ash-namespace filter that discards the
+  # Kernel noise every operator node produces.
+  defp imported_ash_module(state, fun, arity) do
+    with false <- local_def?(state, fun, arity),
+         {:ok, module} <- Aliases.imported_module(current_env(state), fun, arity),
+         [:Ash | _] = segments <- elixir_module_segments(module) do
+      {:ok, segments}
+    else
+      _ -> :error
+    end
+  end
+
+  defp local_def?(state, fun, arity) do
+    key = LocalDefs.path_key(state.literal_module_stack)
+    LocalDefs.local?(state.local_defs, key, fun, arity)
+  end
+
+  # `import :math` style Erlang imports resolve to atoms `Module.split/1`
+  # rejects; they can never be Ash modules, so map them to no segments.
+  defp elixir_module_segments(module) do
+    case Atom.to_string(module) do
+      "Elixir." <> _rest -> module |> Module.split() |> Enum.map(&String.to_atom/1)
+      _other -> []
+    end
   end
 
   # A pushed frame starts as a copy of its parent env; the pop discards
