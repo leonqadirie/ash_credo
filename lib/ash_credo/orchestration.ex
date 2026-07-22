@@ -2,9 +2,10 @@ defmodule AshCredo.Orchestration do
   @moduledoc """
   Shared helpers for coordinating check execution.
 
-  This module holds Credo-facing plumbing that sits above AST introspection,
-  such as iterating resource contexts and building `IssueMeta` once per check
-  run before delegating into rule-specific logic.
+  This module holds Credo-facing plumbing that sits above AST
+  introspection, such as iterating resource contexts and building
+  `IssueMeta` once per check run before delegating into rule-specific
+  logic.
   """
 
   alias AshCredo.Introspection
@@ -40,11 +41,12 @@ defmodule AshCredo.Orchestration do
   end
 
   @doc """
-  Iterates resource contexts and invokes `fun.(resource, context, issue_meta)`
-  only for contexts that (a) have a literal `defmodule` name (so
-  `:absolute_segments` can resolve to a runtime module atom) and (b) declare a
-  non-embedded data layer in `use Ash.Resource`. Contexts failing either
-  filter contribute no issues.
+  Iterates resource contexts and invokes
+  `fun.(resource, context, issue_meta)` only for contexts that (a) have
+  a literal `defmodule` name, so `:absolute_segments` can resolve to a
+  runtime module atom, and (b) declare a non-embedded data layer in
+  `use Ash.Resource`. Contexts failing either filter contribute no
+  issues.
   """
   def flat_map_loadable_resource(%SourceFile{} = source_file, params, fun)
       when is_function(fun, 3) do
@@ -66,11 +68,11 @@ defmodule AshCredo.Orchestration do
   end
 
   @doc """
-  Iterates resource contexts and invokes `fun.(resource, context, issue_meta)`
-  for every context whose `defmodule` name is a literal (so
-  `:absolute_segments` resolves to a runtime module atom). Unlike
-  `flat_map_loadable_resource/3`, applies no data-layer filter - checks that
-  need one apply their own.
+  Iterates resource contexts and invokes
+  `fun.(resource, context, issue_meta)` for every context whose
+  `defmodule` name is a literal (so `:absolute_segments` resolves to a
+  runtime module atom). Unlike `flat_map_loadable_resource/3`, this
+  applies no data-layer filter; checks that need one apply their own.
   """
   def flat_map_named_resource(%SourceFile{} = source_file, params, fun)
       when is_function(fun, 3) do
@@ -84,10 +86,11 @@ defmodule AshCredo.Orchestration do
   end
 
   @doc """
-  Builds the standard "Ash is not loaded" diagnostic that compiled checks
-  emit from `Compiled.with_compiled_check/2`'s missing branch. `check` is
-  the emitting check module; its short name appears in the message and its
-  category/priority shape the issue via `Credo.Check.format_issue/3`.
+  Builds the standard "Ash is not loaded" diagnostic that compiled
+  checks emit from the missing branch of
+  `Compiled.with_compiled_check/2`. `check` is the emitting check
+  module; its short name appears in the message, and its category and
+  priority shape the issue via `Credo.Check.format_issue/3`.
   """
   def ash_missing_issue(issue_meta, check) do
     Check.format_issue(
@@ -103,10 +106,10 @@ defmodule AshCredo.Orchestration do
   end
 
   @doc """
-  Builds the standard "Could not load" diagnostic for `resource`, anchored
-  at the context's `use` line and deduplicated to one issue per module per
-  run via `Compiled.with_unique_not_loadable/2`. Returns a list of zero or
-  one issues.
+  Builds the standard "Could not load" diagnostic for `resource`,
+  anchored at the context's `use` line and deduplicated to one issue per
+  module per run via `Compiled.with_unique_not_loadable/2`. Returns a
+  list of zero or one issues.
   """
   def unique_not_loadable_issues(resource, context, issue_meta, check) do
     CompiledIntrospection.with_unique_not_loadable(resource, fn ->
@@ -124,14 +127,15 @@ defmodule AshCredo.Orchestration do
   end
 
   @doc """
-  Dispatches the result of a `Compiled.inspect_module/1`-style introspection
-  lookup (`inspect_module/1` itself or any accessor built on it, such as
-  `attributes/1` or `actions/1`). Invokes `on_ok.(info)` for `{:ok, info}`,
-  emits the deduplicated "could not load" diagnostic for
-  `{:error, :not_loadable}`, and contributes no issues for any other error.
+  Dispatches the result of a `Compiled.inspect_module/1`-style
+  introspection lookup (`inspect_module/1` itself or any accessor built
+  on it, such as `attributes/1` or `actions/1`). Invokes `on_ok.(info)`
+  for `{:ok, info}`, emits the deduplicated "could not load" diagnostic
+  for `{:error, :not_loadable}`, and contributes no issues for any other
+  error.
 
-  Every compiled resource check funnels its lookup result through here, so the
-  not-loadable handling lives in one place.
+  Every compiled resource check funnels its lookup result through here,
+  so the not-loadable handling lives in one place.
   """
   def with_resource_info(result, resource, context, issue_meta, check, on_ok)
       when is_function(on_ok, 1) do

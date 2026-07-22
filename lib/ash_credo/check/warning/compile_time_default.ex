@@ -5,16 +5,16 @@ defmodule AshCredo.Check.Warning.CompileTimeDefault do
     tags: [:ash],
     explanations: [
       check: """
-      Flags `default`/`update_default` values built by calling a
-      time-or-uuid-producing function directly, like
+      Flags `default` or `update_default` values that come from a direct
+      call to a time- or UUID-producing function, like
       `default: DateTime.utc_now()`. DSL options are ordinary expressions
-      evaluated while the module compiles, so the call runs exactly once
-      and the resulting literal is baked into the resource: every record
-      gets the timestamp of the last compile, and a `Ash.UUID.generate()`
-      default hands every record the same "unique" value.
+      that Elixir evaluates while the module compiles, so the call runs
+      exactly once and the result is baked into the resource as a literal:
+      every record gets the timestamp of the last compile, and a default of
+      `Ash.UUID.generate()` gives every record the same "unique" value.
 
-      Ash only re-evaluates defaults per record when given a zero-arity
-      function (or MFA tuple); any other value is used verbatim.
+      Ash re-evaluates a default per record only when it is a zero-arity
+      function or an MFA tuple; it uses any other value verbatim.
 
           # Bad - frozen at compile time, identical for every record
           attribute :scheduled_at, :utc_datetime, default: DateTime.utc_now()
@@ -22,13 +22,14 @@ defmodule AshCredo.Check.Warning.CompileTimeDefault do
           # Good - re-evaluated for each record
           attribute :scheduled_at, :utc_datetime, default: &DateTime.utc_now/0
 
-      Action and calculation arguments resolve `default` the same way, so
-      their defaults are checked too. Values wrapped in a zero-arity `fn`
-      or a capture are fine and are not flagged.
+      Action arguments and calculation arguments resolve `default` the same
+      way, so the check covers their defaults too. It doesn't flag values
+      wrapped in a zero-arity `fn` or a capture; those forms are correct.
 
-      Nothing else catches this: it compiles without warnings, the frozen
-      value type-checks, and no error is ever raised - dev recompiles keep
-      the value looking fresh, and the freeze only shows up in production.
+      No other tool catches this bug: the code compiles without warnings,
+      the frozen value type-checks, and no error is ever raised. In
+      development each recompile refreshes the value, so the problem only
+      shows up in production.
 
       `Warning.PinnedTimeInExpression` is the sibling check for the same
       bug class inside Ash expressions (`^DateTime.utc_now()`).
@@ -41,10 +42,10 @@ defmodule AshCredo.Check.Warning.CompileTimeDefault do
   alias AshCredo.Orchestration
   alias Credo.Code.Name
 
-  # Functions whose value is only meaningful when produced per record.
-  # Matched on the module resolved through the lexical environment, like
-  # the sibling PinnedTimeInExpression, so aliased forms
-  # (`alias DateTime, as: DT`) are caught too.
+  # Functions whose value is only meaningful when each record gets its own.
+  # We match on the module resolved through the lexical environment, like
+  # the sibling PinnedTimeInExpression, so we also catch aliased forms
+  # (`alias DateTime, as: DT`).
   @frozen_calls [
     {Date, :utc_today},
     {DateTime, :utc_now},
@@ -57,7 +58,7 @@ defmodule AshCredo.Check.Warning.CompileTimeDefault do
 
   @default_options ~w(default update_default)a
 
-  # Sections where default/update_default options exist: attribute
+  # Sections where default/update_default options occur: attribute
   # entities, action arguments, and calculation arguments.
   @sections ~w(attributes actions calculations)a
 
@@ -71,12 +72,12 @@ defmodule AshCredo.Check.Warning.CompileTimeDefault do
     end)
   end
 
-  # Collects default/update_default occurrences in both forms: inline
-  # keyword options (`default: value` - a 2-tuple in the AST) and do-block
-  # option calls (`default value`). The whole module is walked (rather
-  # than each section on its own) so directives at module top are already
-  # applied to the env by the time the sections are reached;
-  # `section_depth` gates collection to the sections.
+  # Collects default/update_default occurrences in both forms: the inline
+  # keyword option (`default: value`, a 2-tuple in the AST) and the
+  # do-block option call (`default value`). We walk the whole module rather
+  # than each section on its own, so directives at the module top are
+  # already in the env by the time we reach the sections; `section_depth`
+  # gates collection to the sections.
   defp default_option_issues(module_ast, sections, issue_meta) do
     {state, _scope} =
       LexicalScopeWalker.traverse(
@@ -122,8 +123,9 @@ defmodule AshCredo.Check.Warning.CompileTimeDefault do
   defp collect_option(_node, _env, state, _issue_meta), do: state
 
   # Walks the option value for frozen calls, including inside containers
-  # (`default: %{at: DateTime.utc_now()}` is just as frozen). Subtrees under
-  # `fn` or `&` are pruned: there the call is deferred, which is the fix.
+  # (`default: %{at: DateTime.utc_now()}` is just as frozen). We prune
+  # subtrees under `fn` or `&`: there the call is deferred, which is the
+  # fix.
   defp frozen_call_issues(value, option, env, issue_meta) do
     {_ast, issues} =
       Macro.prewalk(value, [], fn

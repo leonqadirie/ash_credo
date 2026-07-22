@@ -1,44 +1,47 @@
 defmodule AshCredo.Introspection.Compiled do
   @moduledoc """
-  Introspection that reads **compiled BEAM metadata** - a wrapper around
+  Introspection that reads **compiled BEAM metadata**, a wrapper around
   `Ash.Resource.Info` and `Ash.Domain.Info`.
 
-  Sibling of `AshCredo.Introspection` (AST-level) and
-  `AshCredo.Introspection.AshCallScanner` (AST-level Ash call discovery). This is
-  the module that reaches for the compiled artifact: it loads target
-  modules on demand, reads their DSL metadata through Ash's own
-  introspection API, and caches the results per-module in the run-scoped
-  `AshCredo.Cache` so repeated lookups during a single `mix credo` run are
-  cheap.
+  This module is a sibling of `AshCredo.Introspection` (AST-level) and
+  `AshCredo.Introspection.AshCallScanner` (AST-level Ash call
+  discovery). It's the module that reaches for the compiled artifact: it
+  loads target modules on demand, reads their DSL metadata through Ash's
+  own introspection API, and caches the results per module in the
+  run-scoped `AshCredo.Cache`, so repeated lookups in a single
+  `mix credo` run are cheap.
 
   The cache is a named ETS table owned by a supervised GenServer (see
-  `AshCredo.Cache`). Credo dispatches each check × source_file pair into
-  its own short-lived Task.Supervised process, so the table must not be
-  owned by any of those tasks - the dedicated owner keeps it alive across
-  arbitrary task churn. `AshCredo.init/1` clears the table at run
-  boundaries, so cached metadata never goes stale across runs in a
+  `AshCredo.Cache`). Credo dispatches each check and source_file pair
+  into its own short-lived Task.Supervised process, so the table must
+  not be owned by any of those tasks; the dedicated owner keeps it alive
+  across arbitrary task churn. `AshCredo.init/1` clears the table at the
+  run boundaries, so cached metadata never goes stale across runs in a
   long-lived VM.
 
-  Checks in `AshCredo` that need authoritative metadata about a referenced
-  module (its domain, its actions, its code interfaces, whether it is even
-  an Ash resource) call into this module instead of scanning source AST.
+  Checks in `AshCredo` that need authoritative metadata about a
+  referenced module (its domain, its actions, its code interfaces,
+  whether it's even an Ash resource) call into this module instead of
+  scanning the source AST for that data.
 
   ## Error modes
 
-    * `{:error, :ash_missing}` - Ash itself is not loaded in the VM running
-      Credo. This happens when `ash_credo` is used in a project that does not
-      depend on Ash. Callers should treat this as "Ash-aware checks are a
-      no-op in this project" and emit a single diagnostic.
-    * `{:error, :not_loadable}` - `Code.ensure_compiled/1` returned an error,
-      typically because the host project has not been compiled yet. The
-      caller should surface a "run `mix compile` first" hint.
-    * `{:error, :not_a_resource}` - the module loaded successfully but is
-      not an Ash resource. Checks targeting resources should silently skip.
+    * `{:error, :ash_missing}` - Ash itself is not loaded in the VM
+      running Credo. This happens when `ash_credo` is used in a project
+      that doesn't depend on Ash. Callers should treat this as
+      "Ash-aware checks are a no-op in this project" and emit a single
+      diagnostic.
+    * `{:error, :not_loadable}` - `Code.ensure_compiled/1` returned an
+      error, typically because the host project hasn't been compiled
+      yet. The caller should surface a "run `mix compile` first" hint.
+    * `{:error, :not_a_resource}` - the module loaded successfully but
+      is not an Ash resource. Checks targeting resources should silently
+      skip it.
   """
 
   # Ash is not a runtime dependency of ash_credo - users bring their own.
-  # Suppress compile-time warnings for the remote calls below; they are guarded
-  # at runtime by `ash_available?/0`.
+  # Suppress compile-time warnings for the remote calls below; they are
+  # guarded at runtime by `ash_available?/0`.
   alias Ash.Resource.Info, as: ResourceInfo
   alias Ash.Type.NewType
   alias AshCredo.Cache
@@ -53,7 +56,7 @@ defmodule AshCredo.Introspection.Compiled do
               Ash.Type.NewType
             ]}
 
-  # Tags namespace per-key entries inside the shared cache table.
+  # Tags that namespace the per-key entries inside the shared cache table.
   @cache_key_tag {__MODULE__, :cache}
   @domain_refs_key_tag {__MODULE__, :domain_refs}
   @macros_key_tag {__MODULE__, :macros}
@@ -65,11 +68,11 @@ defmodule AshCredo.Introspection.Compiled do
   @ash_missing_warned_key {__MODULE__, :ash_missing_warned}
   @not_loadable_warned_key_tag {__MODULE__, :not_loadable_warned}
 
-  # Behaviours that mark a module as an Ash resource auxiliary - i.e. a
+  # Behaviours that mark a module as an Ash resource auxiliary, i.e. a
   # module that gets attached to a resource via `change`, `preparation`,
   # `validation`, `calculate`, or a `manual` action option. These modules
-  # don't themselves declare a `:domain`, but conventionally belong to the
-  # domain of the resource that references them.
+  # don't themselves declare a `:domain`, but conventionally belong to
+  # the domain of the resource that references them.
   @ash_callback_behaviours [
     Ash.Resource.Change,
     Ash.Resource.Preparation,
@@ -101,7 +104,7 @@ defmodule AshCredo.Introspection.Compiled do
   @doc """
   Returns `true` if `Ash.Resource.Info` is loadable in the current VM.
 
-  Cached after the first call so subsequent calls are essentially free.
+  Cached after the first call, so subsequent calls are essentially free.
   """
   @spec ash_available?() :: boolean()
   def ash_available? do
@@ -121,8 +124,8 @@ defmodule AshCredo.Introspection.Compiled do
   @doc """
   Returns a map of introspection facts about `module`, or an error tuple.
 
-  The map has keys `:resource?`, `:domain`, `:interfaces`, `:actions`.
-  Results are cached per-module.
+  The map has the keys `:resource?`, `:domain`, `:interfaces`,
+  `:actions`. Results are cached per module.
   """
   @spec inspect_module(module()) :: {:ok, info_map()} | {:error, error()}
   def inspect_module(module) when is_atom(module) do
@@ -207,7 +210,7 @@ defmodule AshCredo.Introspection.Compiled do
 
   @doc """
   Returns the resource's policy entries from `Ash.Policy.Info.policies/1`.
-  Returns `[]` for resources without `Ash.Policy.Authorizer` declared.
+  Returns `[]` for resources that don't declare `Ash.Policy.Authorizer`.
   """
   @spec policies(module()) :: {:ok, [struct()]} | {:error, error()}
   def policies(module) do
@@ -218,8 +221,9 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Returns the list of resources registered inside `domain`'s `resources do
-  ... end` block, or an error tuple if `domain` is not a loaded Ash.Domain.
+  Returns the list of resources registered in `domain`'s
+  `resources do ... end` block, or an error tuple if `domain` is not a
+  loaded Ash.Domain.
   """
   @spec domain_resources(module()) :: {:ok, [module()]} | {:error, error()}
   def domain_resources(module) when is_atom(module) do
@@ -247,7 +251,7 @@ defmodule AshCredo.Introspection.Compiled do
 
   @doc """
   Returns the action struct for `action_name` on `module`, or
-  `{:error, :unknown_action}` if the action is not defined.
+  `{:error, :unknown_action}` if the action doesn't exist.
   """
   @spec action(module(), atom()) :: {:ok, struct()} | {:error, error()}
   def action(module, action_name) when is_atom(action_name) do
@@ -264,14 +268,15 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Returns the set of macro names defined by `module` (read from
-  `module.__info__(:macros)`), or `{:error, :not_loadable}` if the module
-  cannot be loaded. Cached per-module in the run-scoped `AshCredo.Cache`.
+  Returns the set of macro names that `module` defines (read from
+  `module.__info__(:macros)`), or `{:error, :not_loadable}` if the
+  module cannot be loaded. Cached per module in the run-scoped
+  `AshCredo.Cache`.
 
-  Unlike `inspect_module/1`, this does not require the target to be an Ash
-  resource. It works for any compiled Elixir module and exists so checks can
-  ask "which functions on this module are macros?" without hardcoding a list
-  that drifts from reality when upstream adds or renames macros.
+  Unlike `inspect_module/1`, this doesn't require the target to be an
+  Ash resource. It works for any compiled Elixir module and exists so
+  checks can find a module's macros without hardcoding a list that
+  drifts from reality when upstream adds or renames macros.
 
   Used by `Warning.MissingMacroDirective` to resolve its configured
   `macro_modules` list to exact macro sets per module.
@@ -338,9 +343,10 @@ defmodule AshCredo.Introspection.Compiled do
   behaviours (`Ash.Resource.Change`, `Preparation`, `Validation`,
   `Calculation`, or any of the `Manual*` action behaviours).
 
-  Detected by inspecting the module's `:behaviour` attribute, populated by
-  `use Ash.Resource.Change` and siblings at compile time. Cached per module,
-  so only the first probe pays the `Code.ensure_compiled/1` cost.
+  Detected by inspecting the module's `:behaviour` attribute, which
+  `use Ash.Resource.Change` and its siblings populate at compile time.
+  Cached per module, so only the first probe pays the
+  `Code.ensure_compiled/1` cost.
   """
   @spec ash_callback_module?(module()) :: boolean()
   def ash_callback_module?(module) when is_atom(module) do
@@ -369,10 +375,11 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Given a resource's `interfaces` list (as returned by `interfaces/1`) and an
-  action name, returns the `%Ash.Resource.Interface{}` whose action matches
-  (either via the explicit `:action` field or by name equality when the
-  interface uses its own name as the action). Returns `nil` if no match.
+  Given a resource's `interfaces` list (as returned by `interfaces/1`)
+  and an action name, returns the `%Ash.Resource.Interface{}` whose
+  action matches, either via the explicit `:action` field or by name
+  equality when the interface uses its own name as the action. Returns
+  `nil` when there is no match.
   """
   @spec find_interface([struct()], atom()) :: struct() | nil
   def find_interface(interfaces, action_name) when is_list(interfaces) and is_atom(action_name) do
@@ -382,21 +389,23 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Returns `{:ok, info}` if `Mod.fun!` resolves to an Ash code-interface bang
-  - i.e. `Mod` is either a resource whose `code_interface` defines `fun`
-  without the trailing `!`, or a domain whose `resources` block declares a
-  matching `define`. `info` is `%{scope: :resource | :domain, interface:
-  struct(), resource: module()}`, where `:resource` is the resource the
-  interface acts on (same as `Mod` for `:resource` scope, the
-  domain-referenced target for `:domain` scope).
+  Returns `{:ok, info}` if `Mod.fun!` resolves to an Ash code-interface
+  bang, i.e. `Mod` is either a resource whose `code_interface` defines
+  `fun` without the trailing `!`, or a domain whose `resources` block
+  declares a matching `define`. `info` is
+  `%{scope: :resource | :domain, interface: struct(), resource: module()}`,
+  where `:resource` is the resource the interface acts on: the same as
+  `Mod` for the `:resource` scope, the domain-referenced target for the
+  `:domain` scope.
 
   Returns `{:error, :not_code_interface}` for everything else, including
   non-bang function names, modules that aren't Ash resources or domains,
-  and modules whose interfaces do not declare a matching name. Results
-  (including negatives) are cached per `{module, fun}` so repeated probes
-  of non-Ash modules don't re-run `Code.ensure_compiled/1` on every call.
+  and modules whose interfaces don't declare a matching name. Results
+  (negatives included) are cached per `{module, fun}`, so repeated
+  probes of non-Ash modules don't re-run `Code.ensure_compiled/1` on
+  every call.
 
-  Match is by interface `:name` - i.e. the generated function name -
+  The match is by interface `:name`, i.e. the generated function name,
   not by `:action`. For `define :publish_post, action: :publish`, the
   generated function is `publish_post!`, which matches against
   `iface.name == :publish_post`.
@@ -462,9 +471,10 @@ defmodule AshCredo.Introspection.Compiled do
   defp interface_named?(_iface, _non_bang), do: false
 
   @doc """
-  Returns the domain-level interface definition for `resource`'s `action_name`
-  declared inside `domain`'s `resources do ... end` block, or `nil` if no
-  matching definition exists. `domain == nil` is handled gracefully.
+  Returns the domain-level interface definition for `resource`'s
+  `action_name` declared in `domain`'s `resources do ... end` block, or
+  `nil` if no matching definition exists. `domain == nil` is handled
+  gracefully and returns `nil`.
   """
   @spec domain_interface(module() | nil, module(), atom()) :: struct() | nil
   def domain_interface(nil, _resource, _action_name), do: nil
@@ -483,9 +493,10 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Returns all domain-level interface definitions (as `%Ash.Resource.Interface{}`)
-  declared for `resource` inside `domain`'s `resources do ... end` block, or
-  `[]` if the resource is not referenced.
+  Returns all domain-level interface definitions (as
+  `%Ash.Resource.Interface{}`) declared for `resource` in `domain`'s
+  `resources do ... end` block, or `[]` if the domain doesn't reference
+  the resource.
   """
   @spec domain_interfaces(module() | nil, module()) :: [struct()]
   def domain_interfaces(nil, _resource), do: []
@@ -506,13 +517,12 @@ defmodule AshCredo.Introspection.Compiled do
     |> Enum.find(fn ref -> ref.resource == resource end)
   end
 
-  # Cached per-domain in the run-scoped `AshCredo.Cache`. A domain's
-  # reference list is constant for the VM lifetime (set at compile time by
-  # Ash), so we read it
-  # from Ash once per `mix credo` run and reuse the same list for every
-  # subsequent `domain_interface/3` / `domain_interfaces/2` lookup. Keeps
-  # `UseCodeInterface` at O(N) across a file with N `Ash.*` calls into the
-  # same domain instead of O(N*M).
+  # Cached per domain in the run-scoped `AshCredo.Cache`. A domain's
+  # reference list is constant for the VM lifetime (Ash sets it at
+  # compile time), so we read it from Ash once per `mix credo` run and
+  # reuse the same list for every subsequent `domain_interface/3` /
+  # `domain_interfaces/2` lookup. This keeps `UseCodeInterface` at O(N)
+  # across a file with N `Ash.*` calls into the same domain, not O(N*M).
   defp cached_domain_references(domain) do
     Cache.memoize({@domain_refs_key_tag, domain}, fn ->
       Ash.Domain.Info.resource_references(domain)
@@ -520,17 +530,17 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Builds a `:not_loadable` diagnostic for `module` only the first time it is
-  seen this run. Subsequent calls for the same module return `[]`, so an
-  unloadable resource produces at most ONE diagnostic across all
-  compile-dependent checks per `mix credo` invocation. Atomic across
-  concurrent Credo tasks.
+  Builds a `:not_loadable` diagnostic for `module` only the first time
+  it is seen this run. Subsequent calls for the same module return `[]`,
+  so an unloadable resource produces at most ONE diagnostic across all
+  compile-dependent checks per `mix credo` invocation. The
+  check-and-insert is atomic across concurrent Credo tasks.
 
   `build_issue_fn` is a 0-arity function that returns a single
   `Credo.Issue.t()`. Checks with the standard message go through
-  `AshCredo.Orchestration.unique_not_loadable_issues/4`, which wraps this
-  function; checks with a bespoke message call this directly with their own
-  `format_issue/2`.
+  `AshCredo.Orchestration.unique_not_loadable_issues/4`, which wraps
+  this function; checks with a custom message call this directly with
+  their own `format_issue/2`.
   """
   @spec with_unique_not_loadable(module(), (-> struct())) :: [struct()]
   def with_unique_not_loadable(module, build_issue_fn)
@@ -543,20 +553,21 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Shared scaffold for compile-dependent checks. Wraps the common pattern of:
+  Shared scaffold for compile-dependent checks. It wraps this common
+  pattern:
 
-    * bail out early with an `:ash_missing` diagnostic (emitted at most once
-      per `mix credo` run across all compile-dependent checks) if Ash is not
-      loaded in the VM;
-    * otherwise run the check body.
+    * If Ash is not loaded in the VM, bail out early with an
+      `:ash_missing` diagnostic, emitted at most once per `mix credo`
+      run across all compile-dependent checks.
+    * Otherwise, run the check body.
 
   `missing_issue_fn` must be a 0-arity function that returns a single
-  `Credo.Issue.t()` (typically a `format_issue/2` call - which is a macro
-  from `use Credo.Check`, so it can only be built from inside the check
-  module itself).
+  `Credo.Issue.t()`, typically a `format_issue/2` call. `format_issue/2`
+  is a macro from `use Credo.Check`, so only the check module itself can
+  build the call.
 
-  `check_fn` is the 0-arity function that runs the actual check and returns
-  the list of issues.
+  `check_fn` is the 0-arity function that runs the actual check and
+  returns the list of issues.
 
   Returns a list of issues either way.
   """
@@ -571,21 +582,22 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Walks `module`'s name segments upward and returns the innermost ancestor
-  that is a loaded `Ash.Domain`, or `nil` if none is found.
+  Walks `module`'s name segments upward and returns the innermost
+  ancestor that is a loaded `Ash.Domain`, or `nil` when there is none.
 
-  Used to give Ash callback modules (`Change`/`Preparation`/`Validation`/
-  `Calculation`/`Manual*`) a domain by namespace convention - e.g.
-  `MyApp.Blog.Changes.Archive` resolves to `MyApp.Blog` when that module is
-  a loaded domain.
+  Checks use this to give Ash callback modules
+  (`Change`/`Preparation`/`Validation`/`Calculation`/`Manual*`) a domain
+  by namespace convention: `MyApp.Blog.Changes.Archive` resolves to
+  `MyApp.Blog` when that module is a loaded domain.
 
-  **Heuristic, not authoritative.** This is a namespace-convention guess,
-  not a reverse lookup of which resources actually reference the callback
-  module. A "shared infrastructure" change module nested under one domain's
-  namespace but used by resources in multiple domains will be classified as
-  belonging to the namespace's domain, which can occasionally surface a
-  misleading suggestion. Acceptable tradeoff for the common case of teams
-  that organise callback modules under their owning domain.
+  **This is a heuristic, not authoritative.** It's a namespace-convention
+  guess, not a reverse lookup of the resources that actually reference
+  the callback module. A "shared infrastructure" change module nested
+  under one domain's namespace but serving resources in multiple domains
+  gets classified under the namespace's domain, which can occasionally
+  surface a misleading suggestion. That's an acceptable tradeoff for the
+  common case of teams that organise callback modules under their owning
+  domain.
   """
   @spec enclosing_domain(module()) :: module() | nil
   def enclosing_domain(module) when is_atom(module) do
@@ -603,13 +615,13 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Clears every cache entry: per-module introspection results, per-domain
-  resource-reference lists, the `ash_available?` probe, and the one-shot
-  `:ash_missing` / `:not_loadable` diagnostic flags.
+  Clears every cache entry: the per-module introspection results, the
+  per-domain resource-reference lists, the `ash_available?` probe, and
+  the one-shot `:ash_missing` / `:not_loadable` diagnostic flags.
 
-  Called automatically by `AshCredo.init/1` at the start of every Credo
-  run, so callers rarely need to invoke it directly. Useful in tests that
-  need a clean slate between assertions.
+  `AshCredo.init/1` calls this automatically at the start of every Credo
+  run, so callers rarely need to invoke it directly. It's useful in
+  tests that need a clean slate between assertions.
   """
   @spec clear_cache() :: :ok
   def clear_cache do
@@ -624,10 +636,10 @@ defmodule AshCredo.Introspection.Compiled do
   ]
 
   @doc """
-  Returns `true` if `type` is a datetime attribute type, resolving through
-  `Ash.Type.NewType.subtype_of/1` for custom NewTypes (e.g.
-  `AshPostgres.TimestamptzUsec`) whose `storage_type/1` returns a DB-specific
-  atom rather than a standard Ecto datetime type.
+  Returns `true` if `type` is a datetime attribute type, resolving
+  through `Ash.Type.NewType.subtype_of/1` for custom NewTypes (e.g.
+  `AshPostgres.TimestamptzUsec`) whose `storage_type/1` returns a
+  DB-specific atom rather than a standard Ecto datetime type.
   """
   @spec datetime_type?(term()) :: boolean()
   def datetime_type?(type) when is_atom(type) and not is_nil(type) do
@@ -668,16 +680,17 @@ defmodule AshCredo.Introspection.Compiled do
     end
   rescue
     # The `Ash.Resource.Info` accessors bottom out in `Spark.Dsl.Extension`,
-    # which raises `ArgumentError` when `module` is not (or no longer) a Spark
-    # DSL module and `UndefinedFunctionError` when it was purged. Both can
-    # occur after `resource?/1` succeeded if the module is recompiled or
-    # purged mid-run; the memoized error also stops per-call re-raising.
+    # which raises `ArgumentError` when `module` is not (or no longer) a
+    # Spark DSL module and `UndefinedFunctionError` when it was purged.
+    # Both can occur after `resource?/1` succeeded, if the module is
+    # recompiled or purged mid-run; the memoized error also stops a
+    # re-raise on every call.
     _ in [ArgumentError, UndefinedFunctionError] -> {:error, :not_loadable}
   end
 
-  # Policies live in `Ash.Policy.Info` (a separate module from `Ash.Resource.Info`).
-  # `Ash.Policy.Info.policies/1` always returns a list - `[]` for resources
-  # without `Ash.Policy.Authorizer`.
+  # Policies live in `Ash.Policy.Info` (a separate module from
+  # `Ash.Resource.Info`). `Ash.Policy.Info.policies/1` always returns a
+  # list - `[]` for resources without `Ash.Policy.Authorizer`.
   defp read_policies(module) do
     Ash.Policy.Info.policies(module)
   rescue

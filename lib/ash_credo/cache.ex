@@ -1,28 +1,30 @@
 defmodule AshCredo.Cache do
   @moduledoc """
-  Process-independent key-value cache backed by a single named ETS table
-  owned by a supervised GenServer.
+  A process-independent key-value cache backed by a single named ETS
+  table owned by a supervised GenServer.
 
   Reads and writes go straight to ETS from the calling process; the
   GenServer exists only to keep the table alive across Credo's transient
   task churn.
 
-  Cleared at the start and end of every Credo run, so each `mix credo`
-  invocation sees a fresh table regardless of how long the host VM has
-  been alive.
+  AshCredo clears the cache at the start and end of every Credo run, so
+  each `mix credo` invocation sees a fresh table regardless of how long
+  the host VM has been alive.
 
-  The OTP application callback starts the cache under supervision when the
-  `:ash_credo` application boots. `AshCredo.init/1` additionally calls
-  `ensure_started!/0` before any check runs, so the table is also available
-  when `mix credo` runs without booting the `:ash_credo` application.
+  The OTP application callback starts the cache under supervision when
+  the `:ash_credo` application boots. `AshCredo.init/1` additionally
+  calls `ensure_started!/0` before any check runs, so the table is also
+  available when `mix credo` doesn't boot the `:ash_credo` application.
 
-  If the table does not exist - for example when checks are enabled directly
+  The table may be absent, for example when checks are enabled directly
   in `.credo.exs` without registering the `{AshCredo, []}` plugin, so
-  `AshCredo.init/1` never runs - every function degrades gracefully instead
-  of raising: reads behave as if nothing were cached and writes are no-ops.
-  Checks then work correctly, just without cross-call caching. The first
-  such access emits a one-time hint to stderr suggesting the plugin
-  registration.
+  `AshCredo.init/1` never runs. In that case every function degrades
+  gracefully instead of raising: reads behave as if nothing were cached,
+  and writes are no-ops.
+
+  Checks then still work correctly, just without cross-call caching.
+  The first such access emits a one-time hint to stderr suggesting the
+  plugin registration.
   """
 
   use GenServer
@@ -39,7 +41,7 @@ defmodule AshCredo.Cache do
   @memoize_miss {__MODULE__, :memoize_miss}
 
   @doc """
-  Starts the cache GenServer. Idempotent - returns the existing pid if
+  Starts the cache GenServer. Idempotent: returns the existing pid if
   already started.
   """
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -48,15 +50,16 @@ defmodule AshCredo.Cache do
   end
 
   @doc """
-  Ensures the cache GenServer is running and its ETS table is ready for use.
-  Safe to call from any process at any time; idempotent.
+  Ensures the cache GenServer is running and its ETS table is ready for
+  use. Safe to call from any process at any time; idempotent.
 
-  Starts the GenServer directly rather than via `Application.ensure_all_started/1`.
-  The latter would cascade through `:ash_credo`'s runtime application deps -
-  notably `:credo` - and during `mix credo` the live `Credo.Supervisor` collides
-  with that re-start, causing the whole cascade to roll back and the cache to
-  fail to start. The OTP application callback skips its cache child when this
-  function has already started it.
+  Starts the GenServer directly rather than via
+  `Application.ensure_all_started/1`. The latter would cascade through
+  `:ash_credo`'s runtime application deps, notably `:credo`, and during
+  `mix credo` the live `Credo.Supervisor` collides with that re-start,
+  causing the whole cascade to roll back and the cache to fail to start.
+  The OTP application callback skips its cache child when this function
+  has already started it.
   """
   @spec ensure_started!() :: :ok
   def ensure_started! do
@@ -68,8 +71,8 @@ defmodule AshCredo.Cache do
   end
 
   @doc """
-  Returns the cached value at `key`, or `default` if absent. Reads bypass
-  the GenServer for zero-overhead lookups.
+  Returns the cached value at `key`, or `default` if absent. Reads
+  bypass the GenServer for zero-overhead lookups.
   """
   @spec get(term(), term()) :: term()
   def get(key, default \\ nil) do
@@ -85,8 +88,8 @@ defmodule AshCredo.Cache do
   end
 
   @doc """
-  Stores `value` under `key`, overwriting any existing entry. Writes bypass
-  the GenServer.
+  Stores `value` under `key`, overwriting any existing entry. Writes
+  bypass the GenServer.
   """
   @spec put(term(), term()) :: :ok
   def put(key, value) do
@@ -100,11 +103,13 @@ defmodule AshCredo.Cache do
   end
 
   @doc """
-  Returns the cached value at `key`, computing it with `fun` and storing the
-  result on a miss. `fun` must be a pure function of `key`: concurrent first
-  callers may each compute, and the last write wins.
+  Returns the cached value at `key`, computing it with `fun` and storing
+  the result on a miss. `fun` must be a pure function of `key`:
+  concurrent first callers may each compute the value, and the last
+  write wins.
 
-  When the table is missing, computes on every call (nothing is ever cached).
+  When the table is missing, computes on every call; nothing is ever
+  cached.
   """
   @spec memoize(term(), (-> term())) :: term()
   def memoize(key, fun) when is_function(fun, 0) do
@@ -121,12 +126,13 @@ defmodule AshCredo.Cache do
 
   @doc """
   Atomically inserts `key` (with a placeholder value) only if absent.
-  Returns `true` if this call inserted (the caller is the first to see
-  this key), `false` if `key` was already present. Use this when you
-  need to act exactly once per key across concurrent callers.
+  Returns `true` if this call inserted the key, meaning the caller is
+  the first to see it, and `false` if `key` was already present. Use
+  this when you need to act exactly once per key across concurrent
+  callers.
 
-  When the table is missing, returns `true` on every call (nothing is
-  ever cached, so every caller looks like the first one).
+  When the table is missing, returns `true` on every call: nothing is
+  ever cached, so every caller looks like the first one.
   """
   @spec insert_new(term()) :: boolean()
   def insert_new(key) do
@@ -151,7 +157,7 @@ defmodule AshCredo.Cache do
 
   @doc """
   Deletes every entry in the cache. Idempotent and safe to call before
-  the cache GenServer has started (no-op in that case).
+  the cache GenServer has started (a no-op in that case).
   """
   @spec clear() :: :ok
   def clear do
@@ -163,9 +169,9 @@ defmodule AshCredo.Cache do
   end
 
   @doc """
-  Forgets that the missing-table hint was emitted, so the next missing-table
-  access emits it again. Test helper that keeps the flag key private to this
-  module.
+  Forgets that the missing-table hint was emitted, so the next
+  missing-table access emits it again. Test helper that keeps the flag
+  key private to this module.
   """
   @spec reset_missing_table_hint() :: :ok
   def reset_missing_table_hint do
@@ -174,9 +180,9 @@ defmodule AshCredo.Cache do
   end
 
   @doc """
-  Marks the missing-table hint as already emitted, silencing it for the rest
-  of the VM's lifetime. Test helper that keeps the flag key private to this
-  module.
+  Marks the missing-table hint as already emitted, silencing it for the
+  rest of the VM's lifetime. Test helper that keeps the flag key private
+  to this module.
   """
   @spec mark_missing_table_hint_emitted() :: :ok
   def mark_missing_table_hint_emitted do
@@ -187,14 +193,15 @@ defmodule AshCredo.Cache do
 
   # One hint per VM, tracked outside the (missing) table: a no-plugin run
   # would otherwise repeat the message once per accessor call per file.
-  # The flag check and set are not atomic on their own, and Credo dispatches
-  # its first wave of check tasks simultaneously - many processes can pass
-  # the flag check before any of them sets it. Resolve the race through
-  # atomic name registration: each racer spawns a fresh helper that tries
-  # to register a claim name, and only the winner re-checks the flag, sets
-  # it, and prints. Losers exit immediately - no lock, no backoff sleeps
-  # (:global.trans here would put every racer through randomized retry
-  # sleeps). After the flag is set, callers take the claim-free fast path.
+  # The flag check and set are not atomic on their own, and Credo
+  # dispatches its first wave of check tasks simultaneously, so many
+  # processes can pass the flag check before any of them sets it. Atomic
+  # name registration resolves the race: each racer spawns a fresh helper
+  # that tries to register a claim name, and only the winner re-checks the
+  # flag, sets it, and prints. Losers exit immediately, with no lock and
+  # no backoff sleeps (:global.trans here would put every racer through
+  # randomized retry sleeps). After the flag is set, callers take the
+  # claim-free fast path.
   defp warn_missing_table do
     if not hint_emitted?() do
       claim_and_emit_hint()
@@ -203,14 +210,14 @@ defmodule AshCredo.Cache do
     :ok
   end
 
-  # The helper is a spawned process rather than the caller itself because a
-  # process can hold only one registered name and the caller may already
-  # have one. The caller awaits the helper so the hint is on stderr before
-  # the triggering accessor returns. The flag is set before the winner
-  # exits (freeing the name), so a later claimant always finds it set.
-  # This orders emission at-most-once: a winner that crashes between
-  # setting the flag and printing suppresses the hint rather than letting
-  # another process print it twice.
+  # The helper is a spawned process rather than the caller itself because
+  # a process can hold only one registered name and the caller may already
+  # have one. The caller awaits the helper, so the hint is on stderr
+  # before the triggering accessor returns. The winner sets the flag
+  # before it exits and frees the name, so a later claimant always finds
+  # the flag set. This makes emission at-most-once: a winner that crashes
+  # between setting the flag and printing suppresses the hint rather than
+  # letting another process print it twice.
   defp claim_and_emit_hint do
     {pid, ref} =
       spawn_monitor(fn ->

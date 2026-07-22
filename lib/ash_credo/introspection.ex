@@ -1,12 +1,13 @@
 defmodule AshCredo.Introspection do
   @moduledoc """
-  Resource- and domain-level introspection of Ash DSL constructs in source AST:
-  resource/domain detection, resource contexts, DSL sections, entities, options,
-  and policies.
+  Resource- and domain-level introspection of Ash DSL constructs in the
+  source AST: resource/domain detection, resource contexts, DSL
+  sections, entities, options, and policies.
 
-  This module owns only those DSL/resource semantics. Lower-level tools live in
-  sibling modules under `AshCredo.Introspection.*` and are called directly by
-  consumers; there is intentionally no single facade re-exporting them:
+  This module owns only those DSL and resource semantics. Lower-level
+  tools live in sibling modules under `AshCredo.Introspection.*` and are
+  called directly by consumers; there is intentionally no single facade
+  re-exporting them:
 
     * `Aliases` - `Macro.Env`-backed directive application and resolution
     * `AshCallScanner` / `AshCallResolver` / `AshCallSite` - `Ash.*` API call detection
@@ -14,43 +15,47 @@ defmodule AshCredo.Introspection do
     * `Block` - do-block and module-body AST access
     * `LexicalScopeWalker` - scope-aware traversal
     * `ResourceContext` / `UseMetadata` - shared data structs
-    * `Compiled` - compile-time/runtime metadata, and the sole gateway for it.
-      The boundary (only `Compiled` may call Ash's runtime introspection
-      modules) is enforced structurally by the `calls.forbidden` policy in
-      `.reach.exs`.
+    * `Compiled` - compile-time/runtime metadata, and the sole gateway
+      for it. Only `Compiled` may call Ash's runtime introspection
+      modules; the `calls.forbidden` policy in `.reach.exs` enforces
+      this boundary structurally.
 
-  Do not add thin pass-through wrappers here for those modules; call the owning
-  module directly so dependencies stay honest.
+  Do not add thin pass-through wrappers here for those modules. Call the
+  owning module directly so dependencies stay honest.
 
   ## Why two introspection worlds
 
   Checks draw on two complementary sources, and both are load-bearing:
 
-    * **Source AST** (this module and its `*Scanner`/`*Walker` siblings) works
-      without compiling the host project and carries source positions, which
-      diagnostics anchor to. It is the only way to find *call sites* -
-      `Ash.read!(...)` scattered across a codebase - because compiled
-      introspection knows resource definitions, not where they are called.
-    * **`Compiled`** reads the fully-resolved DSL state of loaded modules,
-      including attributes/actions/policies that Spark transformers and
-      extensions contribute and that the source AST never sees.
+    * **Source AST** (this module and its `*Scanner`/`*Walker` siblings)
+      works without compiling the host project and carries source
+      positions, which diagnostics anchor to. It is the only way to find
+      *call sites*, such as `Ash.read!(...)` calls scattered across a
+      codebase: compiled introspection knows resource definitions, not
+      where they are called.
+    * **`Compiled`** reads the fully resolved DSL state of loaded
+      modules, including attributes, actions, and policies that Spark
+      transformers and extensions contribute and that the source AST
+      never sees.
 
-  Source-AST lexical resolution is built on real `Macro.Env` values:
+  Source-AST lexical resolution is built on real `Macro.Env` values.
   `Aliases` applies `alias`/`require`/`import` nodes to an env via
   `Macro.Env.define_alias/4` and `define_require/4`, and resolves
-  references via `Macro.Env.expand_alias/4` and `Macro.Env.required?/2`
-  (Elixir 1.17+ APIs added for exactly this kind of tooling). The walkers
+  references via `Macro.Env.expand_alias/4` and `Macro.Env.required?/2`,
+  APIs Elixir 1.17 added for exactly this kind of tooling. The walkers
   (`LexicalScopeWalker`, `AshCallScanner`) own only what an env cannot
-  know from source: scope-frame push/pop for blocks and branches, quote
-  suppression, and the `defmodule` module stack that substitutes
-  `__MODULE__` targets at declaration time. `Credo.Code.Module.aliases/1`
-  remains unsuitable - it collects alias names flat across a module,
-  dropping `as:` renames and lexical scoping.
+  know from source: scope-frame push and pop for blocks and branches,
+  quote suppression, and the `defmodule` module stack that substitutes
+  `__MODULE__` targets at declaration time.
+  `Credo.Code.Module.aliases/1` remains unsuitable: it collects alias
+  names flat across a module, dropping `as:` renames and lexical scope
+  information.
 
-  Each file is parsed once (Credo caches `SourceFile.ast/1`) and each derived
-  view is memoized on `{filename, source_hash/1}` - `resource_contexts/1` here,
-  `AshCallResolver.sites/1` next door - so the several specialised walkers each
-  run once per file, not once per consuming check.
+  Each file is parsed once (Credo caches `SourceFile.ast/1`), and the
+  cache memoizes each derived view on `{filename, source_hash/1}`
+  (`resource_contexts/1` here, `AshCallResolver.sites/1` next door), so
+  each specialised walker runs once per file rather than once per
+  consuming check.
   """
 
   alias AshCredo.Cache
@@ -72,15 +77,16 @@ defmodule AshCredo.Introspection do
   def resource_modules(source_file), do: modules_using(source_file, [:Ash, :Resource])
 
   @doc """
-  Returns resource contexts for all resource modules in the source file, in
-  file order. Each context now includes `:absolute_segments` - the full
-  enclosing path of the resource's `defmodule` name (e.g. `[:MyApp, :Blog, :Post]`
-  for a nested `defmodule Post` inside `defmodule MyApp.Blog`). This lets
-  compiled-introspection checks resolve the resource to its runtime module atom.
+  Returns the resource contexts for all resource modules in the source
+  file, in file order. Each context includes `:absolute_segments`, the
+  full enclosing path of the resource's `defmodule` name (e.g.
+  `[:MyApp, :Blog, :Post]` for a nested `defmodule Post` inside
+  `defmodule MyApp.Blog`). This lets compiled-introspection checks
+  resolve the resource to its runtime module atom.
 
-  Memoized in the run-scoped cache keyed on filename plus source hash, so the
-  underlying scope-tracking traversal runs once per file per Credo run instead
-  of once per enabled check.
+  Memoized in the run-scoped cache, keyed on filename plus source hash,
+  so the underlying scope-tracking traversal runs once per file per
+  Credo run instead of once per enabled check.
   """
   def resource_contexts(source_file) do
     key = {@resource_contexts_key_tag, source_file.filename, source_hash(source_file)}
@@ -96,10 +102,10 @@ defmodule AshCredo.Introspection do
   end
 
   @doc """
-  Hashes a source file's content for use in content-addressed cache keys.
-  Filename alone is not a safe key: distinct `SourceFile`s regularly share a
-  filename with different content (most prominently in this project's own
-  test suite).
+  Hashes a source file's content for use in content-addressed cache
+  keys. The filename alone is not a safe key: distinct `SourceFile`s
+  regularly share a filename with different content, most prominently in
+  this project's own test suite.
   """
   def source_hash(source_file), do: :erlang.md5(SourceFile.source(source_file))
 
@@ -107,10 +113,11 @@ defmodule AshCredo.Introspection do
   Walks every `defmodule` in a source file and returns
   `{module_ast, absolute_segments}` tuples in file order.
 
-  `absolute_segments` is the concatenation of all enclosing `defmodule` names
-  (top-to-bottom), so a `defmodule Bar` nested inside `defmodule Foo` is
-  reported as `[:Foo, :Bar]`. Modules whose name is not a literal alias are
-  reported with `absolute_segments: nil` (they still appear in the output).
+  `absolute_segments` is the concatenation of all enclosing `defmodule`
+  names, top to bottom, so a `defmodule Bar` nested inside
+  `defmodule Foo` is reported as `[:Foo, :Bar]`. Modules whose name is
+  not a literal alias are reported with `absolute_segments: nil` (they
+  still appear in the output).
   """
   def all_modules_with_path(source_file) do
     {%{out: out}, _scope} =
@@ -125,10 +132,11 @@ defmodule AshCredo.Introspection do
     Enum.reverse(out)
   end
 
-  # Only literal `defmodule Name do ... end` forms are emitted; non-literal
-  # names (e.g. `defmodule unquote(name) do ... end`) are skipped to match
-  # the pre-walker behaviour. The walker still tracks them on the module
-  # stack so nested modules under a non-literal parent are reported as nil.
+  # Only literal `defmodule Name do ... end` forms are emitted;
+  # non-literal names (e.g. `defmodule unquote(name) do ... end`) are
+  # skipped to match the pre-walker behaviour. The walker still tracks
+  # them on the module stack, so nested modules under a non-literal
+  # parent are reported as nil.
   defp collect_module_with_path(
          {:defmodule, _, [{:__aliases__, _, segs}, [do: _body]]} = ast,
          scope,
@@ -188,7 +196,7 @@ defmodule AshCredo.Introspection do
     end
   end
 
-  @doc "Extracts keyword options from a `use` call matching the given module aliases."
+  @doc "Extracts the keyword options from a `use` call matching the given module aliases."
   def use_opts({:defmodule, _, _} = module_ast, module_aliases) do
     module_ast
     |> find_use(module_aliases)
@@ -202,12 +210,12 @@ defmodule AshCredo.Introspection do
   end
 
   @doc """
-  Finds the AST node of the first top-level DSL section (e.g. :attributes)
-  in a module AST or resource/domain context.
+  Finds the AST node of the first top-level DSL section (e.g.
+  :attributes) in a module AST or a resource/domain context.
 
   Suitable only for line anchoring: Spark merges multiple same-named
-  top-level blocks into one section, so entries may live in later blocks.
-  Use `find_dsl_sections/2` to enumerate entries.
+  top-level blocks into one section, so entries may live in later
+  blocks. Use `find_dsl_sections/2` to enumerate the entries.
   """
   def find_dsl_section(%ResourceContext{module_ast: module_ast}, section_name) do
     find_dsl_section(module_ast, section_name)
@@ -226,7 +234,8 @@ defmodule AshCredo.Introspection do
 
   @doc """
   Finds the AST nodes of all same-named top-level DSL sections (e.g.
-  :attributes) in a module AST or resource/domain context, in source order.
+  :attributes) in a module AST or a resource/domain context, in source
+  order.
 
   Spark merges multiple same-named top-level blocks into one section, so
   entry enumeration must consider every block, not just the first.
@@ -282,10 +291,11 @@ defmodule AshCredo.Introspection do
   end
 
   @doc """
-  Returns the explicit action entities whose `accept` option is honored at
-  runtime: creates, updates, and soft destroys. Ash's `DefaultAccept`
-  transformer resets `accept` to `[]` on hard destroys (`soft?` false), so
-  an accept list there is dead configuration rather than an input surface.
+  Returns the explicit action entities whose `accept` option is honored
+  at runtime: creates, updates, and soft destroys. Ash's `DefaultAccept`
+  transformer resets `accept` to `[]` on hard destroys (`soft?` false),
+  so an accept list there is dead configuration rather than an input
+  surface.
   """
   def accepting_action_entities(actions_ast) do
     action_entities(actions_ast, ~w(create update)a) ++
@@ -294,16 +304,16 @@ defmodule AshCredo.Introspection do
 
   @doc """
   Returns true when some action in the section can inherit
-  `default_accept`: an accepting action (create, update, soft destroy)
-  without its own `accept` option, or a bare `:create`/`:update` atom in
-  `defaults`. Ash's DefaultAccept transformer applies the default only to
-  those - explicit accept lists override it, and hard destroys and reads
-  never take one.
+  `default_accept`. Two shapes qualify: an accepting action (create,
+  update, soft destroy) without its own `accept` option, or a bare
+  `:create`/`:update` atom in `defaults`. Ash's DefaultAccept
+  transformer applies the default only to those: explicit accept lists
+  override it, and hard destroys and reads never take one.
 
   Non-literal shapes count as inheritors: `defaults @actions` may expand
-  to inheriting entries and `soft? @soft` may compile a destroy soft, so
-  silencing a warning based on an unreadable value would hide a real
-  mass-assignment surface.
+  to entries that inherit, and `soft? @soft` may compile a destroy as
+  soft, so silencing a warning based on an unreadable value would hide a
+  real mass-assignment surface.
   """
   def default_accept_inheritors?(actions_ast) do
     inheriting_accepting_entity?(actions_ast) or
@@ -328,8 +338,8 @@ defmodule AshCredo.Introspection do
   end
 
   # A destroy whose `soft?` value is anything but the literal `false` may
-  # compile soft and then inherits like an update, unless it carries its
-  # own accept list.
+  # compile as soft and then inherits like an update, unless it carries
+  # its own accept list.
   defp potentially_soft_destroy_inheritor?(actions_ast) do
     actions_ast
     |> action_entities([:destroy])
@@ -533,11 +543,12 @@ defmodule AshCredo.Introspection do
   Returns `{entity, inherited_conditions}` pairs for all `policy` and
   `bypass` entities in a policies section, in source order.
 
-  `policy_group`s are descended at any depth (`policy_group` is declared
-  `recursive_as: :policies` in Ash) and their condition arguments are
-  accumulated, outermost first: Ash adds the group conditions to each
-  policy the group contains, so `inherited_conditions` is part of every
-  contained policy's effective condition.
+  `policy_group`s are descended at any depth (Ash declares
+  `policy_group` as `recursive_as: :policies`) and their condition
+  arguments are accumulated, outermost first. Ash adds the group
+  conditions to each policy the group contains, so
+  `inherited_conditions` is part of every contained policy's effective
+  condition.
   """
   def policy_entities_with_conditions(policies_ast) do
     policies_ast
@@ -573,7 +584,7 @@ defmodule AshCredo.Introspection do
   def find_in_body(ast, call_name),
     do: Enum.find(Block.do_block_entries(ast), &match?({^call_name, _, _}, &1))
 
-  @doc "Extracts the first atom argument from an entity call (e.g. action name)."
+  @doc "Extracts the first atom argument from an entity call (e.g. the action name)."
   def entity_name({_call, _meta, [name | _]}) when is_atom(name), do: name
   def entity_name(_), do: nil
 

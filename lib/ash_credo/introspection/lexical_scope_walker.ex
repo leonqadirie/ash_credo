@@ -1,34 +1,36 @@
 defmodule AshCredo.Introspection.LexicalScopeWalker do
   @moduledoc """
-  Thin wrapper around `Macro.traverse/4` that owns the lexical-scope plumbing
-  (`Macro.Env` frames, `quote` depth, the `defmodule` module stack) and
-  exposes a callback API to consumers.
+  Thin wrapper around `Macro.traverse/4` that owns the lexical-scope
+  plumbing (`Macro.Env` frames, the `quote` depth, the `defmodule`
+  module stack) and exposes a callback API to consumers.
 
   Each scope frame holds a `Macro.Env` snapshot: entering a block copies
-  the parent env, `alias`/`require`/`import` nodes are applied to the head
-  env via `AshCredo.Introspection.Aliases.apply_directive/3`, and leaving
-  the block discards the copy. Resolution semantics therefore come from
-  the compiler's own `Macro.Env` APIs; the walker only decides WHERE
-  scopes begin and end and what to suppress inside `quote`.
+  the parent env, `alias`/`require`/`import` nodes are applied to the
+  head env via `AshCredo.Introspection.Aliases.apply_directive/3`, and
+  leaving the block discards the copy. Resolution semantics therefore
+  come from the compiler's own `Macro.Env` APIs; the walker only decides
+  WHERE scopes start and end, and what to suppress inside `quote`.
 
-  **Note on `AshCallScanner`:** that module deliberately stays outside the
-  walker. Its state (`binding_frames`, `branch_depth`, `pipe_origins`, plus
-  `:=` LHS-binding capture) is heterogeneous enough that routing it through
-  callbacks would cost more clarity than the env/quote plumbing saves.
-  The scanner maintains its own env frames via `Aliases.apply_directive/3`.
+  **Note on `AshCallScanner`:** that module deliberately stays outside
+  the walker. Its state (`binding_frames`, `branch_depth`,
+  `pipe_origins`, plus the `:=` LHS-binding capture) is heterogeneous
+  enough that routing it through callbacks would cost more clarity than
+  the env/quote plumbing saves. The scanner maintains its own env frames
+  via `Aliases.apply_directive/3`.
 
   ## API
 
       LexicalScopeWalker.traverse(ast, user_state, on_enter, on_leave, opts)
 
   - `ast` - any Macro AST.
-  - `user_state` - opaque caller state (any term). The walker does not touch it.
+  - `user_state` - opaque caller state (any term). The walker doesn't
+    touch it.
   - `on_enter` / `on_leave` - 3-arity callbacks
-    `(ast_node, %Scope{}, user_state) :: user_state`. Callbacks return ONLY
-    `user_state`; the walker manages scope and AST. Allowing callbacks to
-    rewrite the AST would be a landmine - the leave handler pattern-matches
-    the original node shape, and a transformed node could silently skip
-    scope pops.
+    `(ast_node, %Scope{}, user_state) :: user_state`. Callbacks return
+    ONLY `user_state`; the walker manages the scope and the AST.
+    Letting a callback rewrite the AST would be dangerous: the leave
+    handler pattern-matches the original node shape, and a transformed
+    node could silently skip scope pops.
 
   Returns `{final_user_state, final_scope}`.
 
@@ -38,31 +40,34 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
     frame, or applies a directive to the current env), THEN invokes
     `on_enter` with the updated scope. So inside `on_enter` for an
     `{:alias, ...}` node, `env/1` already includes the alias.
-  - On leave: `on_leave` runs FIRST (with the still-current scope), THEN the
-    walker pops. So a callback that wants to read the final scope state of a
-    do-block can do so before the pop.
+  - On leave: `on_leave` runs FIRST, with the still-current scope, THEN
+    the walker pops. So a callback that wants to read the final scope
+    state of a do-block can do so before the pop.
 
   ## Opts
 
-  - `:lexical_scope_nodes` - extra atoms for which to push an alias scope
-    frame on entry and pop on exit. Defaults to `[:with, :for]` because
-    these constructs ARE empirically-verified separate scopes in Elixir
-    (a `require`/`alias` declared inside a `with` clause or `for`
-    generator does NOT propagate past the construct). The walker always
-    additionally pushes for `@scope_keys` (`do/else/after/rescue/catch`)
-    and `:->` arrows. Pass `lexical_scope_nodes: []` to opt out (only
-    sensible if you have a specific reason; doing so will let
-    `with`/`for` clause-level aliases leak into the enclosing scope).
-  - `:track_quote` (default `true`) - track `{:quote, _, _}` depth. When
-    truthy, `in_quote?/1` and `quote_depth/1` reflect it, and aliases
-    declared inside `quote` are dropped (see `:track_aliases_in_quote`
-    to override).
+  - `:lexical_scope_nodes` - extra atoms for which the walker pushes an
+    alias scope frame on entry and pops it on exit. Defaults to
+    `[:with, :for]` because these constructs ARE separate scopes in
+    Elixir (verified empirically): a `require`/`alias` declared inside a
+    `with` clause or `for` generator does NOT propagate past the
+    construct. The walker always additionally pushes for `@scope_keys`
+    (`do/else/after/rescue/catch`) and `:->` arrows. Pass
+    `lexical_scope_nodes: []` to opt out, but only with a specific
+    reason: `with`/`for` clause-level aliases then leak into the
+    enclosing scope.
+  - `:track_quote` (default `true`) - track the `{:quote, _, _}` depth.
+    When truthy, `in_quote?/1` and `quote_depth/1` reflect it, and
+    aliases declared inside `quote` are dropped (see
+    `:track_aliases_in_quote` to override this).
   - `:track_aliases_in_quote` (default `false`) - when `false`, aliases
     declared inside a `quote do ... end` are NOT recorded into frames.
-    They belong to the macro caller, not the macro author. Set `true`
-    only if you specifically need to model the author's lexical view.
+    They belong to the macro caller, not the macro author. Set this to
+    `true` only if you specifically need to model the author's lexical
+    view.
   - `:initial_env` - a `Macro.Env` seeding the base frame, for walking a
-    defmodule body that inherits directives from an enclosing scope.
+    defmodule body that should inherit directives from an enclosing
+    scope.
 
   The module stack is always maintained: `current_module_segments/1`
   returns the absolute segments of the innermost enclosing `defmodule`,
@@ -97,8 +102,8 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   @type callback :: (Macro.t(), Scope.t(), user_state() -> user_state())
 
   @typedoc """
-  Walker options (see module docs). `:initial_env` seeds the base env
-  frame - useful when the walker is invoked on a defmodule body that
+  Walker options (see the module docs). `:initial_env` seeds the base
+  env frame; useful when the walker is invoked on a defmodule body that
   should inherit directives from an enclosing scope.
   """
   @type opts :: [
@@ -128,10 +133,11 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   def in_quote?(%Scope{quote_depth: depth}), do: depth > 0
 
   @doc """
-  Returns the absolute module segments of the innermost enclosing `defmodule`,
-  or `nil` if there is no enclosing module. Top-level modules have visible
-  aliases applied to their literal segments; nested modules prepend the
-  enclosing path without re-aliasing (matches Elixir's actual resolution).
+  Returns the absolute module segments of the innermost enclosing
+  `defmodule`, or `nil` if there is no enclosing module. Top-level
+  modules have the visible aliases applied to their literal segments;
+  nested modules prepend the enclosing path without re-aliasing the
+  nested name, matching Elixir's actual resolution.
   """
   @spec current_module_segments(Scope.t()) :: [atom()] | nil
   def current_module_segments(%Scope{module_stack: []}), do: nil
@@ -139,11 +145,11 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
 
   @doc """
   Returns `true` if the current traversal point is lexically inside ANY
-  `defmodule` (including ones with non-literal names like
-  `defmodule Module.concat(...) do ... end`). Distinct from
-  `current_module_segments/1`, which returns `nil` both for "not in a module"
-  AND for "in a module with a non-literal name." Use this when you need to
-  decide whether to skip into a nested-module body.
+  `defmodule`, including ones with non-literal names like
+  `defmodule Module.concat(...) do ... end`. Distinct from
+  `current_module_segments/1`, which returns `nil` both for "not in a
+  module" AND for "in a module with a non-literal name." Use this when
+  you need to decide whether to skip into a nested-module body.
   """
   @spec in_module?(Scope.t()) :: boolean()
   def in_module?(%Scope{module_stack: []}), do: false
@@ -152,8 +158,8 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   # ── Public traverse ──
 
   @doc """
-  Walk `ast` with lexical-scope tracking. See module docs for the API,
-  callback timing, and opts.
+  Walks `ast` with lexical-scope tracking. See the module docs for the
+  API, callback timing, and opts.
   """
   @spec traverse(Macro.t(), user_state(), callback(), callback(), opts()) ::
           {user_state(), Scope.t()}
@@ -190,13 +196,13 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
 
   # Each `enter`/`leave` clause:
   #   1. updates `scope` for its node kind (push frames, capture aliases,
-  #      adjust quote depth, push module stack)
+  #      adjust the quote depth, push the module stack)
   #   2. invokes the user callback with the updated scope
   # The order here matters: more-specific patterns (`:alias`, `:quote`,
   # `:defmodule`) take precedence over the generic scope-key/arrow/extras
-  # patterns. A node that matches multiple kinds (e.g. a `{form, _, _}` that
-  # is also in `lexical_scope_nodes`) is handled by exactly one clause -
-  # follow each clause's chain to confirm.
+  # patterns. A node that matches multiple kinds (e.g. a `{form, _, _}`
+  # that is also in `lexical_scope_nodes`) is handled by exactly one
+  # clause - follow each clause's chain to confirm.
 
   # `capture_directive/3` applies the node to the head env; shapes that
   # create nothing (e.g. a bare `alias __MODULE__`) leave it unchanged.
@@ -243,8 +249,8 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
     {node, {on_enter.(node, scope, user), scope}}
   end
 
-  # Leave: callback runs with current scope, then we pop. Mirror the enter
-  # clauses so each push has a matching pop.
+  # Leave: the callback runs with the current scope, then we pop. Mirrors
+  # the enter clauses so each push has a matching pop.
 
   defp leave({directive, _, _} = node, {user, scope}, on_leave, _options)
        when directive in [:alias, :require, :import] do
@@ -313,7 +319,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   end
 
   # A pushed frame starts as a copy of its parent env, so everything
-  # lexically visible stays visible; the pop discards additions made
+  # lexically visible stays visible; the pop discards the additions made
   # inside the scope.
   defp push_env_frame(%Scope{env_frames: frames} = scope) do
     %{scope | env_frames: [env(scope) | frames]}

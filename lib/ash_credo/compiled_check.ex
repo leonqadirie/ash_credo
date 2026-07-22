@@ -2,22 +2,24 @@ defmodule AshCredo.CompiledCheck do
   @moduledoc """
   Base for checks that introspect compiled Ash modules.
 
-  `use AshCredo.CompiledCheck` injects `use Credo.Check` (passing every option
-  through unchanged) and a generated `run/2` that guards every invocation with
-  the Ash-availability check. When Ash is not loaded in the VM running Credo,
-  the check emits a single informational diagnostic - once per run, across all
-  compiled checks - and runs no introspection; otherwise it delegates to the
-  check's `run_compiled/2` callback.
+  `use AshCredo.CompiledCheck` injects `use Credo.Check`, passing every
+  option through unchanged, plus a generated `run/2` that guards every
+  invocation with the Ash-availability check. When Ash isn't loaded in
+  the VM running Credo, the check emits a single informational
+  diagnostic, once per run across all compiled checks, and runs no
+  introspection. Otherwise the wrapper delegates to the check's
+  `run_compiled/2` callback.
 
-  This makes the wrapper structural rather than a convention. A compiled check
-  cannot run introspection without the guard, so it can never raise or silently
-  no-op when the host project is not compiled, and there is no wrapper call to
-  forget.
+  This makes the wrapper structural rather than a convention. A compiled
+  check cannot run introspection without the guard, so it can never
+  raise or silently no-op when the host project isn't compiled, and
+  there is no wrapper call to forget.
 
-  Implement `run_compiled/2`. Optionally override `active?/2` to skip the check
-  entirely - producing no issues and no ash-missing diagnostic - before the
-  guard runs; use it for checks disabled by path filters or configuration, so
-  a disabled check stays silent even when Ash is unavailable.
+  Implement `run_compiled/2`. Optionally override `active?/2` to skip
+  the check entirely before the guard runs; a skipped check produces no
+  issues and no ash-missing diagnostic. Use `active?/2` for checks
+  disabled by path filters or configuration, so a disabled check stays
+  silent even when Ash is unavailable.
   """
 
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
@@ -26,15 +28,15 @@ defmodule AshCredo.CompiledCheck do
   alias Credo.SourceFile
 
   @doc """
-  Runs the check body. Invoked only when `active?/2` returns `true` and Ash is
-  available in the VM. Returns the list of issues.
+  Runs the check body. Invoked only when `active?/2` returns `true` and
+  Ash is available in the VM. Returns the list of issues.
   """
   @callback run_compiled(SourceFile.t(), keyword()) :: [Credo.Issue.t()]
 
   @doc """
-  Whether the check should run for this file and params at all. When `false`,
-  the check produces no issues and no ash-missing diagnostic. Defaults to
-  `true`.
+  Whether the check should run for this file and params at all. When
+  `false`, the check produces no issues and no ash-missing diagnostic.
+  Defaults to `true`.
   """
   @callback active?(SourceFile.t(), keyword()) :: boolean()
 

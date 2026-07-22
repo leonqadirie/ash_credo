@@ -1,14 +1,14 @@
 defmodule AshCredo.Introspection.AshCallScanner do
   @moduledoc """
-  Lower layer of the Ash call pipeline: scans a source file's AST and yields
-  every `Ash.*` call together with the lexical environment visible at that
-  point - alias frames, binding frames, branch depth, pipe origins, and the
-  enclosing `defmodule` segments.
+  Lower layer of the Ash call pipeline: scans a source file's AST and
+  yields every `Ash.*` call together with the lexical environment
+  visible at that point - alias frames, binding frames, branch depth,
+  pipe origins, and the enclosing `defmodule` segments.
 
-  Knows nothing about specific Ash API entry points. The semantic
-  interpretation - "this call has a literal resource at arg 0 and an action
-  in the keyword opts, resolve it to a real module" - lives one layer up in
-  `AshCredo.Introspection.AshCallResolver`.
+  This module knows nothing about specific Ash API entry points. The
+  semantic interpretation ("this call has a literal resource at arg 0
+  and an action in the keyword opts, resolve it to a real module")
+  lives one layer up in `AshCredo.Introspection.AshCallResolver`.
 
   Three output flavours of increasing richness:
 
@@ -84,9 +84,9 @@ defmodule AshCredo.Introspection.AshCallScanner do
   end
 
   # `require ..., as:` sets up an alias too; `apply_directive/3` records
-  # exactly the shapes that create one. Unlike the walker, the scanner has
-  # no quote tracking: directives inside `quote do ... end` are recorded,
-  # preserving long-standing scanner behavior.
+  # exactly the shapes that create one. Unlike the walker, the scanner
+  # has no quote tracking: directives inside `quote do ... end` are
+  # recorded, preserving long-standing scanner behavior.
   defp enter_node({directive, _, _} = ast, state, _collect_fn)
        when directive in [:alias, :require] do
     {ast, capture_directive(state, ast)}
@@ -222,7 +222,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
   end
 
   # A pushed frame starts as a copy of its parent env; the pop discards
-  # additions made inside the scope.
+  # the additions made inside the scope.
   defp push_alias_frame(state) do
     update_in(state.env_frames, &[current_env(state) | &1])
   end

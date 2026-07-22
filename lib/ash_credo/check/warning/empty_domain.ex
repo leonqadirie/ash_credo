@@ -5,7 +5,7 @@ defmodule AshCredo.Check.Warning.EmptyDomain do
     tags: [:ash],
     explanations: [
       check: """
-      A domain module with no resources registered is likely incomplete.
+      A domain module that registers no resources is probably incomplete.
 
           resources do
             resource MyApp.Post
@@ -14,11 +14,12 @@ defmodule AshCredo.Check.Warning.EmptyDomain do
 
       ## Limitations
 
-      This check scans the source AST, so it only sees resources registered
-      literally in the `resources` block. Resources contributed by Spark
-      transformers, extensions, or `Spark.Dsl.Fragment` modules are
-      invisible to it, so a domain whose resources come from such a source
-      may be flagged as empty even though it is not.
+      The check scans the source AST, so it only sees resources registered
+      literally in the `resources` block. It cannot see resources
+      contributed by Spark transformers, extensions, or
+      `Spark.Dsl.Fragment` modules, so when a domain gets its resources
+      from such a source, the check may flag it as empty even though it is
+      not.
       """
     ]
 

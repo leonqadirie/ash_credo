@@ -1,20 +1,21 @@
 defmodule AshCredo do
   @moduledoc """
-  Credo checks for Ash Framework.
+  Credo checks for the Ash Framework.
 
-  Provides pre-built checks that detect common Ash anti-patterns.
-  Some checks analyse unexpanded source AST; others introspect the
-  compiled modules to see the fully-resolved DSL state, including
-  anything Spark transformers and extensions contribute.
+  The plugin provides pre-built checks that detect common Ash
+  anti-patterns. Some checks analyse the unexpanded source AST, while
+  others introspect the compiled modules to see the fully resolved DSL
+  state, including everything Spark transformers and extensions
+  contribute.
 
-  Checks that introspect compiled modules require the project to be
-  compiled before running `mix credo` (for example via a Mix alias
-  like `lint: ["compile", "credo --strict"]`); otherwise they emit a
+  Checks that introspect compiled modules need the project to be
+  compiled before running `mix credo`, for example via a Mix alias like
+  `lint: ["compile", "credo --strict"]`. Otherwise they emit a
   configuration diagnostic and become a no-op.
 
   ## Plugin Usage
 
-  Add to your `.credo.exs`:
+  Add this to your `.credo.exs`:
 
       %{configs: [%{
         name: "default",

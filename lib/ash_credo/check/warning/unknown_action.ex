@@ -13,9 +13,9 @@ defmodule AshCredo.Check.Warning.UnknownAction do
           # Did you mean `:published`?
 
       The check uses Ash's runtime introspection
-      (`Ash.Resource.Info.actions/1`) to read the resource's fully-resolved
-      action list, then jaro-distance to suggest the closest known action
-      name when one is similar enough.
+      (`Ash.Resource.Info.actions/1`) to read the resource's fully
+      resolved action list, then jaro distance to suggest the closest
+      known action name when one is similar enough.
 
       Unlike `Refactor.UseCodeInterface`, this check is objective: the
       action either exists on the resource or it doesn't. There's nothing
@@ -24,9 +24,9 @@ defmodule AshCredo.Check.Warning.UnknownAction do
       It runs against the same resolved Ash call-site pipeline as
       `UseCodeInterface`, including
       `Ash.read!`/`Ash.get!`/`Ash.read_one!`/`Ash.read_first!`/`Ash.bulk_*`/
-      `Ash.Changeset.for_*`/`Ash.Query.for_read`/`Ash.ActionInput.for_action` - whenever both
-      the resource and the action argument are literal values that can be
-      resolved at lint time.
+      `Ash.Changeset.for_*`/`Ash.Query.for_read`/`Ash.ActionInput.for_action`.
+      The check applies whenever both the resource and the action argument
+      are literal values it can resolve at lint time.
 
       ## Requirements
 
@@ -58,8 +58,8 @@ defmodule AshCredo.Check.Warning.UnknownAction do
     end
   end
 
-  # `:not_loadable` resources are reported by `UseCodeInterface` (gated on its
-  # `enforce_code_interface_outside_domain` flag) - emitting a second
+  # `:not_loadable` resources are reported by `UseCodeInterface` (gated on
+  # its `enforce_code_interface_outside_domain` flag); emitting a second
   # "could not load" diagnostic from here would just double the noise.
   defp check_site(%AshCallSite{}, _issue_meta), do: []
 
@@ -81,10 +81,11 @@ defmodule AshCredo.Check.Warning.UnknownAction do
     )
   end
 
-  # Returns the known action name most similar to `target_name` (jaro distance
-  # >= 0.75), or nil if no close match exists. Pure string similarity over the
-  # already-resolved action list - no Ash runtime introspection, so it lives
-  # with its sole caller rather than in the Compiled gateway.
+  # Returns the known action name most similar to `target_name` (jaro
+  # distance >= 0.75), or nil if no close match exists. Pure string
+  # similarity over the already-resolved action list - no Ash runtime
+  # introspection - so it lives with its sole caller rather than in the
+  # Compiled gateway.
   defp suggest_action_name(known_actions, target_name)
        when is_list(known_actions) and is_atom(target_name) do
     target_str = Atom.to_string(target_name)

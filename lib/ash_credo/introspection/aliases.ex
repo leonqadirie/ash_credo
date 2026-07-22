@@ -7,9 +7,10 @@ defmodule AshCredo.Introspection.Aliases do
   Returns a fresh `Macro.Env` for accumulating lexical directives.
 
   Built via `Code.env_for_eval/1`, so `Kernel` is pre-required and
-  pre-imported exactly as in any real compilation unit. Only observable
-  when a consumer asks `Macro.Env.required?(env, Kernel)` before any
-  directive was applied - which mirrors real Elixir semantics anyway.
+  pre-imported exactly as in any real compilation unit. This is only
+  observable when a consumer asks `Macro.Env.required?(env, Kernel)`
+  before any directive was applied, which mirrors real Elixir semantics
+  anyway.
   """
   def base_env do
     Code.env_for_eval(file: "nofile")
@@ -17,9 +18,9 @@ defmodule AshCredo.Introspection.Aliases do
 
   @doc """
   Applies an `alias`/`require`/`import` directive AST node to `env` and
-  returns the updated env. Malformed or unresolvable directives leave the
-  env unchanged (graceful skip), matching how unparsable directives
-  produced no alias entry before.
+  returns the updated env. Malformed or unresolvable directives leave
+  the env unchanged (a graceful skip), matching how unparsable
+  directives produced no alias entry before.
 
   `enclosing` is the absolute segment list of the innermost literal
   `defmodule`, or `nil` when unknown; it substitutes a leading
@@ -27,11 +28,11 @@ defmodule AshCredo.Introspection.Aliases do
   declaration time, which is where Elixir itself resolves it.
 
   `require Mod, as: Q` registers both the require and the alias.
-  `import Mod` is registered via `Macro.Env.define_require/4` rather than
-  `define_import/4`: consumers only ask "is a require satisfied here?"
-  (import implies require in Elixir), and `define_import` raises for
-  modules not loaded in the linting VM, which source-only references
-  regularly are.
+  `import Mod` is registered via `Macro.Env.define_require/4` rather
+  than `define_import/4`: consumers only ask whether a require holds at
+  a point (import implies require in Elixir), and `define_import/4`
+  raises for modules not loaded in the linting VM, which source-only
+  references regularly are.
   """
   def apply_directive(%Macro.Env{} = env, directive_ast, enclosing) do
     directive_ast
@@ -42,10 +43,10 @@ defmodule AshCredo.Introspection.Aliases do
   end
 
   @doc """
-  Resolves alias segments to a module atom through `env`, falling back to
-  plain concatenation when no alias matches. Returns `:error` when the
-  segments are not a non-empty list of plain atoms (e.g. they still carry
-  an `unquote` or `__MODULE__` node).
+  Resolves alias segments to a module atom through `env`, falling back
+  to plain concatenation when no alias matches. Returns `:error` when
+  the segments are not a non-empty list of plain atoms (e.g. they still
+  carry an `unquote` or `__MODULE__` node).
   """
   def expand_to_module(segments, %Macro.Env{} = env) when is_list(segments) do
     if atom_segments?(segments) do
@@ -61,8 +62,9 @@ defmodule AshCredo.Introspection.Aliases do
   def expand_to_module(_segments, %Macro.Env{}), do: :error
 
   @doc """
-  Extracts the literal alias segments from a `defmodule` AST node, or `nil`
-  when the module name is not a literal alias (e.g. `Module.concat(...)`).
+  Extracts the literal alias segments from a `defmodule` AST node, or
+  `nil` when the module name is not a literal alias (e.g.
+  `Module.concat(...)`).
   """
   def defmodule_literal_segments({:defmodule, _, [{:__aliases__, _, segs}, _]})
       when is_list(segs), do: segs
@@ -89,15 +91,15 @@ defmodule AshCredo.Introspection.Aliases do
   end
 
   @doc """
-  Resolves a literal `defmodule` name into absolute module segments through
-  the visible env.
+  Resolves a literal `defmodule` name into absolute module segments
+  through the visible env.
 
-  When `parent_absolute` is empty, the module is top-level and visible
-  aliases apply to its literal segments. When it is a module path, the
-  module is nested and Elixir resolves it by prepending the enclosing path
-  without applying lexical aliases to the nested name itself. Returns `nil`
-  when the segments are not a literal alias or the enclosing module path is
-  already unknown.
+  When `parent_absolute` is empty, the module is top-level and the
+  visible aliases apply to its literal segments. When it is a module
+  path, the module is nested, and Elixir resolves it by prepending the
+  enclosing path without applying lexical aliases to the nested name
+  itself. Returns `nil` when the segments are not a literal alias or the
+  enclosing module path is already unknown.
   """
   def absolute_module_segments(literal_segments, parent_absolute, %Macro.Env{} = env)
       when is_list(literal_segments) do
@@ -113,7 +115,7 @@ defmodule AshCredo.Introspection.Aliases do
 
   @doc """
   Expands module alias segments through `env` using the compiler's own
-  resolution (`Macro.Env.expand_alias/4`). Segments-in / segments-out:
+  resolution (`Macro.Env.expand_alias/4`). Segments in, segments out:
   unresolvable input (non-atom segments, no matching alias) is returned
   unchanged.
   """
@@ -129,11 +131,12 @@ defmodule AshCredo.Introspection.Aliases do
 
   @doc """
   Substitutes `__MODULE__` elements in expanded alias segments with the
-  enclosing `defmodule`'s absolute segments (`alias __MODULE__.Post` targets
-  carry the raw `__MODULE__` AST tuple). Returns `{:ok, segments}` only when
-  every resulting segment is an atom - `Module.concat/1` raises on anything
-  else - and `:error` when substitution is impossible (no enclosing literal
-  module) or non-atom segments remain.
+  enclosing `defmodule`'s absolute segments (`alias __MODULE__.Post`
+  targets carry the raw `__MODULE__` AST tuple). Returns
+  `{:ok, segments}` only when every resulting segment is an atom,
+  because `Module.concat/1` raises on anything else, and `:error` when
+  substitution is impossible (no enclosing literal module) or non-atom
+  segments remain.
   """
   def resolve_module_self(segments, enclosing) when is_list(segments) do
     resolved =
@@ -166,8 +169,8 @@ defmodule AshCredo.Introspection.Aliases do
   # as_opts}` tuples. Grouped forms (`alias P.{A, B}`) yield one tuple per
   # suffix; `require`/`import` share the same shapes. Anything else yields
   # no tuples. `as_opts` is `[]`, `[as: Module]`, or the `:invalid` marker
-  # for a multi-segment `as:` (invalid Elixir - the whole entry is skipped
-  # rather than misregistered under a guessed name).
+  # for a multi-segment `as:` (invalid Elixir), in which case the whole
+  # entry is skipped rather than misregistered under a guessed name.
   defp directive_targets({kind, meta, [target]}) when kind in @directive_kinds do
     directive_targets({kind, meta, [target, []]})
   end
