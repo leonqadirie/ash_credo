@@ -10,13 +10,18 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
     explanations: [
       check: """
       Passing `authorize?: false` bypasses Ash authorization entirely, which
-      makes it easy to skip policy checks by accident. Use system actors with
-      bypass policies instead, so authorization stays enforced and auditable.
+      makes it easy to skip policy checks by accident. Prefer passing the
+      caller's actor, so policies stay enforced. Only when no user is acting,
+      such as in background jobs or seeds, use a named system actor with a
+      bypass policy, which keeps the bypass explicit and auditable.
 
           # Bad - skips all authorization
           Ash.read!(query, authorize?: false)
 
-          # Good - uses a named system actor
+          # Good - authorizes as the logged-in user
+          Ash.read!(query, actor: current_user)
+
+          # Good when no user is acting - uses a named system actor
           Ash.read!(query, actor: %{system: :my_context})
 
           # In resource policies:
@@ -75,7 +80,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
       Enum.map(lines, fn line ->
         format_issue(issue_meta,
           message:
-            "`authorize?: false` bypasses authorization. Use system actors with bypass policies instead.",
+            "`authorize?: false` bypasses authorization. Pass the caller's actor instead; use a system actor with a bypass policy only when no user is acting.",
           trigger: "authorize?: false",
           line_no: line
         )
