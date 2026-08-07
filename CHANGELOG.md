@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.17.1](https://github.com/leonqadirie/ash_credo/compare/v0.17.0...v0.17.1) (2026-08-07)
+
+
+### Bug Fixes
+
+* reword AuthorizeFalse guidance to prefer the caller's actor ([#235](https://github.com/leonqadirie/ash_credo/issues/235)) ([0491aac](https://github.com/leonqadirie/ash_credo/commit/0491aac99b02b69210a8ebc330b4799007b733ed)) by [@leonqadirie](https://github.com/leonqadirie)
+
 ## [0.17.0](https://github.com/leonqadirie/ash_credo/compare/v0.16.1...v0.17.0) (2026-07-16)
 
 
