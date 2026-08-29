@@ -85,6 +85,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `OverlyPermissivePolicy` | Warning | High | No | Flags unscoped `authorize_if always()` policies |
 | `PinnedTimeInExpression` | Warning | High | Yes | Flags `^Date.utc_today()` / `^DateTime.utc_now()` in Ash expressions (frozen at compile time) |
 | `RedundantValidation` | Warning | Normal | No | Flags `validate present(...)` on attributes that already have `allow_nil? false`. The constraint guarantees presence, so the validation is redundant (skips `allow_nil_input` escape hatches). **Requires a compiled project.** |
+| `RepoCallInResource` | Warning | Normal | No | Flags Ecto `Repo` query calls (`query!`, `insert_all`, `update_all`, ...) inside resources and their change/validation/preparation/calculation/generic-action modules, where raw SQL can bypass tenant scoping, notifications, timestamps, and policies for rows beyond the one being acted on |
 | `SensitiveAttributeExposed` | Warning | High | No | Flags sensitive attributes (password, token, secret, ...) not marked `sensitive?: true` |
 | `SensitiveFieldInAccept` | Warning | High | No | Flags privilege-escalation fields (`is_admin`, `permissions`, ...) in `accept` lists |
 | `UnknownAction` | Warning | High | No | Flags `Ash.*` calls referencing actions that don't exist on the resolved resource, with a fuzzy `Did you mean` hint. **Requires a compiled project.** |
@@ -175,6 +176,7 @@ checks: %{
     {AshCredo.Check.Warning.MissingDomain, []},
     {AshCredo.Check.Warning.OverlyPermissivePolicy, []},
     {AshCredo.Check.Warning.RedundantValidation, []},
+    {AshCredo.Check.Warning.RepoCallInResource, []},
     {AshCredo.Check.Warning.SensitiveAttributeExposed, []},
     {AshCredo.Check.Warning.SensitiveFieldInAccept, []},
     {AshCredo.Check.Warning.UnknownAction, []},
@@ -203,6 +205,9 @@ The following checks accept custom parameters:
 | `Warning.AuthorizeFalse` | `include_non_ash_calls` | `true` | When `false`, only checks Ash API calls and action DSL definitions |
 | `Warning.AuthorizeFalse` | `excluded_paths` | `[~r"/test/", "test"]` | Paths or regexes to skip. Binary entries match as path segments or full file paths. Defaults to test directories, where `authorize?: false` is typically intentional |
 | `Warning.MissingMacroDirective` | `macro_modules` | `[Ash.Query, Ash.Expr]` | Modules whose qualified macro calls the check validates. Macros are read from `module.__info__(:macros)`, so only real macros are flagged |
+| `Warning.RepoCallInResource` | `flagged_functions` | `~w(query query! query_many query_many! insert_all update_all delete_all)a` | Repo functions to flag. Add `:insert`/`:update`/`:delete` to also flag single-record Ecto writes, or `:all`/`:one`/`:get`/`:get_by`/`:exists?`/`:aggregate` to flag reads. `Repo.transaction` is deliberately absent: wrapping Ash calls in a manual transaction is transaction control, not a bypass |
+| `Warning.RepoCallInResource` | `repo_names` | `[:Repo]` | Last name segments to treat as Ecto repos. Atom entries match exactly; `Regex` entries (e.g. `~r/Repo$/`) match against the segment. Aliases are resolved first, so the match is on the real module name. `Ecto.Adapters.SQL` is always checked, independent of this list |
+| `Warning.RepoCallInResource` | `excluded_paths` | `[~r"/test/", "test"]` | Paths or regexes to skip. Binary entries match as path segments or full file paths. Defaults to test directories, where repo calls in fixture modules are intentional |
 | `Warning.SensitiveAttributeExposed` | `sensitive_names` | `~w(password hashed_password password_hash password_digest token access_token secret client_secret totp_secret api_key private_key ssn)a` | Attribute names to flag when not marked `sensitive?: true`. Atom entries match exactly; `Regex` entries (e.g. `~r/_token$/`) match against the attribute name |
 | `Warning.SensitiveAttributeExposed` | `excluded_paths` | `[~r"/test/", "test"]` | Paths or regexes to skip. Binary entries match as path segments or full file paths. Defaults to test directories, where fake sensitive attributes are common in test resources |
 | `Warning.SensitiveFieldInAccept` | `dangerous_fields` | `~w(is_admin admin permissions api_key secret_key)a` | Field names to flag when found in `accept` lists |
