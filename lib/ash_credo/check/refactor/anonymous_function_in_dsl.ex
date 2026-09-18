@@ -5,17 +5,21 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
     tags: [:ash],
     explanations: [
       check: """
-      Flags anonymous functions (`fn ... end` or `&...` captures) passed to
-      `change`, `validate`, `prepare`, or `calculate` in the resource DSL.
-      Prefer to put the code in its own module and refer to that instead.
+      Flags anonymous functions (`fn ... end` or `&...` captures) anywhere
+      in the resource DSL. Prefer to put the code in its own module and
+      refer to that instead.
+
+      Spark lifts every anonymous function in DSL position into a
+      generated public function on the resource module, so the body
+      compiles as part of the resource and grows both the module and the
+      compile-time dependencies of everything it names.
 
       For changes and validations this is more than style: anonymous
       functions can never participate in atomic execution, because Ash
       cannot inspect what they contain. An update or destroy action
       carrying one either fails its atomicity requirement at runtime or
       forces `require_atomic? false`. Anonymous function changes also
-      cannot support batching. Function captures compile to the same
-      `*.Function` wrapper as `fn` and carry the same limitation.
+      cannot support batching.
 
           # Bad - can never be atomic, forces require_atomic? false
           update :update do
@@ -36,22 +40,53 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
       `Ash.Resource.Calculation` can implement `expression/2`; an `expr(...)`
       calculation is data-layer-native and is not flagged.
 
+      `change`, `validate`, `prepare` and `calculate` wrap whatever they
+      are given in a generated callback module, so a remote capture
+      carries the same limitation as `fn` and is flagged too. Every other
+      DSL option takes the function as written, and Spark passes a remote
+      `&Module.function/arity` through untouched, so there it is the fix
+      rather than the defect:
+
+          # Bad - lifted into the resource
+          action :employed?, :boolean do
+            run fn input, context -> ... end
+          end
+
+          publish :create, ["messages", :conversation_id] do
+            transform fn %{data: message} -> %{id: message.id} end
+          end
+
+          # Good
+          action :employed?, :boolean do
+            run MyApp.Employment.EmployedOn
+          end
+
+          publish :create, ["messages", :conversation_id] do
+            transform &MyApp.Chat.Notification.message/1
+          end
+
+      Bodies that run after compilation are ordinary code: an anonymous
+      function inside `def`, `defp`, a macro definition or `quote` is not
+      lifted and is not flagged.
+
       Anonymous functions are fine for prototyping, which is why this
       check is opt-in; silence individual call sites with
       `# credo:disable-for-next-line`.
       """
     ]
 
-  alias AshCredo.Introspection
+  alias AshCredo.Introspection.Block
   alias AshCredo.Orchestration
 
-  @wrappers ~w(change validate prepare)a
-  @action_types ~w(create read update destroy action)a
+  # Options that wrap what they are given in a generated callback module,
+  # so a remote capture is wrapped the same way `fn` is.
+  @wrapped ~w(change validate prepare calculate calculation)a
 
-  # Sections whose direct entries are change/validate/prepare entities.
-  @entity_sections ~w(changes validations preparations)a
+  # `calculation` is the do-block spelling of `calculate`; both report
+  # against the entity a reader recognises.
+  @canonical %{calculation: :calculate}
 
-  @module_advice %{
+  @advice %{
     change:
       "anonymous function changes can never be made atomic or support batching. " <>
         "Extract it into a module with `use Ash.Resource.Change`",
@@ -63,108 +98,80 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
       "anonymous function calculations can never supply an expression, so the data " <>
         "layer cannot run them and sorting on them raises at runtime. Extract it into a " <>
         "module with `use Ash.Resource.Calculation` (which can implement `expression/2`) " <>
-        "or use `expr(...)`"
+        "or use `expr(...)`",
+    run:
+      "Extract it into a module with `use Ash.Resource.Actions.Implementation`, " <>
+        "or name a remote function"
   }
+
+  @generic_advice "Spark lifts it into a generated function on the resource module. " <>
+                    "Extract it into a module, or name a remote function " <>
+                    "(`&Module.function/arity`)"
+
+  # Heads whose bodies run after compilation, plus the forms that are not
+  # DSL at all. Nothing inside them is lifted.
+  @deferred ~w(def defp defmacro defmacrop defguard defguardp defimpl defdelegate defprotocol quote @)a
 
   @impl true
   def run(%SourceFile{} = source_file, params) do
     Orchestration.flat_map_resource_context(source_file, params, fn context, issue_meta ->
-      action_issues(context, issue_meta) ++
-        entity_section_issues(context, issue_meta) ++
-        pipeline_issues(context, issue_meta) ++
-        calculation_issues(context, issue_meta)
+      context.module_ast
+      |> Block.module_body()
+      |> Enum.flat_map(&issues(&1, nil, issue_meta))
     end)
   end
 
-  defp action_issues(context, issue_meta) do
-    entity_body_issues(context, :actions, @action_types, issue_meta)
+  # A module nested inside the resource owns its own DSL, and has its own
+  # resource context when it is one.
+  defp issues({:defmodule, _meta, _args}, _option, _issue_meta), do: []
+
+  defp issues({head, _meta, args}, _option, _issue_meta) when head in @deferred and is_list(args),
+    do: []
+
+  defp issues({:fn, _meta, _clauses}, option, issue_meta), do: [issue(option, "fn", issue_meta)]
+
+  # Spark passes a remote capture through untouched, so it is only a
+  # defect where Ash wraps what it is given.
+  defp issues({:&, _meta, [{:/, _, [{{:., _, _}, _, _}, _arity]}]}, option, issue_meta) do
+    if name_of(option) in @wrapped, do: [issue(option, "&", issue_meta)], else: []
   end
 
-  defp pipeline_issues(context, issue_meta) do
-    entity_body_issues(context, :pipelines, [:pipeline], issue_meta)
-  end
+  defp issues({:&, _meta, _body}, option, issue_meta), do: [issue(option, "&", issue_meta)]
 
-  defp entity_body_issues(context, section_name, entity_names, issue_meta) do
-    context
-    |> Introspection.resource_sections(section_name)
-    |> Introspection.action_entities(entity_names)
-    |> Enum.flat_map(fn entity_ast ->
-      entity_ast
-      |> Introspection.entity_body()
-      |> Enum.flat_map(&anonymous_wrapper_issues(&1, issue_meta))
-    end)
-  end
+  # A named call is the DSL option any function inside it belongs to.
+  defp issues({name, meta, args}, _option, issue_meta) when is_atom(name) and is_list(args),
+    do: Enum.flat_map(args, &issues(&1, {name, meta}, issue_meta))
 
-  defp entity_section_issues(context, issue_meta) do
-    Enum.flat_map(@entity_sections, fn section_name ->
-      context
-      |> Introspection.resource_sections(section_name)
-      |> Introspection.action_entities(@wrappers)
-      |> Enum.flat_map(&anonymous_wrapper_issues(&1, issue_meta))
-    end)
-  end
+  defp issues({left, right}, option, issue_meta),
+    do: Enum.flat_map([left, right], &issues(&1, option, issue_meta))
 
-  # The callback is `calculate`'s third positional argument
-  # (`calculate :name, :type, fn ... end`), unlike the wrappers, where it
-  # is the first.
-  defp calculation_issues(context, issue_meta) do
-    context
-    |> Introspection.resource_sections(:calculations)
-    |> Introspection.action_entities([:calculate])
-    |> Enum.flat_map(&calculate_entity_issues(&1, issue_meta))
-  end
+  defp issues({_call, _meta, args}, option, issue_meta) when is_list(args),
+    do: Enum.flat_map(args, &issues(&1, option, issue_meta))
 
-  defp calculate_entity_issues(
-         {:calculate, meta, [_name, _type, calculation | _]} = entity_ast,
-         issue_meta
-       ) do
-    if anonymous_function?(calculation) do
-      [anonymous_issue(:calculate, meta, issue_meta)]
-    else
-      do_block_calculation_issues(entity_ast, issue_meta)
-    end
-  end
+  defp issues(list, option, issue_meta) when is_list(list),
+    do: Enum.flat_map(list, &issues(&1, option, issue_meta))
 
-  defp calculate_entity_issues(entity_ast, issue_meta) do
-    do_block_calculation_issues(entity_ast, issue_meta)
-  end
+  defp issues(_other, _option, _issue_meta), do: []
 
-  defp do_block_calculation_issues(entity_ast, issue_meta) do
-    entity_ast
-    |> Introspection.entity_body()
-    |> Enum.flat_map(fn
-      {:calculation, meta, [calculation | _]} ->
-        if anonymous_function?(calculation) do
-          [anonymous_issue(:calculate, meta, issue_meta)]
-        else
-          []
-        end
+  defp issue(option, fallback_trigger, issue_meta) do
+    canonical = option |> name_of() |> canonical()
+    trigger = if canonical, do: to_string(canonical), else: fallback_trigger
 
-      _other ->
-        []
-    end)
-  end
-
-  defp anonymous_wrapper_issues({wrapper, meta, [first_arg | _]}, issue_meta)
-       when wrapper in @wrappers do
-    if anonymous_function?(first_arg) do
-      [anonymous_issue(wrapper, meta, issue_meta)]
-    else
-      []
-    end
-  end
-
-  defp anonymous_wrapper_issues(_other, _issue_meta), do: []
-
-  defp anonymous_issue(wrapper, meta, issue_meta) do
     format_issue(issue_meta,
-      message: "`#{wrapper}` is passed an anonymous function - #{@module_advice[wrapper]}.",
-      trigger: "#{wrapper}",
-      line_no: meta[:line]
+      message:
+        "`#{trigger}` is passed an anonymous function - " <>
+          "#{Map.get(@advice, canonical, @generic_advice)}.",
+      trigger: trigger,
+      line_no: line_of(option)
     )
   end
 
-  defp anonymous_function?({:fn, _, _}), do: true
-  defp anonymous_function?({:&, _, _}), do: true
-  defp anonymous_function?(_other), do: false
+  defp name_of({name, _meta}), do: name
+  defp name_of(nil), do: nil
+
+  defp canonical(nil), do: nil
+  defp canonical(name), do: Map.get(@canonical, name, name)
+
+  defp line_of({_name, meta}), do: meta[:line]
+  defp line_of(nil), do: 1
 end
