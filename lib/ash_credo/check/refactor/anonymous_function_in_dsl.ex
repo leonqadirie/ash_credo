@@ -10,9 +10,14 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
       refer to that instead.
 
       Spark lifts every anonymous function in DSL position into a
-      generated public function on the resource module, so the body
-      compiles as part of the resource and grows both the module and the
-      compile-time dependencies of everything it names.
+      generated public function on the resource module. The body then
+      lives under a generated name, appears that way in stack traces, and
+      cannot be tested or documented on its own. It also makes the resource
+      the file where that logic changes. The resource is a compile-time
+      dependency of its domain and of every module that reads it at
+      compile time, so each edit to an inline function recompiles all of
+      them. A callback module is not a compile-time dependency of the
+      resource, so an edit there recompiles only that module.
 
       For changes and validations this is more than style: anonymous
       functions can never participate in atomic execution, because Ash
@@ -45,12 +50,13 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
       never runs atomically.
 
       Ash wraps the value of `change`, `validate`, `prepare` and `calculate`
-      in a callback module that cannot implement `atomic/3` or `expression/2`.
-      A remote capture there has the same limitation as `fn`, so the check flags
-      it too. `run` and `manual` also wrap a remote capture, but the wrapper
-      loses no capability, so the check does not flag it. Spark passes a remote
-      `&Module.function/arity` through untouched, so in every other option
-      it is the fix rather than the defect:
+      in a callback module. For changes, validations and calculations that
+      wrapper cannot implement `atomic/3` or `expression/2`, so a remote
+      capture there has the same limitation as `fn`. The check flags a
+      remote capture in all four, because those callbacks belong in a
+      module of their own. It leaves `run` and `manual` alone. Spark passes
+      a remote `&Module.function/arity` through untouched, so in every
+      other option it is the fix rather than the defect:
 
           # Bad - lifted into the resource
           action :employed?, :boolean do
@@ -90,8 +96,9 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
   alias AshCredo.Introspection.Block
   alias AshCredo.Orchestration
 
-  # Options whose wrapper module cannot implement `atomic/3` or `expression/2`,
-  # so a remote capture has the same limitation as `fn`.
+  # Options whose callback belongs in a module of its own, so the check flags
+  # a remote capture there too. For all but `prepare` the wrapper module also
+  # cannot implement `atomic/3` or `expression/2`.
   @wrapped ~w(change validate prepare calculate)a
 
   # Ash lifts the callback of its hook builtins itself, and a hook change
