@@ -40,12 +40,13 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
       `Ash.Resource.Calculation` can implement `expression/2`; an `expr(...)`
       calculation is data-layer-native and is not flagged.
 
-      `change`, `validate`, `prepare` and `calculate` wrap whatever they
-      are given in a generated callback module, so a remote capture
-      carries the same limitation as `fn` and is flagged too. Every other
-      DSL option takes the function as written, and Spark passes a remote
-      `&Module.function/arity` through untouched, so there it is the fix
-      rather than the defect:
+      Ash wraps the value of `change`, `validate`, `prepare` and `calculate`
+      in a callback module that cannot implement `atomic/3` or `expression/2`.
+      A remote capture there has the same limitation as `fn`, so the check flags
+      it too. `run` and `manual` also wrap a remote capture, but the wrapper
+      loses no capability, so the check does not flag it. Spark passes a remote
+      `&Module.function/arity` through untouched, so in every other option
+      it is the fix rather than the defect:
 
           # Bad - lifted into the resource
           action :employed?, :boolean do
@@ -65,9 +66,9 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
             transform &MyApp.Chat.Notification.message/1
           end
 
-      Bodies that run after compilation are ordinary code: an anonymous
-      function inside `def`, `defp`, a macro definition or `quote` is not
-      lifted and is not flagged.
+      Bodies that run after compilation are ordinary code: Spark does not
+      lift and the check does not flag an anonymous function inside
+      `def`, `defp`, a macro definition, or `quote`.
 
       Anonymous functions are fine for prototyping, which is why this
       check is opt-in; silence individual call sites with
@@ -78,9 +79,9 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
   alias AshCredo.Introspection.Block
   alias AshCredo.Orchestration
 
-  # Options that wrap what they are given in a generated callback module,
-  # so a remote capture is wrapped the same way `fn` is.
-  @wrapped ~w(change validate prepare calculate calculation)a
+  # Options whose wrapper module cannot implement `atomic/3` or `expression/2`,
+  # so a remote capture has the same limitation as `fn`.
+  @wrapped ~w(change validate prepare calculate)a
 
   # `calculation` is the do-block spelling of `calculate`; both report
   # against the entity a reader recognises.
@@ -109,7 +110,7 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
                     "(`&Module.function/arity`)"
 
   # Heads whose bodies run after compilation, plus the forms that are not
-  # DSL at all. Nothing inside them is lifted.
+  # DSL at all. Spark lifts nothing inside them.
   @deferred ~w(def defp defmacro defmacrop defguard defguardp defimpl defdelegate defprotocol quote @)a
 
   @impl true
