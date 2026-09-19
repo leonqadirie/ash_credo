@@ -40,6 +40,10 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
       `Ash.Resource.Calculation` can implement `expression/2`; an `expr(...)`
       calculation is data-layer-native and is not flagged.
 
+      Ash lifts the callback of `after_action`, `before_action`,
+      `after_transaction` and `before_transaction` too, and a hook change
+      never runs atomically.
+
       Ash wraps the value of `change`, `validate`, `prepare` and `calculate`
       in a callback module that cannot implement `atomic/3` or `expression/2`.
       A remote capture there has the same limitation as `fn`, so the check flags
@@ -83,9 +87,12 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
   # so a remote capture has the same limitation as `fn`.
   @wrapped ~w(change validate prepare calculate)a
 
-  # `calculation` is the do-block spelling of `calculate`; both report
-  # against the entity a reader recognises.
-  @canonical %{calculation: :calculate}
+  # Ash lifts the callback of its hook builtins itself, and a hook change
+  # never runs atomically, whatever it is given.
+  @hook_advice "a hook change can never be made atomic, so the action needs " <>
+                 "`require_atomic? false`. Name a remote function (`&MyApp.Hooks.notify/3`) " <>
+                 "to keep the body out of the resource, or move the logic into a module " <>
+                 "with `use Ash.Resource.Change` that implements `atomic/3`"
 
   @advice %{
     change:
@@ -102,7 +109,11 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
         "or use `expr(...)`",
     run:
       "Extract it into a module with `use Ash.Resource.Actions.Implementation`, " <>
-        "or name a remote function"
+        "or name a remote function",
+    after_action: @hook_advice,
+    before_action: @hook_advice,
+    after_transaction: @hook_advice,
+    before_transaction: @hook_advice
   }
 
   @generic_advice "Spark lifts it into a generated function on the resource module. " <>
@@ -129,19 +140,20 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
   defp issues({head, _meta, args}, _option, _issue_meta) when head in @deferred and is_list(args),
     do: []
 
-  defp issues({:fn, _meta, _clauses}, option, issue_meta), do: [issue(option, "fn", issue_meta)]
+  defp issues({:fn, meta, _clauses}, option, issue_meta),
+    do: [issue(option, "fn", meta, issue_meta)]
 
   # Spark passes a remote capture through untouched, so it is only a
   # defect where Ash wraps what it is given.
-  defp issues({:&, _meta, [{:/, _, [{{:., _, _}, _, _}, _arity]}]}, option, issue_meta) do
-    if name_of(option) in @wrapped, do: [issue(option, "&", issue_meta)], else: []
+  defp issues({:&, meta, [{:/, _, [{{:., _, _}, _, _}, _arity]}]}, option, issue_meta) do
+    if canonical(option) in @wrapped, do: [issue(option, "&", meta, issue_meta)], else: []
   end
 
-  defp issues({:&, _meta, _body}, option, issue_meta), do: [issue(option, "&", issue_meta)]
+  defp issues({:&, meta, _body}, option, issue_meta), do: [issue(option, "&", meta, issue_meta)]
 
   # A named call is the DSL option any function inside it belongs to.
-  defp issues({name, meta, args}, _option, issue_meta) when is_atom(name) and is_list(args),
-    do: Enum.flat_map(args, &issues(&1, {name, meta}, issue_meta))
+  defp issues({name, _meta, args}, _option, issue_meta) when is_atom(name) and is_list(args),
+    do: Enum.flat_map(args, &issues(&1, name, issue_meta))
 
   defp issues({left, right}, option, issue_meta),
     do: Enum.flat_map([left, right], &issues(&1, option, issue_meta))
@@ -154,8 +166,8 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
 
   defp issues(_other, _option, _issue_meta), do: []
 
-  defp issue(option, fallback_trigger, issue_meta) do
-    canonical = option |> name_of() |> canonical()
+  defp issue(option, fallback_trigger, meta, issue_meta) do
+    canonical = canonical(option)
     trigger = if canonical, do: to_string(canonical), else: fallback_trigger
 
     format_issue(issue_meta,
@@ -163,16 +175,10 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
         "`#{trigger}` is passed an anonymous function - " <>
           "#{Map.get(@advice, canonical, @generic_advice)}.",
       trigger: trigger,
-      line_no: line_of(option)
+      line_no: meta[:line]
     )
   end
 
-  defp name_of({name, _meta}), do: name
-  defp name_of(nil), do: nil
-
-  defp canonical(nil), do: nil
-  defp canonical(name), do: Map.get(@canonical, name, name)
-
-  defp line_of({_name, meta}), do: meta[:line]
-  defp line_of(nil), do: 1
+  defp canonical(:calculation), do: :calculate
+  defp canonical(name), do: name
 end

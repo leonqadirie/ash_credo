@@ -422,4 +422,42 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDslTest do
 
     assert [] = run_check(AnonymousFunctionInDsl, source)
   end
+
+  test "reports fn passed to an after_action hook with hook advice" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        update :update do
+          change after_action(fn changeset, result, _context -> {:ok, result} end)
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(AnonymousFunctionInDsl, source)
+    assert issue.trigger == "after_action"
+    assert issue.line_no == 6
+    assert issue.message =~ "require_atomic? false"
+  end
+
+  test "reports the line of the function, not the line of the entity above it" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      attributes do
+        attribute :slug, :string,
+          default:
+            fn ->
+              "post"
+            end
+      end
+    end
+    """
+
+    assert [issue] = run_check(AnonymousFunctionInDsl, source)
+    assert issue.line_no == 7
+  end
 end
