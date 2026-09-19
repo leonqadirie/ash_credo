@@ -458,7 +458,9 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDslTest do
     """
 
     assert [issue] = run_check(AnonymousFunctionInDsl, source)
+    assert issue.trigger == "default"
     assert issue.line_no == 7
+    assert issue.message =~ "Spark lifts it"
   end
 
   test "no issue for a function the compiler evaluates before Spark sees it" do
@@ -548,5 +550,171 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDslTest do
     assert issue.trigger == "change"
     assert issue.line_no == 5
     assert issue.message =~ "atomic"
+  end
+
+  test "reports an inline default under its own name" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      attributes do
+        attribute :a, :string, default: fn -> "a" end
+      end
+    end
+    """
+
+    assert [issue] = run_check(AnonymousFunctionInDsl, source)
+    assert issue.trigger == "default"
+    assert issue.line_no == 5
+    assert issue.message =~ "Spark lifts it"
+  end
+
+  test "reports an inline pub_sub transform under its own name" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      pub_sub do
+        module MyAppWeb.Endpoint
+        publish :create, ["posts"], transform: fn notification -> notification end
+      end
+    end
+    """
+
+    assert [issue] = run_check(AnonymousFunctionInDsl, source)
+    assert issue.trigger == "transform"
+    assert issue.line_no == 6
+    assert issue.message =~ "Spark lifts it"
+  end
+
+  test "reports an inline fn change with change advice" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        create :create, change: fn changeset, _context -> changeset end
+      end
+    end
+    """
+
+    assert [issue] = run_check(AnonymousFunctionInDsl, source)
+    assert issue.trigger == "change"
+    assert issue.line_no == 5
+    assert issue.message =~ "atomic"
+    assert issue.message =~ "Ash.Resource.Change"
+  end
+
+  test "reports the capture line when it follows the option on a separate line" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        create :create,
+          change:
+            &MyApp.Changes.slug/2
+      end
+    end
+    """
+
+    assert [issue] = run_check(AnonymousFunctionInDsl, source)
+    assert issue.trigger == "change"
+    assert issue.line_no == 7
+    assert issue.message =~ "atomic"
+  end
+
+  test "no issue for a capture used to compute accepted attributes" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        create :create do
+          accept Enum.reject(fields(), &(&1 == :id))
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "no issue for a module-level remote call with no enclosing option" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      Enum.each([:a], fn value -> Module.put_attribute(__MODULE__, :foo, value) end)
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "no issue for anonymous functions inside an if expression" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      if true do
+        fn -> :draft end
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "no issue for anonymous functions inside a comprehension" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      for type <- [:read] do
+        fn -> type end
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "no issue for anonymous functions in use options" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+      use MyApp.ResourceHelpers, callback: fn value -> value end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "no issue for anonymous functions inside a map" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      %{transform: fn value -> value end}
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "no issue for anonymous functions inside a pipeline" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      attributes do
+        attribute :types, {:array, :atom},
+          default: (fn -> [:read] end) |> then(& &1.())
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
   end
 end
