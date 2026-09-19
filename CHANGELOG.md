@@ -1,6 +1,14 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.18.0](https://github.com/leonqadirie/ash_credo/compare/v0.17.1...v0.18.0) (2026-09-19)
+
+
+### Features
+
+* add Warning.RepoCallInResource check ([#241](https://github.com/leonqadirie/ash_credo/issues/241)) ([3c1da33](https://github.com/leonqadirie/ash_credo/commit/3c1da3385cf207dd371d49726c031e6267fbae30)), closes [#239](https://github.com/leonqadirie/ash_credo/issues/239) by [@leonqadirie](https://github.com/leonqadirie)
+* flag anonymous functions everywhere in the resource DSL ([#245](https://github.com/leonqadirie/ash_credo/issues/245)) ([670a578](https://github.com/leonqadirie/ash_credo/commit/670a578126be90c84a5cc263c745efee2153ac7a)) by [@joshprice](https://github.com/joshprice)
+
 ## [0.17.1](https://github.com/leonqadirie/ash_credo/compare/v0.17.0...v0.17.1) (2026-08-07)
 
 
