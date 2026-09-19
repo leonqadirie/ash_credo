@@ -70,9 +70,16 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
             transform &MyApp.Chat.Notification.message/1
           end
 
-      Bodies that run after compilation are ordinary code: Spark does not
-      lift and the check does not flag an anonymous function inside
-      `def`, `defp`, a macro definition, or `quote`.
+      Spark lifts a function in three positions only: the direct value of
+      an entity argument, the direct value of an option, and a value in a
+      keyword list under its key. It returns every other value unchanged,
+      so the check reports those three positions and stops everywhere
+      else. A function the compiler evaluates before Spark sees it, such
+      as `default: Enum.map([:read], fn t -> t end)`, is ordinary code.
+
+      Bodies that run after compilation are ordinary code as well: Spark
+      does not lift and the check does not flag an anonymous function
+      inside `def`, `defp`, a macro definition, or `quote`.
 
       Anonymous functions are fine for prototyping, which is why this
       check is opt-in; silence individual call sites with
@@ -120,10 +127,6 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
                     "Extract it into a module, or name a remote function " <>
                     "(`&Module.function/arity`)"
 
-  # Heads whose bodies run after compilation, plus the forms that are not
-  # DSL at all. Spark lifts nothing inside them.
-  @deferred ~w(def defp defmacro defmacrop defguard defguardp defimpl defdelegate defprotocol quote @)a
-
   @impl true
   def run(%SourceFile{} = source_file, params) do
     Orchestration.flat_map_resource_context(source_file, params, fn context, issue_meta ->
@@ -132,13 +135,6 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
       |> Enum.flat_map(&issues(&1, nil, issue_meta))
     end)
   end
-
-  # A module nested inside the resource owns its own DSL, and has its own
-  # resource context when it is one.
-  defp issues({:defmodule, _meta, _args}, _option, _issue_meta), do: []
-
-  defp issues({head, _meta, args}, _option, _issue_meta) when head in @deferred and is_list(args),
-    do: []
 
   defp issues({:fn, meta, _clauses}, option, issue_meta),
     do: [issue(option, "fn", meta, issue_meta)]
@@ -151,20 +147,31 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
 
   defp issues({:&, meta, _body}, option, issue_meta), do: [issue(option, "&", meta, issue_meta)]
 
-  # A named call is the DSL option any function inside it belongs to.
-  defp issues({name, _meta, args}, _option, issue_meta) when is_atom(name) and is_list(args),
-    do: Enum.flat_map(args, &issues(&1, name, issue_meta))
+  # A do block holds entities. Each entity names its own option.
+  defp issues({:__block__, _meta, body}, option, issue_meta), do: issues(body, option, issue_meta)
 
-  defp issues({left, right}, option, issue_meta),
-    do: Enum.flat_map([left, right], &issues(&1, option, issue_meta))
+  # Spark lifts a function only as the direct value of an entity argument,
+  # an option or a keyword-list value. The compiler evaluates a Kernel
+  # macro, an operator, a special form and a remote call as ordinary code,
+  # so the walk stops there.
+  defp issues({name, _meta, args}, _option, issue_meta) when is_atom(name) and is_list(args) do
+    if elixir?(name, length(args)),
+      do: [],
+      else: Enum.flat_map(args, &issues(&1, name, issue_meta))
+  end
 
-  defp issues({_call, _meta, args}, option, issue_meta) when is_list(args),
-    do: Enum.flat_map(args, &issues(&1, option, issue_meta))
+  defp issues({key, value}, _option, issue_meta) when is_atom(key),
+    do: issues(value, key, issue_meta)
 
   defp issues(list, option, issue_meta) when is_list(list),
     do: Enum.flat_map(list, &issues(&1, option, issue_meta))
 
   defp issues(_other, _option, _issue_meta), do: []
+
+  defp elixir?(name, arity) do
+    Macro.special_form?(name, arity) or Macro.operator?(name, arity) or
+      macro_exported?(Kernel, name, arity) or function_exported?(Kernel, name, arity)
+  end
 
   defp issue(option, fallback_trigger, meta, issue_meta) do
     canonical = canonical(option)

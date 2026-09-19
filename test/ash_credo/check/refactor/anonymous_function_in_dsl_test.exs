@@ -460,4 +460,93 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDslTest do
     assert [issue] = run_check(AnonymousFunctionInDsl, source)
     assert issue.line_no == 7
   end
+
+  test "no issue for a function the compiler evaluates before Spark sees it" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      names = Enum.map([:a, :b], fn name -> name end)
+
+      attributes do
+        attribute :types, {:array, :atom}, default: Enum.map([:read], fn type -> type end)
+        attribute :status, :atom, constraints: [one_of: Enum.map([:a, :b], & &1)]
+      end
+
+      actions do
+        read :search do
+          filter expr(id in ^Enum.map([1], fn id -> id end))
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "no issue for a capture under a key of its own" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        create :create do
+          change {MyApp.Changes.Slugify, callback: &MyApp.Slug.make/1}
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "no issue for a capture passed to a builtin through its module" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        create :create do
+          change Ash.Resource.Change.Builtins.set_attribute(:published_at, &DateTime.utc_now/0)
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "reports a keyword-form option under its own name" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        action :ok?, :boolean, run: fn _input, _context -> {:ok, true} end
+      end
+    end
+    """
+
+    assert [issue] = run_check(AnonymousFunctionInDsl, source)
+    assert issue.trigger == "run"
+    assert issue.line_no == 5
+    assert issue.message =~ "Ash.Resource.Actions.Implementation"
+  end
+
+  test "reports a remote capture given to a wrapped option in keyword form" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        create :create, change: &MyApp.Changes.slug/2
+      end
+    end
+    """
+
+    assert [issue] = run_check(AnonymousFunctionInDsl, source)
+    assert issue.trigger == "change"
+    assert issue.line_no == 5
+    assert issue.message =~ "atomic"
+  end
 end
