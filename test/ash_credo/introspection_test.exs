@@ -131,6 +131,29 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "resource_fragment_contexts/1" do
+    test "returns only fragments of Ash.Resource" do
+      source = """
+      defmodule MyApp.Post.Calculations do
+        use Spark.Dsl.Fragment, of: Ash.Resource, authorizers: [Ash.Policy.Authorizer]
+      end
+
+      defmodule MyApp.Blog.Resources do
+        use Spark.Dsl.Fragment, of: Ash.Domain
+      end
+
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+      end
+      """
+
+      assert [fragment] = Introspection.resource_fragment_contexts(source_file(source))
+      assert fragment.absolute_segments == [:MyApp, :Post, :Calculations]
+      assert fragment.use_line == 2
+      assert [authorizers: _] = fragment.use_opts
+    end
+  end
+
   describe "resource_contexts/1" do
     test "returns resource contexts in file order" do
       source = """
@@ -1032,6 +1055,22 @@ defmodule AshCredo.IntrospectionTest do
 
     test "returns nil for non-entity" do
       assert nil == Introspection.entity_name(:not_an_entity)
+    end
+  end
+
+  describe "entity_label/1" do
+    test "formats an atom name" do
+      assert "calculate :mine" ==
+               Introspection.entity_label(quote(do: calculate(:mine, :boolean)))
+    end
+
+    test "formats a non-atom name as source text" do
+      assert "calculate @name" ==
+               Introspection.entity_label(quote(do: calculate(@name, :boolean)))
+    end
+
+    test "falls back to the call name without a name argument" do
+      assert "calculate" == Introspection.entity_label(quote(do: calculate()))
     end
   end
 

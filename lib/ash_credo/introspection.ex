@@ -72,6 +72,7 @@ defmodule AshCredo.Introspection do
   @action_entities ~w(create read update destroy action)a
 
   @resource_contexts_key_tag {__MODULE__, :resource_contexts}
+  @resource_fragment_contexts_key_tag {__MODULE__, :resource_fragment_contexts}
 
   @doc "Returns all modules in the source file that directly `use Ash.Resource`."
   def resource_modules(source_file), do: modules_using(source_file, [:Ash, :Resource])
@@ -157,6 +158,53 @@ defmodule AshCredo.Introspection do
       use_opts: normalized_resource_use_opts(use_metadata),
       absolute_segments: absolute_segments
     }
+  end
+
+  @doc """
+  Returns resource contexts for the `Spark.Dsl.Fragment` modules in the
+  source file that declare `of: Ash.Resource`, in file order. A
+  fragment holds part of a resource's DSL, so only checks that judge
+  each entity on its own should read these contexts. `:use_line` points
+  at the fragment's `use`, and `:use_opts` holds its options minus
+  `:of`.
+
+  Memoized like `resource_contexts/1`.
+  """
+  def resource_fragment_contexts(source_file) do
+    key = {@resource_fragment_contexts_key_tag, source_file.filename, source_hash(source_file)}
+
+    Cache.memoize(key, fn -> compute_resource_fragment_contexts(source_file) end)
+  end
+
+  defp compute_resource_fragment_contexts(source_file) do
+    source_file
+    |> all_modules_with_path()
+    |> Enum.flat_map(fn {ast, segs} ->
+      ast
+      |> find_use([:Spark, :Dsl, :Fragment])
+      |> resource_fragment_context(ast, segs)
+    end)
+  end
+
+  defp resource_fragment_context(%UseMetadata{opts: opts} = use_metadata, ast, segs) do
+    if resource_fragment_opts?(opts) do
+      [
+        %ResourceContext{
+          module_ast: ast,
+          use_line: use_metadata_line(use_metadata),
+          use_opts: Keyword.delete(opts, :of),
+          absolute_segments: segs
+        }
+      ]
+    else
+      []
+    end
+  end
+
+  defp resource_fragment_context(nil, _ast, _segs), do: []
+
+  defp resource_fragment_opts?(opts) do
+    Keyword.keyword?(opts) and match?({:__aliases__, _, [:Ash, :Resource]}, opts[:of])
   end
 
   @doc "Returns all modules in the source file that directly `use Ash.Domain`."
@@ -587,6 +635,15 @@ defmodule AshCredo.Introspection do
   @doc "Extracts the first atom argument from an entity call (e.g. the action name)."
   def entity_name({_call, _meta, [name | _]}) when is_atom(name), do: name
   def entity_name(_), do: nil
+
+  @doc """
+  Formats an entity call head for issue messages, e.g. `calculate :mine`.
+  Non-atom names such as module attributes render as source text.
+  """
+  def entity_label({call, _meta, [name | _]}) when not is_list(name),
+    do: "#{call} #{Macro.to_string(name)}"
+
+  def entity_label({call, _meta, _args}), do: "#{call}"
 
   @doc "Returns the line number of a `use` call for the given module aliases."
   def find_use_line({:defmodule, _, _} = module_ast, module_aliases) do

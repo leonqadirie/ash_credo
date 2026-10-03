@@ -41,6 +41,31 @@ defmodule AshCredo.Orchestration do
   end
 
   @doc """
+  Like `flat_map_resource_section/4`, but also visits
+  `Spark.Dsl.Fragment` modules declared `of: Ash.Resource`. A fragment
+  holds only part of a resource, so only checks that judge each entity
+  on its own may use this; section-level rules such as required entries
+  would misfire on fragments.
+  """
+  def flat_map_resource_or_fragment_section(
+        %SourceFile{} = source_file,
+        params,
+        section_name,
+        fun
+      )
+      when is_function(fun, 2) do
+    issue_meta = IssueMeta.for(source_file, params)
+
+    (Introspection.resource_contexts(source_file) ++
+       Introspection.resource_fragment_contexts(source_file))
+    |> Enum.flat_map(fn context ->
+      context
+      |> Introspection.resource_sections(section_name)
+      |> fun.(issue_meta)
+    end)
+  end
+
+  @doc """
   Iterates resource contexts and invokes
   `fun.(resource, context, issue_meta)` only for contexts that (a) have
   a literal `defmodule` name, so `:absolute_segments` can resolve to a
@@ -104,6 +129,39 @@ defmodule AshCredo.Orchestration do
       check
     )
   end
+
+  @doc """
+  Builds one issue per entity in `entities` that does not set `option`,
+  either inline or in its `do` block. `message_fun` receives the
+  entity's label (see `Introspection.entity_label/1`) and returns the
+  issue message; by default it reports a missing explicit option.
+  """
+  def missing_option_issues(entities, option, issue_meta, check, message_fun \\ nil) do
+    message_fun = message_fun || (&"`#{&1}` is missing an explicit `#{option}` option.")
+
+    entities
+    |> Enum.reject(&Introspection.entity_has_opt_key?(&1, option))
+    |> Enum.map(fn {_call, meta, _args} = entity ->
+      Check.format_issue(
+        issue_meta,
+        [
+          message: message_fun.(Introspection.entity_label(entity)),
+          trigger: entity_trigger(entity),
+          line_no: meta[:line]
+        ],
+        check
+      )
+    end)
+  end
+
+  # Credo anchors the issue column on the trigger, so it carries the
+  # name as written in the source.
+  defp entity_trigger({_call, _meta, [name | _]}) when is_atom(name), do: Atom.to_string(name)
+
+  defp entity_trigger({_call, _meta, [name | _]}) when not is_list(name),
+    do: Macro.to_string(name)
+
+  defp entity_trigger({call, _meta, _args}), do: Atom.to_string(call)
 
   @doc """
   Builds the standard "Could not load" diagnostic for `resource`,

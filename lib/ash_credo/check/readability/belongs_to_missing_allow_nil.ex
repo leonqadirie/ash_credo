@@ -10,6 +10,9 @@ defmodule AshCredo.Check.Readability.BelongsToMissingAllowNil do
       and prevents surprises when defaults change.
 
           belongs_to :author, MyApp.Author, allow_nil?: false
+
+      The check also scans `Spark.Dsl.Fragment` modules declared
+      `of: Ash.Resource`.
       """
     ]
 
@@ -19,7 +22,7 @@ defmodule AshCredo.Check.Readability.BelongsToMissingAllowNil do
   @impl true
   def run(%SourceFile{} = source_file, params),
     do:
-      Orchestration.flat_map_resource_section(
+      Orchestration.flat_map_resource_or_fragment_section(
         source_file,
         params,
         :relationships,
@@ -29,17 +32,6 @@ defmodule AshCredo.Check.Readability.BelongsToMissingAllowNil do
   defp check_belongs_to(rels_ast, issue_meta) do
     rels_ast
     |> Introspection.entities(:belongs_to)
-    |> Enum.reject(&has_allow_nil_opt?/1)
-    |> Enum.map(fn {_, meta, [name | _]} ->
-      format_issue(issue_meta,
-        message: "`belongs_to :#{name}` is missing an explicit `allow_nil?` option.",
-        trigger: "#{name}",
-        line_no: meta[:line]
-      )
-    end)
-  end
-
-  defp has_allow_nil_opt?(entity_ast) do
-    Introspection.entity_has_opt_key?(entity_ast, :allow_nil?)
+    |> Orchestration.missing_option_issues(:allow_nil?, issue_meta, __MODULE__)
   end
 end

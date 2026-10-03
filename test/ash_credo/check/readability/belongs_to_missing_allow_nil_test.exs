@@ -64,6 +64,56 @@ defmodule AshCredo.Check.Readability.BelongsToMissingAllowNilTest do
     assert [] = run_check(BelongsToMissingAllowNil, source)
   end
 
+  test "reports issue for a relationship named by a module attribute" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      @rel :author
+
+      relationships do
+        belongs_to @rel, MyApp.Author
+      end
+    end
+    """
+
+    assert [issue] = run_check(BelongsToMissingAllowNil, source)
+    assert issue.message =~ "`belongs_to @rel`"
+    assert issue.trigger == "@rel"
+  end
+
+  test "reports a relationship whose destination is a module attribute" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      @destination MyApp.Author
+
+      relationships do
+        belongs_to :author, @destination
+      end
+    end
+    """
+
+    assert [issue] = run_check(BelongsToMissingAllowNil, source)
+    assert issue.message =~ "`belongs_to :author`"
+  end
+
+  test "reports issue in a resource fragment" do
+    source = """
+    defmodule MyApp.Post.Relationships do
+      use Spark.Dsl.Fragment, of: Ash.Resource
+
+      relationships do
+        belongs_to :author, MyApp.Author
+      end
+    end
+    """
+
+    assert [issue] = run_check(BelongsToMissingAllowNil, source)
+    assert issue.message =~ "`belongs_to :author`"
+  end
+
   test "no issue when no relationships section" do
     source = """
     defmodule MyApp.Post do
