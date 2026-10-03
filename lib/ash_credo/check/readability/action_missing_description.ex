@@ -12,6 +12,9 @@ defmodule AshCredo.Check.Readability.ActionMissingDescription do
             description "Register a new user account."
             # ...
           end
+
+      The check also scans `Spark.Dsl.Fragment` modules declared
+      `of: Ash.Resource`.
       """
     ]
 
@@ -23,7 +26,7 @@ defmodule AshCredo.Check.Readability.ActionMissingDescription do
   @impl true
   def run(%SourceFile{} = source_file, params),
     do:
-      Orchestration.flat_map_resource_section(
+      Orchestration.flat_map_resource_or_fragment_section(
         source_file,
         params,
         :actions,
@@ -33,19 +36,11 @@ defmodule AshCredo.Check.Readability.ActionMissingDescription do
   defp check_descriptions(actions_ast, issue_meta) do
     actions_ast
     |> Introspection.action_entities(@action_types)
-    |> Enum.reject(&has_description?/1)
-    |> Enum.map(fn {type, meta, _} = entity ->
-      name = Introspection.entity_name(entity)
-
-      format_issue(issue_meta,
-        message: "Action `#{name || type}` is missing a `description`.",
-        trigger: "#{name || type}",
-        line_no: meta[:line]
-      )
-    end)
-  end
-
-  defp has_description?(entity_ast) do
-    Introspection.entity_has_opt_key?(entity_ast, :description)
+    |> Orchestration.missing_option_issues(
+      :description,
+      issue_meta,
+      __MODULE__,
+      &"Action `#{&1}` is missing a `description`."
+    )
   end
 end
