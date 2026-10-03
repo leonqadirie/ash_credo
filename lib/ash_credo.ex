@@ -64,7 +64,8 @@ defmodule AshCredo do
             {AshCredo.Check.Design.MissingTimestamps, false},
             # Readability
             {AshCredo.Check.Readability.ActionMissingDescription, false},
-            {AshCredo.Check.Readability.BelongsToMissingAllowNil, false}
+            {AshCredo.Check.Readability.BelongsToMissingAllowNil, false},
+            {AshCredo.Check.Readability.CalculationMissingAllowNil, false}
           ]
         }
       }

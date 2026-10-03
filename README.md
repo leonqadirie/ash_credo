@@ -101,6 +101,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `MissingTimestamps` | Design | Normal | No | Suggests adding `timestamps()` to persisted resources. **Requires a compiled project.** |
 | `ActionMissingDescription` | Readability | Low | No | Flags actions without a `description` |
 | `BelongsToMissingAllowNil` | Readability | Normal | No | Flags `belongs_to` without an explicit `allow_nil?` |
+| `CalculationMissingAllowNil` | Readability | Normal | No | Flags `calculate` without an explicit `allow_nil?` |
 
 ## Checks that require a compiled project
 
@@ -191,7 +192,8 @@ checks: %{
     {AshCredo.Check.Design.MissingPrimaryAction, []},
     {AshCredo.Check.Design.MissingTimestamps, []},
     {AshCredo.Check.Readability.ActionMissingDescription, []},
-    {AshCredo.Check.Readability.BelongsToMissingAllowNil, []}
+    {AshCredo.Check.Readability.BelongsToMissingAllowNil, []},
+    {AshCredo.Check.Readability.CalculationMissingAllowNil, []}
   ]
 }
 ```
