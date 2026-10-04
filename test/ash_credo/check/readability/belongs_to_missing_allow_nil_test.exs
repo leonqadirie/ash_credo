@@ -3,6 +3,40 @@ defmodule AshCredo.Check.Readability.BelongsToMissingAllowNilTest do
 
   alias AshCredo.Check.Readability.BelongsToMissingAllowNil
 
+  test "reports relationships when the resource use is an inherited alias" do
+    source = """
+    defmodule MyApp do
+      alias Ash.Resource, as: Resource
+      defmodule Post do
+        use Resource, domain: MyApp.Blog
+        relationships do
+          belongs_to :author, MyApp.Author
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(BelongsToMissingAllowNil, source)
+    assert issue.line_no == 6
+    assert issue.trigger == "author"
+  end
+
+  test "reports relationships in a fragment declared through aliases" do
+    source = """
+    alias Spark.Dsl.Fragment, as: Fragment
+    alias Ash.Resource, as: Resource
+    defmodule MyApp.Relationships do
+      use Fragment, of: Resource
+      relationships do
+        belongs_to :author, MyApp.Author
+      end
+    end
+    """
+
+    assert [issue] = run_check(BelongsToMissingAllowNil, source)
+    assert issue.line_no == 6
+  end
+
   test "reports issue for belongs_to without allow_nil?" do
     source = """
     defmodule MyApp.Post do

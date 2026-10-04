@@ -131,7 +131,205 @@ defmodule AshCredo.IntrospectionTest do
     end
   end
 
+  describe "alias-aware use detection" do
+    test "resolves a renamed resource alias and preserves use metadata" do
+      source = """
+      defmodule MyApp.Post do
+        alias Ash.Resource, as: Resource
+        use Resource, domain: MyApp.Blog, data_layer: AshPostgres.DataLayer
+      end
+      """
+
+      sf = source_file(source)
+      [resource] = Introspection.resource_modules(sf)
+      [context] = Introspection.resource_contexts(sf)
+
+      assert Introspection.ash_resource?(sf)
+      assert Introspection.ash_resource?(resource)
+      assert context.module_ast == resource
+      assert context.absolute_segments == [:MyApp, :Post]
+      assert context.use_line == 3
+      assert context.use_opts == Introspection.use_opts(sf, [:Ash, :Resource])
+      assert context.use_opts == Introspection.use_opts(resource, [:Ash, :Resource])
+      assert Introspection.find_use_line(sf, [:Ash, :Resource]) == 3
+      assert Introspection.find_use_line(resource, [:Ash, :Resource]) == 3
+      assert Introspection.has_data_layer?(context)
+      assert Introspection.has_data_layer?(resource)
+
+      assert {:use, _, [{:__aliases__, _, [:Resource]}, _]} =
+               Enum.at(Block.module_body(resource), 1)
+    end
+
+    test "inherits grouped aliases declared outside modules" do
+      source = """
+      alias Ash.{Resource, Domain}
+      defmodule MyApp.Post do
+        use Resource, data_layer: :embedded
+      end
+      defmodule MyApp.Blog do
+        use Domain
+      end
+      """
+
+      sf = source_file(source)
+      assert [_] = Introspection.resource_modules(sf)
+      assert [_] = Introspection.domain_modules(sf)
+      assert Introspection.ash_resource?(sf)
+      assert Introspection.ash_domain?(sf)
+      assert Introspection.embedded_resource?(sf)
+      assert Introspection.use_opts(sf, [:Ash, :Resource]) == [data_layer: :embedded]
+      assert Introspection.find_use_line(sf, [:Ash, :Domain]) == 6
+    end
+
+    test "resolves relative references through a parent alias" do
+      source = """
+      alias Ash, as: Framework
+      defmodule MyApp.Post do
+        use Framework.Resource
+      end
+      defmodule MyApp.Blog do
+        use Framework.Domain
+      end
+      """
+
+      sf = source_file(source)
+      assert [_] = Introspection.resource_contexts(sf)
+      assert [_] = Introspection.domain_modules(sf)
+    end
+
+    test "inherits aliases in nested modules without leaking child overrides" do
+      source = """
+      defmodule MyApp do
+        alias Ash.Resource, as: Resource
+        defmodule Ignored do
+          alias Other.Resource, as: Resource
+          use Resource
+        end
+        defmodule Post do
+          use Resource, domain: MyApp.Blog
+        end
+      end
+      """
+
+      sf = source_file(source)
+      assert [context] = Introspection.resource_contexts(sf)
+      assert context.absolute_segments == [:MyApp, :Post]
+      assert context.use_line == 8
+      assert [context.module_ast] == Introspection.resource_modules(sf)
+      assert Introspection.find_use_line(sf, [:Ash, :Resource], context.module_ast) == 8
+    end
+
+    test "does not apply aliases declared after a use" do
+      source = """
+      defmodule MyApp.Post do
+        use Resource
+        alias Ash.Resource, as: Resource
+      end
+      """
+
+      sf = source_file(source)
+      refute Introspection.ash_resource?(sf)
+      assert Introspection.resource_contexts(sf) == []
+      assert Introspection.use_opts(sf, [:Ash, :Resource]) == nil
+    end
+
+    test "keeps a use resolved before a later alias override" do
+      source = """
+      defmodule MyApp.Post do
+        alias Ash.Resource, as: Resource
+        use Resource, domain: MyApp.Blog
+        alias Other.Resource, as: Resource
+      end
+      """
+
+      assert [context] = Introspection.resource_contexts(source_file(source))
+      assert context.use_line == 3
+    end
+
+    test "does not treat a shadowed Ash namespace as the framework" do
+      source = """
+      alias Other, as: Ash
+      defmodule MyApp.Post do
+        use Ash.Resource
+      end
+      defmodule MyApp.Blog do
+        use Ash.Domain
+      end
+      """
+
+      sf = source_file(source)
+      assert Introspection.resource_modules(sf) == []
+      assert Introspection.resource_contexts(sf) == []
+      assert Introspection.domain_modules(sf) == []
+    end
+
+    test "does not leak aliases from functions or branches" do
+      source = """
+      defmodule MyApp.Post do
+        def helper do
+          alias Ash.Resource, as: Resource
+        end
+        if true do
+          alias Ash.Domain, as: Domain
+        end
+        use Resource
+        use Domain
+      end
+      """
+
+      sf = source_file(source)
+      assert Introspection.resource_modules(sf) == []
+      assert Introspection.domain_modules(sf) == []
+    end
+
+    test "only uses direct module-body declarations for resource detection" do
+      source = """
+      defmodule MyApp do
+        alias Ash.Resource, as: Resource
+        def helper do
+          use Resource
+        end
+        defmodule Post do
+          use Resource
+        end
+      end
+      """
+
+      assert [context] = Introspection.resource_contexts(source_file(source))
+      assert context.absolute_segments == [:MyApp, :Post]
+    end
+
+    test "cached metadata distinguishes different enclosing alias environments" do
+      filename = "aliased_use_memoization.ex"
+      body = "defmodule MyApp.Post do\n  use Resource\nend"
+      ash_source = source_file("alias Ash.Resource, as: Resource\n" <> body, filename)
+      other_source = source_file("alias Other.Resource, as: Resource\n" <> body, filename)
+
+      assert [_] = Introspection.resource_contexts(ash_source)
+      assert Introspection.resource_contexts(other_source) == []
+      assert [_] = Introspection.resource_contexts(ash_source)
+    end
+  end
+
   describe "resource_fragment_contexts/1" do
+    test "resolves aliases for the fragment module and its of option" do
+      source = """
+      alias Spark.Dsl.Fragment, as: Fragment
+      alias Ash.{Resource, Domain}
+      defmodule MyApp.Relationships do
+        use Fragment, of: Resource, authorizers: [Ash.Policy.Authorizer]
+      end
+      defmodule MyApp.Resources do
+        use Fragment, of: Domain
+      end
+      """
+
+      assert [fragment] = Introspection.resource_fragment_contexts(source_file(source))
+      assert fragment.absolute_segments == [:MyApp, :Relationships]
+      assert fragment.use_line == 4
+      assert [authorizers: _] = fragment.use_opts
+    end
+
     test "returns only fragments of Ash.Resource" do
       source = """
       defmodule MyApp.Post.Calculations do
