@@ -652,11 +652,21 @@ defmodule AshCredoFixtures.FakeMacros do
     end
   end
 
+  def do_thing(x, y), do: {x, y}
+
   defmacro other(a, b) do
     quote do
       {unquote(a), unquote(b)}
     end
   end
+
+  defmacro with_default(value, other \\ :default) do
+    quote do
+      {unquote(value), unquote(other)}
+    end
+  end
+
+  defmacro no_args, do: :ok
 
   def regular(value), do: value
 end

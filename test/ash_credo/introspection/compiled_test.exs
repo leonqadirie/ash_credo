@@ -13,6 +13,24 @@ defmodule AshCredo.Introspection.CompiledTest do
   @post AshCredoFixtures.Blog.Post
   @plain AshCredoFixtures.Plain
 
+  describe "macros/1" do
+    test "preserves exact macro arities, including default arguments" do
+      assert {:ok, macros} = Compiled.macros(AshCredoFixtures.FakeMacros)
+
+      assert macros ==
+               MapSet.new([
+                 {:do_thing, 1},
+                 {:other, 2},
+                 {:with_default, 1},
+                 {:with_default, 2},
+                 {:no_args, 0}
+               ])
+
+      refute MapSet.member?(macros, {:do_thing, 2})
+      refute MapSet.member?(macros, {:regular, 1})
+    end
+  end
+
   describe "resource aspect accessors" do
     test "domain/1 returns the declared domain" do
       assert Compiled.domain(@post) == {:ok, AshCredoFixtures.Blog}

@@ -103,8 +103,9 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
       to learn which functions on each configured module are actually
       macros. This means:
 
-        * It only flags real macro calls; it never flags a non-macro call
-          on the same module (`Ash.Query.new/1`, for example).
+        * It matches the macro's name and arity, including the argument
+          supplied by a pipe. Regular functions with the same name at a
+          different arity are ignored.
         * New macros in future Ash releases are covered automatically,
           without code changes here.
         * User-supplied modules in `macro_modules` get the same precision
@@ -246,13 +247,32 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     {%{sites: sites}, _scope} =
       LexicalScopeWalker.traverse(
         body,
-        %{sites: []},
+        %{sites: [], piped_arities: %{}},
         &enter_for_calls(&1, &2, &3, resolved),
         fn _node, _scope, acc -> acc end,
         initial_env: inherited_env
       )
 
     Enum.reverse(sites)
+  end
+
+  # Normalize just the signature with Elixir's pipe APIs. Keep the
+  # original AST traversal so the left side is visited once, in source
+  # order. The RHS AST includes column metadata, distinguishing calls
+  # that share a line.
+  defp enter_for_calls(
+         {:|>, _, [left, {{:., _, [{:__aliases__, _, _}, fun]}, _, args} = right]},
+         _scope,
+         state,
+         _resolved
+       )
+       when is_atom(fun) and is_list(args) do
+    {_module, _fun, normalized_args} =
+      left
+      |> Macro.pipe(right, 0)
+      |> Macro.decompose_call()
+
+    %{state | piped_arities: Map.put(state.piped_arities, right, length(normalized_args))}
   end
 
   # A qualified remote call `Alias.fun(args)` parses as
@@ -262,17 +282,19 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
   # `Ash.Query.filter(...)`. Skip calls inside a nested `defmodule` (we
   # process that body separately) or inside a `quote do ... end` block.
   defp enter_for_calls(
-         {{:., _, [{:__aliases__, _, segs}, fun]}, meta, args},
+         {{:., _, [{:__aliases__, _, segs}, fun]}, meta, args} = call,
          scope,
          state,
          resolved
        )
        when is_atom(fun) and is_list(args) do
     env = LexicalScopeWalker.env(scope)
+    {arity, piped_arities} = Map.pop(state.piped_arities, call, length(args))
+    state = %{state | piped_arities: piped_arities}
 
     with false <- in_nested_module_or_quote?(scope),
          {:ok, mod} <- Aliases.expand_to_module(segs, env) do
-      maybe_record_call(state, resolved, mod, fun, args, meta, env)
+      maybe_record_call(state, resolved, mod, fun, arity, meta, env)
     else
       _ -> state
     end
@@ -288,11 +310,11 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     LexicalScopeWalker.in_module?(scope) or LexicalScopeWalker.in_quote?(scope)
   end
 
-  defp maybe_record_call(state, resolved, mod, fun, args, meta, env) do
+  defp maybe_record_call(state, resolved, mod, fun, arity, meta, env) do
     with {:ok, macros} <- Map.fetch(resolved, mod),
-         true <- MapSet.member?(macros, fun),
+         true <- MapSet.member?(macros, {fun, arity}),
          false <- Macro.Env.required?(env, mod) do
-      site = %{module: mod, fun: fun, arity: length(args), line: meta[:line]}
+      site = %{module: mod, fun: fun, arity: arity, line: meta[:line]}
       %{state | sites: [site | state.sites]}
     else
       _ -> state
