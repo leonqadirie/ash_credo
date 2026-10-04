@@ -3,6 +3,21 @@ defmodule AshCredo.Check.Refactor.LargeResourceTest do
 
   alias AshCredo.Check.Refactor.LargeResource
 
+  test "anchors an oversized resource at its use when the alias is inherited" do
+    source = """
+    alias Ash.Resource, as: Resource
+    defmodule MyApp.Post do
+      use Resource, domain: MyApp.Blog
+      attributes do
+        attribute :title, :string
+      end
+    end
+    """
+
+    assert [issue] = run_check(LargeResource, source, max_lines: 3)
+    assert issue.line_no == 3
+  end
+
   test "reports issue when resource exceeds max lines" do
     lines = for i <- 1..20, do: "  attribute :field_#{i}, :string\n"
 

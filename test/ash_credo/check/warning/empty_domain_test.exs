@@ -3,6 +3,22 @@ defmodule AshCredo.Check.Warning.EmptyDomainTest do
 
   alias AshCredo.Check.Warning.EmptyDomain
 
+  test "anchors each domain at its use when aliases are inherited" do
+    source = """
+    defmodule MyApp do
+      alias Ash.Domain, as: Domain
+      defmodule Blog do
+        use Domain
+      end
+      defmodule Accounts do
+        use Domain
+      end
+    end
+    """
+
+    assert sorted_lines(run_check(EmptyDomain, source)) == [4, 7]
+  end
+
   test "reports issue for domain with no resources section" do
     source = """
     defmodule MyApp.Blog do

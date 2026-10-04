@@ -31,12 +31,12 @@ defmodule AshCredo.Check.Warning.EmptyDomain do
 
     source_file
     |> Introspection.domain_modules()
-    |> Enum.flat_map(&empty_domain_issues(&1, issue_meta))
+    |> Enum.flat_map(&empty_domain_issues(&1, source_file, issue_meta))
   end
 
-  defp empty_domain_issues(module_ast, issue_meta) do
+  defp empty_domain_issues(module_ast, source_file, issue_meta) do
     resources_asts = Introspection.find_dsl_sections(module_ast, :resources)
-    use_line = Introspection.find_use_line(module_ast, [:Ash, :Domain])
+    use_line = Introspection.find_use_line(source_file, [:Ash, :Domain], module_ast)
 
     case resources_asts do
       [] ->

@@ -61,6 +61,7 @@ defmodule AshCredo.Introspection do
   alias AshCredo.Cache
 
   alias AshCredo.Introspection.{
+    Aliases,
     Block,
     LexicalScopeWalker,
     ResourceContext,
@@ -73,6 +74,7 @@ defmodule AshCredo.Introspection do
 
   @resource_contexts_key_tag {__MODULE__, :resource_contexts}
   @resource_fragment_contexts_key_tag {__MODULE__, :resource_fragment_contexts}
+  @module_metadata_key_tag {__MODULE__, :module_metadata}
 
   @doc "Returns all modules in the source file that directly `use Ash.Resource`."
   def resource_modules(source_file), do: modules_using(source_file, [:Ash, :Resource])
@@ -97,9 +99,14 @@ defmodule AshCredo.Introspection do
 
   defp compute_resource_contexts(source_file) do
     source_file
-    |> all_modules_with_path()
-    |> Enum.filter(fn {ast, _segs} -> module_uses?(ast, [:Ash, :Resource]) end)
-    |> Enum.map(fn {ast, segs} -> resource_context_with_segments(ast, segs) end)
+    |> module_metadata()
+    |> Enum.filter(&literal_module?(&1.module_ast))
+    |> Enum.flat_map(fn entry ->
+      case Map.get(entry.uses, [:Ash, :Resource]) do
+        nil -> []
+        use_metadata -> [resource_context_with_segments(entry, use_metadata)]
+      end
+    end)
   end
 
   @doc """
@@ -121,16 +128,10 @@ defmodule AshCredo.Introspection do
   still appear in the output).
   """
   def all_modules_with_path(source_file) do
-    {%{out: out}, _scope} =
-      source_file
-      |> Credo.SourceFile.ast()
-      |> LexicalScopeWalker.traverse(
-        %{out: []},
-        &collect_module_with_path/3,
-        fn _node, _scope, acc -> acc end
-      )
-
-    Enum.reverse(out)
+    source_file
+    |> module_metadata()
+    |> Enum.filter(&literal_module?(&1.module_ast))
+    |> Enum.map(&{&1.module_ast, &1.absolute_segments})
   end
 
   # Only literal `defmodule Name do ... end` forms are emitted;
@@ -138,25 +139,17 @@ defmodule AshCredo.Introspection do
   # skipped to match the pre-walker behaviour. The walker still tracks
   # them on the module stack, so nested modules under a non-literal
   # parent are reported as nil.
-  defp collect_module_with_path(
-         {:defmodule, _, [{:__aliases__, _, segs}, [do: _body]]} = ast,
-         scope,
-         state
-       )
-       when is_list(segs) do
-    %{state | out: [{ast, LexicalScopeWalker.current_module_segments(scope)} | state.out]}
-  end
+  defp literal_module?({:defmodule, _, [{:__aliases__, _, segs}, [do: _body]]})
+       when is_list(segs), do: true
 
-  defp collect_module_with_path(_node, _scope, state), do: state
+  defp literal_module?(_), do: false
 
-  defp resource_context_with_segments(module_ast, absolute_segments) do
-    use_metadata = find_use(module_ast, [:Ash, :Resource])
-
+  defp resource_context_with_segments(entry, use_metadata) do
     %ResourceContext{
-      module_ast: module_ast,
+      module_ast: entry.module_ast,
       use_line: use_metadata_line(use_metadata),
       use_opts: normalized_resource_use_opts(use_metadata),
-      absolute_segments: absolute_segments
+      absolute_segments: entry.absolute_segments
     }
   end
 
@@ -178,22 +171,23 @@ defmodule AshCredo.Introspection do
 
   defp compute_resource_fragment_contexts(source_file) do
     source_file
-    |> all_modules_with_path()
-    |> Enum.flat_map(fn {ast, segs} ->
-      ast
-      |> find_use([:Spark, :Dsl, :Fragment])
-      |> resource_fragment_context(ast, segs)
+    |> module_metadata()
+    |> Enum.filter(&literal_module?(&1.module_ast))
+    |> Enum.flat_map(fn entry ->
+      entry.uses
+      |> Map.get([:Spark, :Dsl, :Fragment])
+      |> resource_fragment_context(entry)
     end)
   end
 
-  defp resource_fragment_context(%UseMetadata{opts: opts} = use_metadata, ast, segs) do
-    if resource_fragment_opts?(opts) do
+  defp resource_fragment_context(%UseMetadata{opts: opts, env: env} = use_metadata, entry) do
+    if resource_fragment_opts?(opts, env) do
       [
         %ResourceContext{
-          module_ast: ast,
+          module_ast: entry.module_ast,
           use_line: use_metadata_line(use_metadata),
           use_opts: Keyword.delete(opts, :of),
-          absolute_segments: segs
+          absolute_segments: entry.absolute_segments
         }
       ]
     else
@@ -201,10 +195,11 @@ defmodule AshCredo.Introspection do
     end
   end
 
-  defp resource_fragment_context(nil, _ast, _segs), do: []
+  defp resource_fragment_context(nil, _entry), do: []
 
-  defp resource_fragment_opts?(opts) do
-    Keyword.keyword?(opts) and match?({:__aliases__, _, [:Ash, :Resource]}, opts[:of])
+  defp resource_fragment_opts?(opts, env) do
+    Keyword.keyword?(opts) and
+      Aliases.resolved_module_ref(opts[:of], %{env: env}) == [:Ash, :Resource]
   end
 
   @doc "Returns all modules in the source file that directly `use Ash.Domain`."
@@ -658,45 +653,104 @@ defmodule AshCredo.Introspection do
     |> use_metadata_line()
   end
 
+  @doc """
+  Returns a module's `use` line using its full source file's lexical
+  environment. Use this when the module AST has been extracted from a
+  file and may depend on aliases declared in an enclosing scope.
+  """
+  def find_use_line(%SourceFile{} = source_file, module_aliases, module_ast) do
+    source_file
+    |> module_metadata()
+    |> Enum.find(&(&1.module_ast == module_ast))
+    |> module_use_metadata(module_aliases)
+    |> use_metadata_line()
+  end
+
   defp modules_using(source_file, module_aliases) do
     source_file
-    |> all_modules()
-    |> Enum.filter(&module_uses?(&1, module_aliases))
+    |> module_metadata()
+    |> Enum.filter(&Map.has_key?(&1.uses, module_aliases))
+    |> Enum.map(& &1.module_ast)
   end
 
   defp find_use({:defmodule, _, _} = module_ast, module_aliases) do
-    Enum.find_value(Block.module_body(module_ast), fn
-      {:use, meta, [{:__aliases__, _, ^module_aliases}, opts]} when is_list(opts) ->
-        %UseMetadata{line: meta[:line], opts: opts}
-
-      {:use, meta, [{:__aliases__, _, ^module_aliases}]} ->
-        %UseMetadata{line: meta[:line], opts: []}
-
-      _ ->
-        nil
-    end)
+    module_ast
+    |> compute_module_metadata()
+    |> List.first()
+    |> module_use_metadata(module_aliases)
   end
 
   defp find_use(source_file, module_aliases) do
     source_file
-    |> all_modules()
-    |> Enum.find_value(&find_use(&1, module_aliases))
+    |> module_metadata()
+    |> Enum.find_value(&module_use_metadata(&1, module_aliases))
   end
 
-  defp all_modules(source_file) do
-    source_file
-    |> Credo.Code.prewalk(
-      fn
-        {:defmodule, _, [_name, [do: _body]]} = ast, acc ->
-          {ast, [ast | acc]}
+  defp module_use_metadata(%{uses: uses}, module_aliases), do: Map.get(uses, module_aliases)
+  defp module_use_metadata(nil, _module_aliases), do: nil
 
-        ast, acc ->
-          {ast, acc}
-      end,
-      []
-    )
+  defp module_metadata(source_file) do
+    key = {@module_metadata_key_tag, source_file.filename, source_hash(source_file)}
+
+    Cache.memoize(key, fn -> compute_module_metadata(SourceFile.ast(source_file)) end)
+  end
+
+  # Capture each use's env in the file traversal, before discarding the
+  # enclosing scopes. Only direct module-body uses contribute metadata.
+  defp compute_module_metadata(ast) do
+    {%{modules: modules, use_envs: use_envs}, _scope} =
+      LexicalScopeWalker.traverse(
+        ast,
+        %{modules: [], use_envs: %{}},
+        &collect_module_metadata/3,
+        fn _node, _scope, acc -> acc end
+      )
+
+    modules
     |> Enum.reverse()
+    |> Enum.map(fn {module_ast, segments} ->
+      %{
+        module_ast: module_ast,
+        absolute_segments: segments,
+        uses: resolved_uses(module_ast, use_envs)
+      }
+    end)
   end
+
+  defp collect_module_metadata({:defmodule, _, [_name, [do: _body]]} = ast, scope, state) do
+    entry = {ast, LexicalScopeWalker.current_module_segments(scope)}
+    %{state | modules: [entry | state.modules]}
+  end
+
+  defp collect_module_metadata({:use, _, _} = ast, scope, state) do
+    %{state | use_envs: Map.put(state.use_envs, ast, LexicalScopeWalker.env(scope))}
+  end
+
+  defp collect_module_metadata(_node, _scope, state), do: state
+
+  defp resolved_uses(module_ast, use_envs) do
+    module_ast
+    |> Block.module_body()
+    |> Enum.reduce(%{}, fn node, acc ->
+      case resolved_use(node, Map.get(use_envs, node)) do
+        {target, metadata} -> Map.put_new(acc, target, metadata)
+        nil -> acc
+      end
+    end)
+  end
+
+  defp resolved_use({:use, meta, [target]}, env),
+    do: resolved_use({:use, meta, [target, []]}, env)
+
+  defp resolved_use({:use, meta, [{:__aliases__, _, _} = target, opts]}, %Macro.Env{} = env)
+       when is_list(opts) do
+    {
+      Aliases.resolved_module_ref(target, %{env: env}),
+      %UseMetadata{line: meta[:line], opts: opts, env: env}
+    }
+  end
+
+  defp resolved_use(_node, _env), do: nil
 
   defp module_uses?(module_ast, module_aliases) do
     not is_nil(find_use(module_ast, module_aliases))
