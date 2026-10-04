@@ -268,9 +268,9 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Returns the set of macro names that `module` defines (read from
-  `module.__info__(:macros)`), or `{:error, :not_loadable}` if the
-  module cannot be loaded. Cached per module in the run-scoped
+  Returns the set of `{name, arity}` macro signatures that `module` defines
+  (read from `module.__info__(:macros)`), or `{:error, :not_loadable}` if
+  the module cannot be loaded. Cached per module in the run-scoped
   `AshCredo.Cache`.
 
   Unlike `inspect_module/1`, this doesn't require the target to be an
@@ -281,7 +281,7 @@ defmodule AshCredo.Introspection.Compiled do
   Used by `Warning.MissingMacroDirective` to resolve its configured
   `macro_modules` list to exact macro sets per module.
   """
-  @spec macros(module()) :: {:ok, MapSet.t(atom())} | {:error, :not_loadable}
+  @spec macros(module()) :: {:ok, MapSet.t({atom(), arity()})} | {:error, :not_loadable}
   def macros(module) when is_atom(module) do
     Cache.memoize({@macros_key_tag, module}, fn -> do_macros(module) end)
   end
@@ -291,7 +291,7 @@ defmodule AshCredo.Introspection.Compiled do
          true <- function_exported?(module, :__info__, 1) do
       macros =
         module.__info__(:macros)
-        |> MapSet.new(fn {name, _arity} -> name end)
+        |> MapSet.new()
 
       {:ok, macros}
     else

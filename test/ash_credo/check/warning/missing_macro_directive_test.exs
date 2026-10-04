@@ -18,6 +18,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       assert [issue] = run_check(MissingMacroDirective, source)
       assert issue.trigger == "Ash.Query.filter"
       assert issue.message =~ "require Ash.Query"
+      assert issue.message =~ "Ash.Query.filter/2"
       assert issue.line_no == 4
     end
 
@@ -295,7 +296,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
         def foo(q, x) do
           q
           |> Ash.Query.filter(x)
-          |> Ash.Expr.expr(true)
+          |> Ash.Expr.expr()
         end
       end
       """
@@ -313,7 +314,7 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
         def foo(q, x) do
           q
           |> Ash.Query.filter(x)
-          |> Ash.Expr.expr(true)
+          |> Ash.Expr.expr()
         end
       end
       """
@@ -462,11 +463,143 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
   end
 
   describe "configurable macro_modules (real fixture)" do
-    # These tests use `AshCredoFixtures.FakeMacros`, a real compiled module in
-    # `test/support/fixtures/ash_fixtures.ex`. It defines two macros
-    # (`do_thing/1`, `other/2`) and one regular function (`regular/1`), so we
-    # can verify the check's macro precision: regular functions on a
-    # configured module must NOT be flagged.
+    # FakeMacros includes a regular do_thing/2 alongside the do_thing/1
+    # macro, and a macro with defaults that exports two arities.
+
+    test "distinguishes macro arities from regular functions and undefined calls" do
+      source = """
+      defmodule MyApp.Caller do
+        def a, do: AshCredoFixtures.FakeMacros.do_thing(1)
+        def b, do: AshCredoFixtures.FakeMacros.do_thing(1, 2)
+        def c, do: AshCredoFixtures.FakeMacros.other(1)
+      end
+      """
+
+      assert [issue] =
+               run_check(MissingMacroDirective, source,
+                 macro_modules: [AshCredoFixtures.FakeMacros]
+               )
+
+      assert issue.line_no == 2
+      assert issue.message =~ "FakeMacros.do_thing/1"
+    end
+
+    test "uses the piped argument when distinguishing macro and function arities" do
+      source = """
+      defmodule MyApp.Caller do
+        def a(value), do: value |> AshCredoFixtures.FakeMacros.do_thing()
+        def b(value), do: value |> AshCredoFixtures.FakeMacros.do_thing(:other)
+      end
+      """
+
+      assert [issue] =
+               run_check(MissingMacroDirective, source,
+                 macro_modules: [AshCredoFixtures.FakeMacros]
+               )
+
+      assert issue.line_no == 2
+      assert issue.message =~ "FakeMacros.do_thing/1"
+    end
+
+    test "reports both macro calls in a pipeline on one line with their full arity" do
+      source = """
+      defmodule MyApp.Caller do
+        alias AshCredoFixtures.FakeMacros, as: M
+        def a(value), do: value |> M.other(:first) |> M.other(:second)
+      end
+      """
+
+      issues =
+        run_check(MissingMacroDirective, source, macro_modules: [AshCredoFixtures.FakeMacros])
+
+      assert sorted_lines(issues) == [3, 3]
+      assert Enum.all?(issues, &(&1.message =~ "FakeMacros.other/2"))
+    end
+
+    test "counts a macro in the left side of a pipe once" do
+      source = """
+      defmodule MyApp.Caller do
+        def a, do: AshCredoFixtures.FakeMacros.do_thing(1) |> AshCredoFixtures.FakeMacros.do_thing(2)
+      end
+      """
+
+      assert [issue] =
+               run_check(MissingMacroDirective, source,
+                 macro_modules: [AshCredoFixtures.FakeMacros]
+               )
+
+      assert issue.line_no == 2
+      assert issue.message =~ "FakeMacros.do_thing/1"
+    end
+
+    test "distinguishes identical direct and piped calls on the same line" do
+      source = """
+      defmodule MyApp.Caller do
+        alias AshCredoFixtures.FakeMacros, as: M
+        def a(value), do: {value |> M.do_thing(1), M.do_thing(1)}
+      end
+      """
+
+      assert [issue] =
+               run_check(MissingMacroDirective, source,
+                 macro_modules: [AshCredoFixtures.FakeMacros]
+               )
+
+      assert issue.line_no == 3
+      assert issue.message =~ "FakeMacros.do_thing/1"
+    end
+
+    test "recognizes each exported arity of macros with default arguments" do
+      source = """
+      defmodule MyApp.Caller do
+        def a, do: AshCredoFixtures.FakeMacros.with_default(1)
+        def b, do: AshCredoFixtures.FakeMacros.with_default(1, 2)
+        def c(value), do: value |> AshCredoFixtures.FakeMacros.with_default()
+        def d(value), do: value |> AshCredoFixtures.FakeMacros.with_default(:other)
+      end
+      """
+
+      issues =
+        run_check(MissingMacroDirective, source, macro_modules: [AshCredoFixtures.FakeMacros])
+
+      assert [direct_one, direct_two, piped_one, piped_two] = issues
+      assert sorted_lines(issues) == [2, 3, 4, 5]
+      assert direct_one.message =~ "FakeMacros.with_default/1"
+      assert direct_two.message =~ "FakeMacros.with_default/2"
+      assert piped_one.message =~ "FakeMacros.with_default/1"
+      assert piped_two.message =~ "FakeMacros.with_default/2"
+    end
+
+    test "only flags a zero-arity macro when called without arguments" do
+      source = """
+      defmodule MyApp.Caller do
+        def a, do: AshCredoFixtures.FakeMacros.no_args()
+        def b(value), do: value |> AshCredoFixtures.FakeMacros.no_args()
+      end
+      """
+
+      assert [issue] =
+               run_check(MissingMacroDirective, source,
+                 macro_modules: [AshCredoFixtures.FakeMacros]
+               )
+
+      assert issue.line_no == 2
+      assert issue.message =~ "FakeMacros.no_args/0"
+    end
+
+    test "require satisfies piped macro calls with their normalized arity" do
+      source = """
+      defmodule MyApp.Caller do
+        require AshCredoFixtures.FakeMacros, as: M
+        def a(value), do: value |> M.other(:second)
+      end
+      """
+
+      assert [] =
+               run_check(MissingMacroDirective, source,
+                 macro_modules: [AshCredoFixtures.FakeMacros]
+               )
+    end
 
     test "flags configured module's macros but NOT its regular functions" do
       source = """
