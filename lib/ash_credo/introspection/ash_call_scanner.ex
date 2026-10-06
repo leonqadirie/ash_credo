@@ -3,7 +3,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
   Lower layer of the Ash call pipeline: scans a source file's AST and
   yields every `Ash.*` call together with the lexical environment
   visible at that point - alias frames, binding frames, branch depth,
-  pipe origins, and the enclosing `defmodule` segments.
+  pipe origins, and the enclosing module's segments.
 
   This module knows nothing about specific Ash API entry points. The
   semantic interpretation ("this call has a literal resource at arg 0
@@ -23,9 +23,12 @@ defmodule AshCredo.Introspection.AshCallScanner do
   how many checks consume it.
   """
 
+  import AshCredo.Introspection.ModuleStack, only: [is_module_definition: 1]
+
   alias AshCredo.Cache
   alias AshCredo.Introspection
   alias AshCredo.Introspection.Aliases
+  alias AshCredo.Introspection.ModuleStack
 
   @calls_key_tag {__MODULE__, :calls}
 
@@ -78,6 +81,14 @@ defmodule AshCredo.Introspection.AshCallScanner do
     Enum.reverse(calls)
   end
 
+  # Module identity comes from `ModuleStack`, shared with
+  # `LexicalScopeWalker`: a definition's module is current only inside
+  # its own `do` body.
+  defp enter_node({:do, _body} = ast, state) do
+    state = update_in(state.module_stack, &ModuleStack.enter_do(&1, ast))
+    {ast, push_alias_frame(state)}
+  end
+
   defp enter_node({scope_key, _body} = ast, state) when scope_key in @scope_keys do
     {ast, push_alias_frame(state)}
   end
@@ -86,8 +97,11 @@ defmodule AshCredo.Introspection.AshCallScanner do
     {ast, push_alias_frame(state)}
   end
 
-  defp enter_node({:defmodule, _, _} = ast, state) do
-    {ast, push_module_stack(state, ast)}
+  defp enter_node({kind, _, _} = ast, state) when is_module_definition(kind) do
+    {stack, _segments} =
+      ModuleStack.enter_definition(state.module_stack, ast, current_env(state))
+
+    {ast, %{state | module_stack: stack}}
   end
 
   defp enter_node({node_name, _, _} = ast, state) when node_name in @lexical_scope_nodes do
@@ -119,6 +133,11 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   defp enter_node(ast, state), do: {ast, state}
 
+  defp leave_node({:do, _body} = ast, state) do
+    state = pop_alias_frame(state)
+    {ast, update_in(state.module_stack, &ModuleStack.leave_do(&1, ast))}
+  end
+
   defp leave_node({scope_key, _body} = ast, state) when scope_key in @scope_keys do
     {ast, pop_alias_frame(state)}
   end
@@ -131,18 +150,13 @@ defmodule AshCredo.Introspection.AshCallScanner do
     {ast, maybe_record_binding(state, lhs, rhs)}
   end
 
-  # A defmodule aliases its (first literal) name in the enclosing scope
-  # for the rest of that body, so the alias is registered after the
-  # body's frame is gone and the parent frame is current again.
-  defp leave_node({:defmodule, _, _} = ast, state) do
-    child_absolute = current_module_segments(state)
+  # A defmodule or defprotocol aliases its (first literal) name in the
+  # enclosing scope for the rest of that body, so the alias is registered
+  # after the body's frame is gone and the parent frame is current again.
+  defp leave_node({kind, _, _} = ast, state) when is_module_definition(kind) do
+    {stack, child_absolute} = ModuleStack.leave_definition(state.module_stack)
 
-    state =
-      state
-      |> pop_module_stack()
-      |> register_defmodule_alias(ast, child_absolute)
-
-    {ast, state}
+    {ast, register_defmodule_alias(%{state | module_stack: stack}, ast, child_absolute)}
   end
 
   defp leave_node({node_name, _, _} = ast, state) when node_name in @lexical_scope_nodes do
@@ -158,7 +172,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
       branch_depth: 0,
       calls: [],
       pipe_origins: %{},
-      module_stack: []
+      module_stack: %ModuleStack{}
     }
   end
 
@@ -182,25 +196,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
     }
   end
 
-  defp push_module_stack(state, ast) do
-    literal = Aliases.defmodule_literal_segments(ast)
-
-    parent_absolute =
-      case state.module_stack do
-        [top | _] -> top
-        [] -> []
-      end
-
-    absolute = Aliases.absolute_module_segments(literal, parent_absolute, current_env(state))
-
-    %{state | module_stack: [absolute | state.module_stack]}
-  end
-
-  defp pop_module_stack(%{module_stack: [_ | rest]} = state), do: %{state | module_stack: rest}
-  defp pop_module_stack(state), do: state
-
-  defp current_module_segments(%{module_stack: [top | _]}), do: top
-  defp current_module_segments(%{module_stack: []}), do: nil
+  defp current_module_segments(state), do: ModuleStack.current(state.module_stack)
 
   defp enter_lexical_scope(state, node_name) do
     state

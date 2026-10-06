@@ -11,6 +11,40 @@ defmodule AshCredo.Introspection.AliasesTest do
 
   alias AshCredo.Introspection.Aliases
 
+  describe "absolute_module_segments/3" do
+    test "a leading __MODULE__ uses the parent's absolute name without reapplying aliases" do
+      env = env_after(["alias Other, as: MyApp"])
+      name = [{:__MODULE__, [], nil}, :MacroScope]
+
+      assert Aliases.absolute_module_segments(name, [:MyApp, :Outer], env) ==
+               [:MyApp, :Outer, :MacroScope]
+
+      assert Aliases.absolute_module_segments(name, nil, env) == nil
+      assert Aliases.absolute_module_segments(name, [], env) == nil
+    end
+
+    test "explicit Elixir names stay absolute regardless of aliases or parent identity" do
+      env = env_after(["alias MyApp.Shadow, as: Outside"])
+
+      for parent <- [[], [:MyApp, :Outer], nil] do
+        assert Aliases.absolute_module_segments([Elixir, :Outside, :Child], parent, env) ==
+                 [:Outside, :Child]
+      end
+    end
+
+    test "relative names use aliases at the top level and the parent path when nested" do
+      env = env_after(["alias MyApp.Shadow, as: Outside"])
+
+      assert Aliases.absolute_module_segments([:Outside, :Child], [], env) ==
+               [:MyApp, :Shadow, :Child]
+
+      assert Aliases.absolute_module_segments([:Outside, :Child], [:MyApp, :Outer], env) ==
+               [:MyApp, :Outer, :Outside, :Child]
+
+      assert Aliases.absolute_module_segments([:Outside, :Child], nil, env) == nil
+    end
+  end
+
   describe "resolve_module_self/2" do
     test "substitutes __MODULE__ with the enclosing segments" do
       segments = [{:__MODULE__, [line: 2], nil}, :Post]

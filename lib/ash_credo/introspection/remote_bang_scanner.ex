@@ -10,14 +10,14 @@ defmodule AshCredo.Introspection.RemoteBangScanner do
   Aliases are resolved lexically via `LexicalScopeWalker`'s env. The
   walker substitutes the common `alias __MODULE__.Foo` pattern at
   declaration time, and this module substitutes use-site
-  `__MODULE__.Foo.bar!()` segments against the enclosing `defmodule`'s
+  `__MODULE__.Foo.bar!()` segments against the enclosing module's
   absolute segments, so both resolve to the same module as the fully
   qualified spelling. Calls with a non-literal module (`apply/3`,
   variable references, bare `__MODULE__.fun!()`) are skipped, since such
   a call site cannot be resolved to a concrete module at lint time.
   """
 
-  alias AshCredo.Introspection.{Aliases, LexicalScopeWalker}
+  alias AshCredo.Introspection.LexicalScopeWalker
 
   @doc """
   Returns all `Mod.fun!(args)` call sites in `source_file` as
@@ -44,17 +44,7 @@ defmodule AshCredo.Introspection.RemoteBangScanner do
        )
        when is_list(args) and is_atom(fun_name) and is_list(segments) do
     if bang?(fun_name) do
-      # Expand first, substitute second: `expand_alias/2` is a no-op on
-      # `__MODULE__`-headed segments, and `resolve_module_self/2` drops
-      # calls that cannot resolve to a concrete module (e.g. `__MODULE__`
-      # inside a non-literal `defmodule unquote(...)`), on which
-      # `Module.concat/1` would raise.
-      resolved =
-        segments
-        |> Aliases.expand_alias(LexicalScopeWalker.env(scope))
-        |> Aliases.resolve_module_self(LexicalScopeWalker.current_module_segments(scope))
-
-      case resolved do
+      case LexicalScopeWalker.resolve_alias(segments, scope) do
         {:ok, expanded} -> %{state | calls: [{call_ast, expanded, fun_name} | state.calls]}
         :error -> state
       end

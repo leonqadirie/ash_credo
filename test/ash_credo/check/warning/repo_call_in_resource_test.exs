@@ -283,6 +283,24 @@ defmodule AshCredo.Check.Warning.RepoCallInResourceTest do
     assert issue.trigger == "__MODULE__.Repo.query!"
   end
 
+  test "protocol and implementation bodies do not inherit the outer resource label" do
+    source = """
+    defmodule MyApp.Order do
+      use Ash.Resource
+      defimpl Inspect, for: Foo do
+        def inspect(value, opts), do: MyApp.Repo.query!("SELECT 1")
+      end
+      defprotocol Format do
+        MyApp.Repo.query!("SELECT 1")
+      end
+      def go, do: MyApp.Repo.query!("SELECT 1")
+    end
+    """
+
+    assert [issue] = run_check(RepoCallInResource, source)
+    assert issue.line_no == 9
+  end
+
   test "reports issue when the use target is reached through an alias" do
     source = """
     defmodule MyApp.Order.Changes.AssignStops do

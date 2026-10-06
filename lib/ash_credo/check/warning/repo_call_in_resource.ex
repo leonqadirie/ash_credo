@@ -113,6 +113,8 @@ defmodule AshCredo.Check.Warning.RepoCallInResource do
       ]
     ]
 
+  import AshCredo.Introspection.ModuleStack, only: [is_module_definition: 1]
+
   alias AshCredo.Introspection.{Aliases, LexicalScopeWalker}
   alias AshCredo.{NameFilter, PathFilter}
   alias Credo.Code.Name
@@ -162,9 +164,13 @@ defmodule AshCredo.Check.Warning.RepoCallInResource do
     end)
   end
 
-  # One lexical walk over the file. `labels` mirrors the walker's module
-  # stack: each `defmodule` pushes `nil`, and a `use` of an extension
-  # point resolved through the current env overwrites the head. A call
+  # One lexical walk over the file. `labels` holds one entry per
+  # enclosing `defmodule`, `defprotocol`, or `defimpl`: entering the
+  # definition node pushes `nil`, and a `use` of an extension point
+  # resolved through the current env overwrites the head. Labels change at
+  # the definition node, not at its `do` body like the walker's module
+  # stack, so a call in a nested definition's name or options is gated by
+  # the nested label. A call
   # is gated by the innermost module only, so a plain helper module
   # nested in a resource is not blamed on the resource and a change
   # module nested in one is reported as a change. `quote` bodies are
@@ -182,7 +188,7 @@ defmodule AshCredo.Check.Warning.RepoCallInResource do
     Enum.reverse(calls)
   end
 
-  defp on_enter({:defmodule, _, _}, _scope, state, _config) do
+  defp on_enter({kind, _, _}, _scope, state, _config) when is_module_definition(kind) do
     %{state | labels: [nil | state.labels]}
   end
 
@@ -219,7 +225,8 @@ defmodule AshCredo.Check.Warning.RepoCallInResource do
 
   defp on_enter(_node, _scope, state, _config), do: state
 
-  defp on_leave({:defmodule, _, _}, _scope, %{labels: [_ | rest]} = state) do
+  defp on_leave({kind, _, _}, _scope, %{labels: [_ | rest]} = state)
+       when is_module_definition(kind) do
     %{state | labels: rest}
   end
 
@@ -232,12 +239,7 @@ defmodule AshCredo.Check.Warning.RepoCallInResource do
   # `alias Ecto.Adapters.SQL` both land on the real module, and
   # `__MODULE__.Repo` is substituted against the enclosing `defmodule`.
   defp repo_module?(segments, scope, repo_names) do
-    resolved =
-      segments
-      |> Aliases.expand_alias(LexicalScopeWalker.env(scope))
-      |> Aliases.resolve_module_self(LexicalScopeWalker.current_module_segments(scope))
-
-    case resolved do
+    case LexicalScopeWalker.resolve_alias(segments, scope) do
       {:ok, @sql_adapter_segments} -> true
       {:ok, resolved_segments} -> resolved_segments |> Enum.reverse() |> repo_name?(repo_names)
       :error -> false

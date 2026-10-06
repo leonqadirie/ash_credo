@@ -4,6 +4,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
   alias AshCredo.Introspection.Aliases
   alias AshCredo.Introspection.LexicalScopeWalker
   alias AshCredo.Introspection.LexicalScopeWalker.Scope
+  alias AshCredo.Introspection.ModuleStack
 
   # Convenience: walk an AST and return only the final user_state (drop scope).
   defp walk(ast, user_state, on_enter, on_leave, opts \\ []) do
@@ -311,6 +312,229 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
   end
 
   describe "module_stack" do
+    test "a do block within a computed name keeps the parent identity" do
+      ast =
+        parse!("""
+        defmodule MyApp.Outer do
+          defmodule (if true do
+            Probe.mark(:name)
+          end) do
+            Probe.mark(:child)
+          end
+        end
+        """)
+
+      paths =
+        walk(
+          ast,
+          [],
+          fn
+            {{:., _, [_, :mark]}, _, _}, scope, acc ->
+              [LexicalScopeWalker.current_module_segments(scope) | acc]
+
+            _node, _scope, acc ->
+              acc
+          end,
+          noop()
+        )
+        |> Enum.reverse()
+
+      assert paths == [[:MyApp, :Outer], nil]
+    end
+
+    test "a name do block equal to the module body does not open the module early" do
+      ast =
+        parse!("""
+        defmodule MyApp.Outer do
+          defmodule (if true, do: Probe.mark()), do: Probe.mark()
+        end
+        """)
+
+      paths =
+        walk(
+          ast,
+          [],
+          fn
+            {{:., _, [_, :mark]}, _, _}, scope, acc ->
+              [LexicalScopeWalker.current_module_segments(scope) | acc]
+
+            _node, _scope, acc ->
+              acc
+          end,
+          noop()
+        )
+        |> Enum.reverse()
+
+      assert paths == [[:MyApp, :Outer], nil]
+    end
+
+    test "computed module names are visited in the parent context and bodies in the child" do
+      ast =
+        parse!("""
+        defmodule MyApp.Outer do
+          defmodule Module.concat([Probe.mark(__MODULE__)]) do
+            Probe.mark(:child)
+          end
+          Probe.mark(:outer)
+        end
+        """)
+
+      paths =
+        walk(
+          ast,
+          [],
+          fn
+            {{:., _, [_, :mark]}, _, _}, scope, acc ->
+              [LexicalScopeWalker.current_module_segments(scope) | acc]
+
+            _node, _scope, acc ->
+              acc
+          end,
+          noop()
+        )
+        |> Enum.reverse()
+
+      assert paths == [[:MyApp, :Outer], nil, [:MyApp, :Outer]]
+    end
+
+    test "protocols and implementations get their own identities and restore the parent" do
+      ast =
+        parse!("""
+        defmodule MyApp.Outer do
+          alias Inspect, as: P
+          alias MyApp.Foo, as: T
+          defprotocol __MODULE__.Format do
+            Probe.mark(:protocol)
+          end
+          defimpl P, for: T do
+            Probe.mark(:implementation)
+          end
+          defimpl P do
+            Probe.mark(:default_target)
+          end
+          Probe.mark(:outer)
+        end
+        """)
+
+      paths =
+        walk(
+          ast,
+          [],
+          fn
+            {{:., _, [_, :mark]}, _, _}, scope, acc ->
+              [LexicalScopeWalker.current_module_segments(scope) | acc]
+
+            _node, _scope, acc ->
+              acc
+          end,
+          noop()
+        )
+        |> Enum.reverse()
+
+      assert paths == [
+               [:MyApp, :Outer, :Format],
+               [:Inspect, :MyApp, :Foo],
+               [:Inspect, :MyApp, :Outer],
+               [:MyApp, :Outer]
+             ]
+    end
+
+    test "ambiguous implementation targets never inherit the outer module's identity" do
+      ast =
+        parse!("""
+        defmodule MyApp.Outer do
+          defimpl Inspect, for: [Foo, Bar] do
+            Probe.mark(:many)
+          end
+          defimpl Inspect, for: target() do
+            Probe.mark(:dynamic)
+          end
+        end
+        """)
+
+      paths =
+        walk(
+          ast,
+          [],
+          fn
+            {{:., _, [_, :mark]}, _, _}, scope, acc ->
+              [
+                {LexicalScopeWalker.current_module_segments(scope),
+                 LexicalScopeWalker.in_module?(scope)}
+                | acc
+              ]
+
+            _node, _scope, acc ->
+              acc
+          end,
+          noop()
+        )
+
+      assert paths == [{nil, true}, {nil, true}]
+    end
+
+    test "absolute nested modules keep their own identity and restore the parent afterwards" do
+      ast =
+        parse!("""
+        defmodule MyApp.Outer do
+          defmodule Elixir.Outside.Child do
+            alias __MODULE__.Api
+            def go, do: Probe.mark(Api)
+
+            defmodule Inner do
+              def go, do: Probe.mark(Api)
+            end
+          end
+
+          def go, do: Probe.mark(:outer)
+        end
+        """)
+
+      contexts =
+        walk(
+          ast,
+          [],
+          fn
+            {{:., _, [_, :mark]}, _, _}, scope, acc ->
+              [
+                {LexicalScopeWalker.current_module_segments(scope), LexicalScopeWalker.env(scope)}
+                | acc
+              ]
+
+            _node, _scope, acc ->
+              acc
+          end,
+          noop()
+        )
+        |> Enum.reverse()
+
+      assert [
+               {[:Outside, :Child], child_env},
+               {[:Outside, :Child, :Inner], inner_env},
+               {[:MyApp, :Outer], outer_env}
+             ] = contexts
+
+      assert resolves?(child_env, [:Api], [:Outside, :Child, :Api])
+      assert resolves?(inner_env, [:Api], [:Outside, :Child, :Api])
+      assert resolves?(outer_env, [:Api], [:Api])
+    end
+
+    test "an absolute module inside an unknown parent can resolve __MODULE__ directives" do
+      ast =
+        parse!("""
+        defmodule Module.concat([:Generated, :Outer]) do
+          defmodule Elixir.Outside.Child do
+            require __MODULE__.Api
+            def go, do: Probe.mark()
+          end
+        end
+        """)
+
+      [env] = walk(ast, [], record_env_at(:mark), noop())
+
+      assert Macro.Env.required?(env, Outside.Child.Api)
+    end
+
     test "current_module_segments returns absolute path across nested defmodules" do
       ast =
         parse!("""
@@ -454,6 +678,38 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
                resolves?(env, [:Query], [:Ash, :Query]) and
                  resolves?(env, [:Expr], [:Ash, :Expr])
              end)
+    end
+  end
+
+  describe "resolve_alias/2" do
+    test "shares lexical alias expansion and absolute self substitution" do
+      env = Aliases.apply_directive(Aliases.base_env(), parse!("alias Ash.Query, as: Q"), nil)
+      env = Aliases.apply_directive(env, parse!("alias Other, as: MyApp"), nil)
+      scope = %Scope{env_frames: [env], module_stack: %ModuleStack{modules: [[:MyApp, :Outer]]}}
+
+      assert LexicalScopeWalker.resolve_alias([:Q], scope) == {:ok, [:Ash, :Query]}
+
+      assert LexicalScopeWalker.resolve_alias([{:__MODULE__, [], nil}, :Api], scope) ==
+               {:ok, [:MyApp, :Outer, :Api]}
+
+      unknown_scope = %{scope | module_stack: %ModuleStack{modules: [nil]}}
+
+      assert LexicalScopeWalker.resolve_alias([{:__MODULE__, [], nil}, :Api], unknown_scope) ==
+               :error
+
+      assert LexicalScopeWalker.resolve_alias([{:unquote, [], [:module]}, :Api], scope) == :error
+      assert LexicalScopeWalker.resolve_alias(:not_segments, scope) == :error
+    end
+
+    test "drops a leading Elixir root and skips lexical aliases" do
+      env = Aliases.apply_directive(Aliases.base_env(), parse!("alias MyApp.Ecto"), nil)
+      scope = %Scope{env_frames: [env]}
+
+      assert LexicalScopeWalker.resolve_alias([Elixir, :Ecto, :Adapters, :SQL], scope) ==
+               {:ok, [:Ecto, :Adapters, :SQL]}
+
+      assert LexicalScopeWalker.resolve_alias([:Ecto, :Adapters, :SQL], scope) ==
+               {:ok, [:MyApp, :Ecto, :Adapters, :SQL]}
     end
   end
 

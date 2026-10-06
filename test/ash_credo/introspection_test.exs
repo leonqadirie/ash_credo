@@ -353,6 +353,26 @@ defmodule AshCredo.IntrospectionTest do
   end
 
   describe "resource_contexts/1" do
+    test "preserves absolute names and relative descendants inside nested modules" do
+      source = """
+      defmodule MyApp.Outer do
+        defmodule Elixir.Outside.Post do
+          use Ash.Resource
+
+          defmodule Draft do
+            use Ash.Resource
+          end
+        end
+      end
+      """
+
+      assert [
+               %{absolute_segments: [:Outside, :Post]},
+               %{absolute_segments: [:Outside, :Post, :Draft]}
+             ] =
+               Introspection.resource_contexts(source_file(source))
+    end
+
     test "returns resource contexts in file order" do
       source = """
       defmodule MyApp.Post do
@@ -664,6 +684,46 @@ defmodule AshCredo.IntrospectionTest do
   end
 
   describe "ash_api_calls_with_module/1" do
+    test "keeps absolute enclosing module paths in call contexts" do
+      source = """
+      defmodule MyApp.Outer do
+        defmodule Elixir.Outside.Accounts do
+          alias __MODULE__.User
+          def list_users, do: Ash.read!(User)
+        end
+
+        def list_users, do: Ash.read!(MyApp.User)
+      end
+      """
+
+      assert [inner, outer] = AshCallScanner.calls_with_context(source_file(source))
+      assert inner.enclosing_module_segments == [:Outside, :Accounts]
+      assert Aliases.expand_alias([:User], inner.env) == [:Outside, :Accounts, :User]
+      assert outer.enclosing_module_segments == [:MyApp, :Outer]
+      assert Aliases.expand_alias([:User], outer.env) == [:User]
+    end
+
+    test "uses the implementation identity inside defimpl bodies" do
+      source = """
+      defmodule MyApp.Outer do
+        defprotocol Proto do
+          def x(value)
+        end
+
+        defimpl Inspect, for: Foo do
+          def x, do: Ash.read!(__MODULE__)
+        end
+
+        def list_users, do: Ash.read!(MyApp.User)
+      end
+      """
+
+      assert [impl, outer] = AshCallScanner.calls_with_context(source_file(source))
+      assert impl.enclosing_module_segments == [:Inspect, :Foo]
+      assert outer.enclosing_module_segments == [:MyApp, :Outer]
+      assert Aliases.expand_alias([:Proto], outer.env) == [:MyApp, :Outer, :Proto]
+    end
+
     test "returns expanded module segments for aliased calls" do
       source = """
       defmodule MyApp.Accounts do
