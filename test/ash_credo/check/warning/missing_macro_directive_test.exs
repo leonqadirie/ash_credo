@@ -379,14 +379,8 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
     end
 
     test "nested defmodule with a non-literal name is processed exactly once" do
-      # Regression: with the LexicalScopeWalker migration, an early version
-      # used `current_module_segments != nil` to detect nesting, which
-      # returned nil for both "no enclosing module" and "in a module with a
-      # non-literal name." That conflation meant the inner defmodule's calls
-      # would be DOUBLE-processed - once as part of the outer module's pass
-      # (because we wrongly thought we were still at outer-module scope) and
-      # once in the inner's own pass. The walker exposes `in_module?/1` to
-      # distinguish "no enclosing module" from "in an unknown-name module."
+      # Unknown module identity still counts as module scope. This also
+      # guards against duplicate issues from traversing nested bodies twice.
       source = """
       defmodule MyApp.Outer do
         defmodule Module.concat([:Generated, :Inner]) do
@@ -395,8 +389,6 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       end
       """
 
-      # Exactly ONE issue (not two). With the bug, the call would have
-      # produced two identical issues - one per pass.
       assert [issue] = run_check(MissingMacroDirective, source)
       assert issue.trigger == "Ash.Query.filter"
       assert issue.line_no == 3
@@ -656,6 +648,215 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       """
 
       assert [] = run_check(MissingMacroDirective, source, macro_modules: [Ash.Query])
+    end
+  end
+
+  describe "module identity" do
+    @mixed_api AshCredoFixtures.MacroScope.MixedApi
+
+    test "a __MODULE__-relative module declaration preserves directive identity" do
+      source = """
+      defmodule AshCredoFixtures do
+        defmodule __MODULE__.MacroScope do
+          require __MODULE__.MixedApi
+          def go(value), do: AshCredoFixtures.MacroScope.MixedApi.do_thing(value)
+        end
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source, macro_modules: [@mixed_api])
+    end
+
+    test "a protocol body has its own module identity" do
+      source = """
+      defmodule AshCredoFixtures do
+        defprotocol MacroScope do
+          require __MODULE__.MixedApi
+          AshCredoFixtures.MacroScope.MixedApi.do_thing(:value)
+        end
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source, macro_modules: [@mixed_api])
+    end
+
+    test "implementation macro calls resolve to the implementation and then restore the parent" do
+      source = """
+      defmodule AshCredoFixtures.MacroScope do
+        defimpl Inspect, for: AshCredoFixtures.MacroScope do
+          def go(value), do: __MODULE__.MixedApi.do_thing(value)
+        end
+        def go(value), do: __MODULE__.MixedApi.do_thing(value)
+      end
+      """
+
+      assert [implementation, outer] =
+               run_check(MissingMacroDirective, source,
+                 macro_modules: [@mixed_api, Inspect.AshCredoFixtures.MacroScope.MixedApi]
+               )
+
+      assert implementation.message =~ "Inspect.AshCredoFixtures.MacroScope.MixedApi.do_thing/1"
+      assert outer.message =~ "`AshCredoFixtures.MacroScope.MixedApi.do_thing/1`"
+    end
+
+    test "implementation-local requires use the implementation identity without leaking" do
+      source = """
+      defmodule AshCredoFixtures.MacroScope do
+        defimpl Inspect, for: AshCredoFixtures.MacroScope do
+          require __MODULE__.MixedApi
+          def go(value), do: Inspect.AshCredoFixtures.MacroScope.MixedApi.do_thing(value)
+        end
+        def go(value), do: __MODULE__.MixedApi.do_thing(value)
+      end
+      """
+
+      assert [issue] =
+               run_check(MissingMacroDirective, source,
+                 macro_modules: [@mixed_api, Inspect.AshCredoFixtures.MacroScope.MixedApi]
+               )
+
+      assert issue.line_no == 6
+      assert issue.message =~ "`AshCredoFixtures.MacroScope.MixedApi.do_thing/1`"
+    end
+
+    test "a macro in a computed module name is checked in the parent's context" do
+      source = """
+      defmodule AshCredoFixtures.MacroScope do
+        defmodule Module.concat([__MODULE__.MixedApi.do_thing(:x)]) do
+          :ok
+        end
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source, macro_modules: [@mixed_api])
+      assert issue.line_no == 2
+      assert issue.message =~ "AshCredoFixtures.MacroScope.MixedApi.do_thing/1"
+    end
+
+    test "a parent's require satisfies a macro in a computed module name" do
+      source = """
+      defmodule AshCredoFixtures.MacroScope do
+        require __MODULE__.MixedApi
+        defmodule Module.concat([__MODULE__.MixedApi.do_thing(:x)]) do
+          :ok
+        end
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source, macro_modules: [@mixed_api])
+    end
+
+    test "quoted implementations with dynamic options are skipped without evaluating them" do
+      source = """
+      defmodule AshCredoFixtures.MacroScope do
+        defmacro build(options) do
+          quote do
+            defimpl Inspect, unquote(options) do
+              __MODULE__.MixedApi.do_thing(:value)
+            end
+          end
+        end
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source, macro_modules: [@mixed_api])
+    end
+
+    test "require __MODULE__.MixedApi satisfies a fully qualified macro call" do
+      source = """
+      defmodule AshCredoFixtures.MacroScope do
+        require __MODULE__.MixedApi
+        def go(value), do: AshCredoFixtures.MacroScope.MixedApi.do_thing(value)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source, macro_modules: [@mixed_api])
+    end
+
+    test "a grouped import through __MODULE__ satisfies the directive" do
+      source = """
+      defmodule AshCredoFixtures.MacroScope do
+        import __MODULE__.{MixedApi}
+        def go(value), do: AshCredoFixtures.MacroScope.MixedApi.do_thing(value)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source, macro_modules: [@mixed_api])
+    end
+
+    test "a relative nested module retains its full identity" do
+      source = """
+      defmodule AshCredoFixtures do
+        defmodule MacroScope do
+          require __MODULE__.MixedApi
+          def go(value), do: AshCredoFixtures.MacroScope.MixedApi.do_thing(value)
+        end
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source, macro_modules: [@mixed_api])
+    end
+
+    test "an absolute nested module resolves __MODULE__ independently of its parent" do
+      source = """
+      defmodule MyApp.Outer do
+        defmodule Elixir.AshCredoFixtures.MacroScope do
+          require __MODULE__.MixedApi
+          def go(value), do: AshCredoFixtures.MacroScope.MixedApi.do_thing(value)
+        end
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source, macro_modules: [@mixed_api])
+    end
+
+    test "an absolute module retains its identity inside an unknown parent" do
+      source = """
+      defmodule Module.concat([:Generated, :Outer]) do
+        defmodule Elixir.AshCredoFixtures.MacroScope do
+          require __MODULE__.MixedApi
+          def go(value), do: AshCredoFixtures.MacroScope.MixedApi.do_thing(value)
+        end
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source, macro_modules: [@mixed_api])
+    end
+
+    test "a top-level module name resolved through an alias retains its identity" do
+      source = """
+      alias AshCredoFixtures.MacroScope, as: Scope
+
+      defmodule Scope do
+        require __MODULE__.MixedApi
+        def go(value), do: AshCredoFixtures.MacroScope.MixedApi.do_thing(value)
+      end
+      """
+
+      assert [] = run_check(MissingMacroDirective, source, macro_modules: [@mixed_api])
+    end
+
+    test "__MODULE__ macro calls respect function-local requires" do
+      source = """
+      defmodule AshCredoFixtures.MacroScope do
+        def required(value) do
+          require __MODULE__.MixedApi
+          value |> __MODULE__.MixedApi.do_thing()
+        end
+
+        def missing(value), do: value |> __MODULE__.MixedApi.do_thing()
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source, macro_modules: [@mixed_api])
+      assert issue.line_no == 7
+      assert issue.message =~ "AshCredoFixtures.MacroScope.MixedApi.do_thing/1"
+    end
+
+    test "calls outside modules remain out of scope" do
+      source = "AshCredoFixtures.MacroScope.MixedApi.do_thing(:value)"
+
+      assert [] = run_check(MissingMacroDirective, source, macro_modules: [@mixed_api])
     end
   end
 

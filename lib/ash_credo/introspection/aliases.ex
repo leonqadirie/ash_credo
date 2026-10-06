@@ -84,12 +84,12 @@ defmodule AshCredo.Introspection.Aliases do
   def expand_to_module(_segments, %Macro.Env{}), do: :error
 
   @doc """
-  Extracts the literal alias segments from a `defmodule` AST node, or
+  Extracts the alias segments from a `defmodule` or `defprotocol` AST node, or
   `nil` when the module name is not a literal alias (e.g.
   `Module.concat(...)`).
   """
-  def defmodule_literal_segments({:defmodule, _, [{:__aliases__, _, segs}, _]})
-      when is_list(segs), do: segs
+  def defmodule_literal_segments({kind, _, [{:__aliases__, _, segs}, _]})
+      when kind in [:defmodule, :defprotocol] and is_list(segs), do: segs
 
   def defmodule_literal_segments(_), do: nil
 
@@ -120,13 +120,25 @@ defmodule AshCredo.Introspection.Aliases do
   visible aliases apply to its literal segments. When it is a module
   path, the module is nested, and Elixir resolves it by prepending the
   enclosing path without applying lexical aliases to the nested name
-  itself. Returns `nil` when the segments are not a literal alias or the
-  enclosing module path is already unknown.
+  itself. An explicit `Elixir.*` name is absolute even inside a module
+  whose name is unknown. Returned paths omit the `Elixir` root prefix.
+  A leading `__MODULE__` is replaced with the parent's full path and
+  the resulting name is absolute, without applying lexical aliases again.
+  Returns `nil` when the segments are not a literal alias or a relative
+  name's enclosing module path is already unknown.
   """
+  def absolute_module_segments([{:__MODULE__, _, _} | _] = segments, parent, %Macro.Env{}) do
+    case resolve_module_self(segments, parent) do
+      {:ok, absolute} -> absolute
+      :error -> nil
+    end
+  end
+
   def absolute_module_segments(literal_segments, parent_absolute, %Macro.Env{} = env)
       when is_list(literal_segments) do
     cond do
       not Enum.all?(literal_segments, &is_atom/1) -> nil
+      match?([Elixir, _ | _], literal_segments) -> tl(literal_segments)
       is_nil(parent_absolute) -> nil
       parent_absolute == [] -> expand_alias(literal_segments, env)
       true -> parent_absolute ++ literal_segments
@@ -169,6 +181,25 @@ defmodule AshCredo.Introspection.Aliases do
 
     if Enum.all?(resolved, &is_atom/1), do: {:ok, resolved}, else: :error
   end
+
+  @doc """
+  Resolves a module reference's alias segments: expands them through
+  `env`, substitutes `__MODULE__` with `enclosing`, and drops a leading
+  `Elixir` root so references match `absolute_module_segments/3`.
+  Returns `:error` when the reference cannot be resolved without
+  evaluating source code.
+  """
+  def resolve_alias(segments, %Macro.Env{} = env, enclosing) when is_list(segments) do
+    segments
+    |> expand_alias(env)
+    |> resolve_module_self(enclosing)
+    |> case do
+      {:ok, [Elixir, _ | _] = resolved} -> {:ok, tl(resolved)}
+      result -> result
+    end
+  end
+
+  def resolve_alias(_segments, %Macro.Env{}, _enclosing), do: :error
 
   @doc """
   Resolves a module reference (an `__aliases__` node or bare segments)
@@ -271,9 +302,12 @@ defmodule AshCredo.Introspection.Aliases do
     segments != [] and Enum.all?(segments, &(is_atom(&1) and not is_nil(&1)))
   end
 
-  # `Module.split/1` raises for non-Elixir atoms; alias targets extracted
-  # from `__aliases__` nodes are always Elixir modules, but stay defensive.
-  defp elixir_module_segments(module) do
+  @doc """
+  Splits an Elixir module atom into segment atoms (`MyApp.Post` becomes
+  `[:MyApp, :Post]`). Returns `nil` for atoms outside the `Elixir.`
+  namespace, where `Module.split/1` would raise.
+  """
+  def elixir_module_segments(module) when is_atom(module) do
     case Atom.to_string(module) do
       "Elixir." <> _rest -> module |> Module.split() |> Enum.map(&String.to_atom/1)
       _other -> nil

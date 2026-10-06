@@ -670,3 +670,23 @@ defmodule AshCredoFixtures.FakeMacros do
 
   def regular(value), do: value
 end
+
+defmodule AshCredoFixtures.MacroScope.MixedApi do
+  @moduledoc false
+
+  defmacro do_thing(value) do
+    quote do
+      unquote(value)
+    end
+  end
+end
+
+defmodule Inspect.AshCredoFixtures.MacroScope.MixedApi do
+  @moduledoc false
+
+  defmacro do_thing(value) do
+    quote do
+      unquote(value)
+    end
+  end
+end

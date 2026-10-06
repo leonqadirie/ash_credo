@@ -90,6 +90,10 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
       `Ash.Query.filter(...)` (or `Q.filter(...)`) inside a nested
       `defmodule`.
 
+      Directives and qualified calls through `__MODULE__.SomeMacros`
+      resolve against the enclosing module's absolute name, including
+      nested modules and explicit `Elixir.*` module declarations.
+
       The check is a **correctness backstop**: for projects without
       `--warnings-as-errors`, it converts the easy-to-miss runtime case
       (#3 above) into a lint issue. Style rules about *where* directives
@@ -143,8 +147,8 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
       ]
     ]
 
-  alias AshCredo.Introspection.{Aliases, LexicalScopeWalker}
   alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
+  alias AshCredo.Introspection.LexicalScopeWalker
 
   @impl AshCredo.CompiledCheck
   def run_compiled(source_file, params) do
@@ -166,10 +170,8 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     call_issues =
       source_file
       |> Credo.SourceFile.ast()
-      |> collect_module_bodies()
-      |> Enum.flat_map(fn {body, inherited_env} ->
-        check_module_body(body, inherited_env, resolved, issue_meta)
-      end)
+      |> collect_call_sites(resolved)
+      |> Enum.map(&build_issue(&1, issue_meta))
       |> Enum.sort_by(& &1.line_no)
 
     load_issues ++ call_issues
@@ -199,58 +201,17 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     end
   end
 
-  # Walks the whole file AST and returns `{body, inherited_env}` tuples for
-  # every `defmodule`, nested ones included. `inherited_env` is the
-  # `Macro.Env` visible at the `defmodule` declaration; the walker records
-  # `alias`/`require`/`import` directives into it, so nested modules
-  # inherit all three from the enclosing lexical scope, exactly as Elixir
-  # does. We do NOT capture defmodules inside `quote do ... end` blocks;
-  # they belong to the macro caller's site.
-  defp collect_module_bodies(ast) do
-    {%{bodies: bodies}, _scope} =
-      LexicalScopeWalker.traverse(
-        ast,
-        %{bodies: []},
-        &enter_for_bodies/3,
-        fn _node, _scope, acc -> acc end
-      )
-
-    Enum.reverse(bodies)
-  end
-
-  defp enter_for_bodies({:defmodule, _, [_alias, [do: body]]}, scope, state) do
-    if LexicalScopeWalker.in_quote?(scope) do
-      state
-    else
-      captured = {body, LexicalScopeWalker.env(scope)}
-      %{state | bodies: [captured | state.bodies]}
-    end
-  end
-
-  defp enter_for_bodies(_node, _scope, state), do: state
-
-  # Single pass per body: walks the body with the inherited env as the base
-  # frame, recording a site only when the env visible at that call site
-  # does NOT require the call's module.
-  defp check_module_body(body, inherited_env, resolved, issue_meta) do
-    body
-    |> collect_call_sites(inherited_env, resolved)
-    |> Enum.map(&build_issue(&1, issue_meta))
-  end
-
-  # The body we traverse is already the contents of the outer `defmodule`'s
-  # do-block; we never visit that outermost `{:do, body}` tuple ourselves,
-  # so the walker's `:initial_env` opt seeds the inherited env into the
-  # base frame. A nested module's calls then expand and resolve the same
-  # way they do in Elixir.
-  defp collect_call_sites(body, inherited_env, resolved) do
+  # Walk the full file once so the env and absolute module path stay
+  # together. Extracting module bodies would discard the identity needed
+  # to resolve __MODULE__ directives and calls. Nested modules inherit
+  # lexical directives through the walker and each call is visited once.
+  defp collect_call_sites(ast, resolved) do
     {%{sites: sites}, _scope} =
       LexicalScopeWalker.traverse(
-        body,
+        ast,
         %{sites: [], piped_arities: %{}},
         &enter_for_calls(&1, &2, &3, resolved),
-        fn _node, _scope, acc -> acc end,
-        initial_env: inherited_env
+        fn _node, _scope, acc -> acc end
       )
 
     Enum.reverse(sites)
@@ -279,8 +240,8 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
   #   {{:., _, [{:__aliases__, _, segs}, fun]}, meta, args}
   # Expand `segs` through the env visible at the call, so `alias Ash.Query,
   # as: Q; Q.filter(...)` matches the same as a literal
-  # `Ash.Query.filter(...)`. Skip calls inside a nested `defmodule` (we
-  # process that body separately) or inside a `quote do ... end` block.
+  # `Ash.Query.filter(...)`. Substitute __MODULE__ through the same
+  # scope's absolute path. Skip calls outside modules or inside quote.
   defp enter_for_calls(
          {{:., _, [{:__aliases__, _, segs}, fun]}, meta, args} = call,
          scope,
@@ -292,23 +253,16 @@ defmodule AshCredo.Check.Warning.MissingMacroDirective do
     {arity, piped_arities} = Map.pop(state.piped_arities, call, length(args))
     state = %{state | piped_arities: piped_arities}
 
-    with false <- in_nested_module_or_quote?(scope),
-         {:ok, mod} <- Aliases.expand_to_module(segs, env) do
-      maybe_record_call(state, resolved, mod, fun, arity, meta, env)
+    with true <- LexicalScopeWalker.in_module?(scope),
+         false <- LexicalScopeWalker.in_quote?(scope),
+         {:ok, segments} <- LexicalScopeWalker.resolve_alias(segs, scope) do
+      maybe_record_call(state, resolved, Module.concat(segments), fun, arity, meta, env)
     else
       _ -> state
     end
   end
 
   defp enter_for_calls(_node, _scope, state, _resolved), do: state
-
-  defp in_nested_module_or_quote?(scope) do
-    # We use `in_module?/1`, not `current_module_segments != nil`, so we
-    # also skip nested defmodules with non-literal names like
-    # `defmodule Module.concat(...) do ... end`; those would otherwise be
-    # processed as part of the outer module's call sites.
-    LexicalScopeWalker.in_module?(scope) or LexicalScopeWalker.in_quote?(scope)
-  end
 
   defp maybe_record_call(state, resolved, mod, fun, arity, meta, env) do
     with {:ok, macros} <- Map.fetch(resolved, mod),
