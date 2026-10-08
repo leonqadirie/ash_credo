@@ -34,3 +34,6 @@ ash_credo-*.tar
 
 # Reports
 reach_report
+
+# Taskfile checksum cache
+.task/

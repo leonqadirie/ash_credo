@@ -1,0 +1,82 @@
+# https://taskfile.dev
+version: "3"
+
+tasks:
+  default:
+    desc: List the available tasks
+    cmds:
+      - task --list --sort none
+    silent: true
+
+  ci:
+    desc: Run the CI checks that work locally (typos, deps audit, test, lint)
+    cmds:
+      - task: typos
+      - task: deps:audit
+      - task: test:clean
+      - task: lint
+
+  deps:audit:
+    desc: Check dependencies for retired Hex packages
+    deps: [deps:get]
+    cmds:
+      - mix hex.audit
+
+  deps:get:
+    desc: Fetch Mix dependencies
+    cmds:
+      - mix deps.get
+    sources:
+      - mix.exs
+      - mix.lock
+
+  deps:outdated:
+    desc: List dependencies with newer Hex releases
+    deps: [deps:get]
+    cmds:
+      - mix hex.outdated
+
+  deps:update:
+    desc: Update all Mix dependencies to the newest versions mix.exs allows
+    cmds:
+      - mix deps.update --all
+
+  format:
+    desc: Format all Elixir sources
+    cmds:
+      - mix format
+
+  lint:
+    desc: Run the mix lint alias (format check, Credo, Credence, Reach, xref cycles, docs)
+    deps: [deps:get]
+    cmds:
+      - mix lint
+
+  test:
+    desc: Run the test suite; pass extra mix test args after --
+    deps: [deps:get]
+    cmds:
+      - mix test {{.CLI_ARGS}}
+
+  test:clean:
+    desc: Recompile ash_credo from scratch, then run the test suite as CI does; pass extra mix test args after --
+    deps: [deps:get]
+    cmds:
+      - rm -rf _build/*/lib/ash_credo
+      - mix test {{.CLI_ARGS}}
+
+  typos:
+    desc: Check spelling with typos
+    preconditions:
+      - sh: command -v typos
+        msg: "typos is not installed: https://github.com/crate-ci/typos#install"
+    cmds:
+      - typos
+
+  verify:
+    desc: Format the sources, then check spelling, lint, and run the test suite
+    cmds:
+      - task: format
+      - task: typos
+      - task: lint
+      - task: test
