@@ -189,6 +189,19 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       assert issue.line_no == 8
     end
 
+    test "require inside a default argument does not reach the function body" do
+      source = """
+      defmodule MyApp.PostQueries do
+        def published(query \\\\ (require Ash.Query; MyApp.Post)) do
+          Ash.Query.filter(query, state == :published)
+        end
+      end
+      """
+
+      assert [issue] = run_check(MissingMacroDirective, source)
+      assert issue.line_no == 3
+    end
+
     test "flags all Ash.Query macros when require is missing" do
       source = """
       defmodule MyApp.PostQueries do

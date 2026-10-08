@@ -270,17 +270,20 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
       assert resolves?(env_after_for, [:Q], [:Q])
     end
 
-    test "def scopes default-argument aliases by default (matches Elixir)" do
+    test "default-argument aliases stay inside the default expression (matches Elixir)" do
       ast =
         parse!("""
         defmodule Foo do
-          def first(x \\\\ (alias Ash.Query, as: Q; 1)), do: x
+          def first(x \\\\ (alias Ash.Query, as: Q; Probe.mark(Q))), do: Probe.mark(Q)
           def later, do: Probe.mark(Q)
         end
         """)
 
-      [env_in_later] = walk(ast, [], record_env_at(:mark), noop())
+      [env_in_later, env_in_body, env_in_default] =
+        walk(ast, [], record_env_at(:mark), noop())
 
+      assert resolves?(env_in_default, [:Q], [:Ash, :Query])
+      assert resolves?(env_in_body, [:Q], [:Q])
       assert resolves?(env_in_later, [:Q], [:Q])
     end
 

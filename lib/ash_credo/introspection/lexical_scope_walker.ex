@@ -50,7 +50,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
     an alias scope frame on entry and pops it on exit, on top of the
     frames it always pushes for `Aliases.scope_keys/0`
     (`do/else/after/rescue/catch`) and `:->` arrows. Defaults to
-    `Aliases.alias_scope_nodes/0` (`with`, `for`, and the `def` family),
+    `Aliases.alias_scope_nodes/0` (`with`, `for`, and default arguments),
     which documents the Elixir scoping rule behind it. A passed list
     replaces the default instead of extending it, so include
     `Aliases.alias_scope_nodes()` to keep those scopes. Pass `[]` to opt
