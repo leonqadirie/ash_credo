@@ -4,12 +4,15 @@
       name: "default",
       files: %{
         included: [
+          "dev/",
           "lib/",
           "test/"
         ],
         excluded: [~r"/_build/", ~r"/deps/", ~r"/test/integration/fixtures/"]
       },
-      plugins: [{ExDNA.Credo, []}],
+      # ExDNA scans only lib/ by default; extend it to every path Credo lints.
+      # normalize_pipes makes `x |> f()` and `f(x)` count as the same code.
+      plugins: [{ExDNA.Credo, [paths: ["dev/", "lib/", "test/"], normalize_pipes: true]}],
       requires: [],
       strict: true,
       parse_timeout: 5000,
@@ -70,7 +73,7 @@
           {ExSlop.Check.Readability.ObviousComment, [additional_keywords: []]},
           {ExSlop.Check.Readability.StepComment, []},
           {ExSlop.Check.Readability.NarratorComment, []},
-          {ExSlop.Check.Readability.UnaliasedModuleUse, []}
+          {ExSlop.Check.Readability.UnaliasedModuleUse, [min_count: 2]}
         ]
       }
     }
