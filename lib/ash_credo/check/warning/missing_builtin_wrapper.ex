@@ -1,5 +1,5 @@
 defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
-  use Credo.Check,
+  use AshCredo.CompiledCheck,
     base_priority: :high,
     category: :warning,
     tags: [:ash],
@@ -47,10 +47,11 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
     ]
 
   alias AshCredo.Introspection
+  alias AshCredo.Introspection.Compiled
   alias AshCredo.Orchestration
 
   # One entry per builtin family. We read the builtin NAMES at run time
-  # from `:builtins_module` via `__info__(:functions)`, so builtins added
+  # from `:builtins_module` via `Compiled.functions/1`, so builtins added
   # in newer Ash versions are covered without editing this file. Everything
   # else is hand-tuned scoping: it decides where we flag a family, and
   # which family owns names shared by more than one (`set_context`):
@@ -111,8 +112,8 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
     }
   ]
 
-  @impl true
-  def run(%SourceFile{} = source_file, params) do
+  @impl AshCredo.CompiledCheck
+  def run_compiled(source_file, params) do
     Enum.flat_map(@families, fn family ->
       naked_builtin_issues(source_file, params, family_opts(family))
     end)
@@ -133,14 +134,14 @@ defmodule AshCredo.Check.Warning.MissingBuiltinWrapper do
   end
 
   # Read the builtin function names live from the family's Ash module, so
-  # new builtins are picked up automatically. When the module isn't
-  # loadable (Ash absent from the VM running Credo), the family simply
-  # doesn't flag: without Ash there is nothing Ash-specific to check.
+  # new builtins are picked up automatically. The CompiledCheck guard
+  # already skips the run when Ash is absent, so a non-loadable module
+  # here means the installed Ash version lacks that family; the family
+  # then doesn't flag.
   defp resolve_builtins(module) do
-    if Code.ensure_loaded?(module) do
-      module.__info__(:functions) |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
-    else
-      []
+    case Compiled.functions(module) do
+      {:ok, functions} -> functions |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+      {:error, :not_loadable} -> []
     end
   end
 
