@@ -27,6 +27,8 @@ defmodule Mix.Tasks.Lint.Reach do
 
   use Mix.Task
 
+  alias Reach.Check.DeadCode
+
   @impl true
   def run(_args) do
     run_check(["--arch"])
@@ -44,7 +46,7 @@ defmodule Mix.Tasks.Lint.Reach do
   defp run_dead_code do
     Mix.shell().info("\nDead Code")
 
-    case Reach.Check.DeadCode.run(Reach.Check.DeadCode.collect_files(["lib", "dev"])) do
+    case DeadCode.run(DeadCode.collect_files(["lib", "dev"])) do
       [] ->
         Mix.shell().info("  (none)")
 
@@ -59,8 +61,5 @@ defmodule Mix.Tasks.Lint.Reach do
     end
   end
 
-  defp run_check(args) do
-    Mix.Task.reenable("reach.check")
-    Mix.Task.run("reach.check", args)
-  end
+  defp run_check(args), do: Mix.Task.rerun("reach.check", args)
 end
