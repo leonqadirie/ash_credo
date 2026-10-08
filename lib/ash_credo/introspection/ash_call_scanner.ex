@@ -30,12 +30,14 @@ defmodule AshCredo.Introspection.AshCallScanner do
   @calls_key_tag {__MODULE__, :calls}
 
   @scope_keys Aliases.scope_keys()
-  @lexical_scope_nodes [
-    :\\ | ~w(def defp defmacro defmacrop fn if unless case cond with try receive for)a
-  ]
   @branch_scope_nodes ~w(if unless case cond with try receive for)a
   @function_scope_nodes ~w(def defp defmacro defmacrop)a
   @alias_scope_nodes Aliases.alias_scope_nodes()
+  @binding_scope_nodes [:fn | @function_scope_nodes]
+  # Every node that opens an alias, binding, or branch scope.
+  @lexical_scope_nodes Enum.uniq(
+                         @alias_scope_nodes ++ @binding_scope_nodes ++ @branch_scope_nodes
+                       )
 
   @doc "Returns true if the AST node is a call to an `Ash.*` module."
   def call?(ast, env \\ nil)
