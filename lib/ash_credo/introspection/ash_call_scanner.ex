@@ -17,9 +17,17 @@ defmodule AshCredo.Introspection.AshCallScanner do
     * `calls_with_context/1` - enriched maps with `:call_ast`,
       `:expanded_module`, `:args`, `:env`, `:bindings`, and
       `:enclosing_module_segments`
+
+  All three read one memoized scan per file, keyed on filename plus
+  source hash, so the walk runs once per file per Credo run no matter
+  how many checks consume it.
   """
 
+  alias AshCredo.Cache
+  alias AshCredo.Introspection
   alias AshCredo.Introspection.Aliases
+
+  @calls_key_tag {__MODULE__, :calls}
 
   @scope_keys ~w(do else after rescue catch)a
   @lexical_scope_nodes ~w(defmodule def defp defmacro defmacrop fn if unless case cond with try receive for)a
@@ -42,78 +50,77 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   @doc "Returns all `Ash.*` API call AST nodes, resolving aliases lexically."
   def calls(source_file) do
-    traverse(source_file, fn ast, _expanded, _state -> ast end)
+    source_file |> calls_with_context() |> Enum.map(& &1.call_ast)
   end
 
   @doc "Returns `{call_ast, expanded_module_segments}` tuples for all `Ash.*` calls."
   def calls_with_module(source_file) do
-    traverse(source_file, fn ast, expanded, _state -> {ast, expanded} end)
+    source_file |> calls_with_context() |> Enum.map(&{&1.call_ast, &1.expanded_module})
   end
 
   @doc "Returns enriched call maps with `:call_ast`, `:expanded_module`, `:args`, `:env`, and `:bindings`."
   def calls_with_context(source_file) do
-    traverse(source_file, &build_call_context/3, track_context?: true)
+    key = {@calls_key_tag, source_file.filename, Introspection.source_hash(source_file)}
+
+    Cache.memoize(key, fn -> traverse(source_file) end)
   end
 
-  defp traverse(source_file, collect_fn, opts \\ []) do
+  defp traverse(source_file) do
     {_, %{calls: calls}} =
       source_file
       |> Credo.SourceFile.ast()
       |> Macro.traverse(
-        initial_state(opts),
-        &enter_node(&1, &2, collect_fn),
+        initial_state(),
+        &enter_node/2,
         &leave_node/2
       )
 
     Enum.reverse(calls)
   end
 
-  defp enter_node({scope_key, _body} = ast, state, _collect_fn) when scope_key in @scope_keys do
+  defp enter_node({scope_key, _body} = ast, state) when scope_key in @scope_keys do
     {ast, push_alias_frame(state)}
   end
 
-  defp enter_node({:->, _, [_args, _body]} = ast, state, _collect_fn) do
+  defp enter_node({:->, _, [_args, _body]} = ast, state) do
     {ast, push_alias_frame(state)}
   end
 
-  defp enter_node({:defmodule, _, _} = ast, state, _collect_fn) do
+  defp enter_node({:defmodule, _, _} = ast, state) do
     {ast,
      state
-     |> maybe_enter_lexical_scope(:defmodule)
+     |> enter_lexical_scope(:defmodule)
      |> push_module_stack(ast)}
   end
 
-  defp enter_node({node_name, _, _} = ast, state, _collect_fn)
-       when node_name in @lexical_scope_nodes do
-    {ast, maybe_enter_lexical_scope(state, node_name)}
+  defp enter_node({node_name, _, _} = ast, state) when node_name in @lexical_scope_nodes do
+    {ast, enter_lexical_scope(state, node_name)}
   end
 
   # `require ..., as:` sets up an alias too; `apply_directive/3` records
   # exactly the shapes that create one. Unlike the walker, the scanner
   # has no quote tracking: directives inside `quote do ... end` are
   # recorded, preserving long-standing scanner behavior.
-  defp enter_node({directive, _, _} = ast, state, _collect_fn)
-       when directive in [:alias, :require] do
+  defp enter_node({directive, _, _} = ast, state) when directive in [:alias, :require] do
     {ast, capture_directive(state, ast)}
   end
 
-  defp enter_node({:|>, _, [left, {{:., _, _}, meta, _}]} = ast, state, _collect_fn)
-       when is_list(meta) do
-    {ast, maybe_track_pipe_origin(state, meta, left)}
+  defp enter_node({:|>, _, [left, {{:., _, _}, meta, _}]} = ast, state) when is_list(meta) do
+    {ast, track_pipe_origin(state, meta, left)}
   end
 
-  defp enter_node({{:., _, [module_ast, _fun_name]}, _meta, args} = call_ast, state, collect_fn)
+  defp enter_node({{:., _, [module_ast, _fun_name]}, _meta, args} = call_ast, state)
        when is_list(args) do
     expanded_module = expanded_call_module(module_ast, current_env(state))
 
     if match?([:Ash | _], expanded_module) do
-      {call_ast, record_call(state, call_ast, expanded_module, collect_fn)}
+      {call_ast, record_call(state, call_ast, expanded_module)}
     else
       {call_ast, state}
     end
   end
 
-  defp enter_node(ast, state, _collect_fn), do: {ast, state}
+  defp enter_node(ast, state), do: {ast, state}
 
   defp leave_node({scope_key, _body} = ast, state) when scope_key in @scope_keys do
     {ast, pop_alias_frame(state)}
@@ -136,7 +143,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
     state =
       state
       |> pop_module_stack()
-      |> maybe_leave_lexical_scope(:defmodule)
+      |> leave_lexical_scope(:defmodule)
       |> register_defmodule_alias(ast, child_absolute)
 
     {ast, state}
@@ -144,25 +151,24 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   defp leave_node({node_name, _, _} = ast, state)
        when node_name in @lexical_scope_nodes and node_name != :defmodule do
-    {ast, maybe_leave_lexical_scope(state, node_name)}
+    {ast, leave_lexical_scope(state, node_name)}
   end
 
   defp leave_node(ast, state), do: {ast, state}
 
-  defp initial_state(opts) do
+  defp initial_state do
     %{
       env_frames: [Aliases.base_env()],
       binding_frames: [],
       branch_depth: 0,
       calls: [],
       pipe_origins: %{},
-      module_stack: [],
-      track_context?: Keyword.get(opts, :track_context?, false)
+      module_stack: []
     }
   end
 
-  defp record_call(state, call_ast, expanded_module, collect_fn) do
-    %{state | calls: [collect_fn.(call_ast, expanded_module, state) | state.calls]}
+  defp record_call(state, call_ast, expanded_module) do
+    %{state | calls: [build_call_context(call_ast, expanded_module, state) | state.calls]}
   end
 
   defp build_call_context(
@@ -201,20 +207,14 @@ defmodule AshCredo.Introspection.AshCallScanner do
   defp current_module_segments(%{module_stack: [top | _]}), do: top
   defp current_module_segments(%{module_stack: []}), do: nil
 
-  defp maybe_enter_lexical_scope(%{track_context?: false} = state, node_name),
-    do: maybe_push_alias_frame(state, node_name)
-
-  defp maybe_enter_lexical_scope(state, node_name) do
+  defp enter_lexical_scope(state, node_name) do
     state
     |> maybe_push_alias_frame(node_name)
     |> maybe_push_binding_frame(node_name)
     |> maybe_enter_branch_scope(node_name)
   end
 
-  defp maybe_leave_lexical_scope(%{track_context?: false} = state, node_name),
-    do: maybe_pop_alias_frame(state, node_name)
-
-  defp maybe_leave_lexical_scope(state, node_name) do
+  defp leave_lexical_scope(state, node_name) do
     state
     |> maybe_leave_branch_scope(node_name)
     |> maybe_pop_binding_frame(node_name)
@@ -231,9 +231,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   defp maybe_pop_alias_frame(state, _node_name), do: state
 
-  defp maybe_track_pipe_origin(%{track_context?: false} = state, _meta, _left), do: state
-
-  defp maybe_track_pipe_origin(state, meta, left) do
+  defp track_pipe_origin(state, meta, left) do
     key = call_key(meta)
     %{state | pipe_origins: Map.put(state.pipe_origins, key, left)}
   end
