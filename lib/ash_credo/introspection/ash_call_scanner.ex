@@ -36,7 +36,9 @@ defmodule AshCredo.Introspection.AshCallScanner do
   # Elixir confines an alias declared in a `with` or `for` clause, or in a
   # function head's default argument, to the construct, but lets one
   # declared in a `case`/`if`/`unless`/`cond` subject leak into the
-  # enclosing body.
+  # enclosing body. `LexicalScopeWalker` uses the same split by default.
+  # Elixir also hides a `with` clause alias from the `else` block; neither
+  # traversal models that, so `else` resolves it like the `do` block.
   @alias_scope_nodes [:with, :for | @function_scope_nodes]
 
   @doc "Returns true if the AST node is a call to an `Ash.*` module."

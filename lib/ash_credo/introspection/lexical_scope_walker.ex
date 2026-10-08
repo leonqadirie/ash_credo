@@ -47,15 +47,15 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   ## Opts
 
   - `:lexical_scope_nodes` - extra atoms for which the walker pushes an
-    alias scope frame on entry and pops it on exit. Defaults to
-    `[:with, :for]` because these constructs ARE separate scopes in
-    Elixir (verified empirically): a `require`/`alias` declared inside a
-    `with` clause or `for` generator does NOT propagate past the
-    construct. The walker always additionally pushes for `@scope_keys`
-    (`do/else/after/rescue/catch`) and `:->` arrows. Pass
-    `lexical_scope_nodes: []` to opt out, but only with a specific
-    reason: `with`/`for` clause-level aliases then leak into the
-    enclosing scope.
+    alias scope frame on entry and pops it on exit. Defaults to `with`,
+    `for`, and the `def` family because Elixir confines a `require`/`alias`
+    declared in a `with` clause, a `for` generator, or a function head's
+    default argument to that construct. The walker always additionally
+    pushes for `@scope_keys` (`do/else/after/rescue/catch`) and `:->`
+    arrows. Pass `lexical_scope_nodes: []` to opt out, but only with a
+    specific reason: those aliases then leak into the enclosing scope.
+    Elixir also hides a `with` clause alias from the `else` block; the
+    walker does not model that, so `else` resolves it like the `do` block.
   - `:track_quote` (default `true`) - track the `{:quote, _, _}` depth.
     When truthy, `in_quote?/1` and `quote_depth/1` reflect it, and
     aliases declared inside `quote` are dropped (see
@@ -77,6 +77,7 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   alias AshCredo.Introspection.Aliases
 
   @scope_keys ~w(do else after rescue catch)a
+  @default_lexical_scope_nodes ~w(with for def defp defmacro defmacrop)a
 
   defmodule Scope do
     @moduledoc """
@@ -187,7 +188,10 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   defp normalize_opts(opts) do
     %{
       lexical_scope_nodes:
-        opts |> Keyword.get(:lexical_scope_nodes, [:with, :for]) |> List.wrap() |> MapSet.new(),
+        opts
+        |> Keyword.get(:lexical_scope_nodes, @default_lexical_scope_nodes)
+        |> List.wrap()
+        |> MapSet.new(),
       track_quote: Keyword.get(opts, :track_quote, true),
       track_aliases_in_quote: Keyword.get(opts, :track_aliases_in_quote, false),
       initial_env: Keyword.get(opts, :initial_env)
