@@ -2,6 +2,27 @@ defmodule AshCredo.Introspection.Aliases do
   @moduledoc false
 
   @directive_kinds ~w(alias require import)a
+  @scope_keys ~w(do else after rescue catch)a
+  @alias_scope_nodes ~w(with for def defp defmacro defmacrop)a
+
+  @doc """
+  Returns the keyword block keys whose bodies each open their own alias
+  scope. Every `->` clause opens one too.
+  """
+  def scope_keys, do: @scope_keys
+
+  @doc """
+  Returns the call forms that open an alias scope around the whole node,
+  head included. Elixir confines an alias declared in a `with` or `for`
+  clause, or in a function head's default argument, to the construct,
+  but lets one declared in a `case`/`if`/`unless`/`cond` subject leak
+  into the enclosing body.
+
+  Elixir also hides a `with` clause alias from the `else` block. Neither
+  `AshCallScanner` nor `LexicalScopeWalker` models that, so `else`
+  resolves it like the `do` block.
+  """
+  def alias_scope_nodes, do: @alias_scope_nodes
 
   @doc """
   Returns a fresh `Macro.Env` for accumulating lexical directives.
