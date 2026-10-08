@@ -30,7 +30,9 @@ defmodule AshCredo.Introspection.AshCallScanner do
   @calls_key_tag {__MODULE__, :calls}
 
   @scope_keys Aliases.scope_keys()
-  @lexical_scope_nodes ~w(def defp defmacro defmacrop fn if unless case cond with try receive for)a
+  @lexical_scope_nodes [
+    :\\ | ~w(def defp defmacro defmacrop fn if unless case cond with try receive for)a
+  ]
   @branch_scope_nodes ~w(if unless case cond with try receive for)a
   @function_scope_nodes ~w(def defp defmacro defmacrop)a
   @alias_scope_nodes Aliases.alias_scope_nodes()

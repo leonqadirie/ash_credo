@@ -749,17 +749,18 @@ defmodule AshCredo.IntrospectionTest do
       assert [] = AshCallScanner.calls_with_module(source_file(source))
     end
 
-    test "an alias in a default argument does not leak into later functions" do
+    test "an alias in a default argument stays inside that default expression" do
       source = """
       defmodule MyApp.Accounts do
-        def first(x \\\\ (alias Ash, as: A; 1)), do: x
+        def first(x \\\\ (alias Ash, as: A; A.read!(:in_default))), do: A.read!(x)
+        def second(a \\\\ (alias Ash, as: A; 1), b \\\\ A.read!(a)), do: b
         def later(x), do: A.read!(x)
       end
       """
 
       file = source_file(source)
-      assert [] = AshCallScanner.calls_with_context(file)
-      assert [] = AshCallScanner.calls_with_module(file)
+      assert [%{args: [:in_default]}] = AshCallScanner.calls_with_context(file)
+      assert [{{_, _, [:in_default]}, [:Ash]}] = AshCallScanner.calls_with_module(file)
     end
 
     test "an alias in a for filter does not shadow an outer alias past the for" do
