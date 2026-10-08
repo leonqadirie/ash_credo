@@ -114,7 +114,12 @@ defmodule AshCredo.Introspection do
   keys. The filename alone is not a safe key: distinct `SourceFile`s
   regularly share a filename with different content, most prominently in
   this project's own test suite.
+
+  Returns the SHA-256 digest that `Credo.SourceFile.parse/2` stores on
+  the struct, so cache lookups skip rehashing the source. Falls back to
+  hashing the source for structs built without one.
   """
+  def source_hash(%SourceFile{hash: hash}) when is_binary(hash), do: hash
   def source_hash(source_file), do: :erlang.md5(SourceFile.source(source_file))
 
   @doc """
