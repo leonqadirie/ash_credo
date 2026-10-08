@@ -30,7 +30,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
   @calls_key_tag {__MODULE__, :calls}
 
   @scope_keys Aliases.scope_keys()
-  @lexical_scope_nodes ~w(defmodule def defp defmacro defmacrop fn if unless case cond with try receive for)a
+  @lexical_scope_nodes ~w(def defp defmacro defmacrop fn if unless case cond with try receive for)a
   @branch_scope_nodes ~w(if unless case cond with try receive for)a
   @function_scope_nodes ~w(def defp defmacro defmacrop)a
   @alias_scope_nodes Aliases.alias_scope_nodes()
@@ -83,10 +83,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
   end
 
   defp enter_node({:defmodule, _, _} = ast, state) do
-    {ast,
-     state
-     |> enter_lexical_scope(:defmodule)
-     |> push_module_stack(ast)}
+    {ast, push_module_stack(state, ast)}
   end
 
   defp enter_node({node_name, _, _} = ast, state) when node_name in @lexical_scope_nodes do
@@ -132,21 +129,19 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   # A defmodule aliases its (first literal) name in the enclosing scope
   # for the rest of that body, so the alias is registered after the
-  # defmodule's own frames are gone and the parent frame is current again.
+  # body's frame is gone and the parent frame is current again.
   defp leave_node({:defmodule, _, _} = ast, state) do
     child_absolute = current_module_segments(state)
 
     state =
       state
       |> pop_module_stack()
-      |> leave_lexical_scope(:defmodule)
       |> register_defmodule_alias(ast, child_absolute)
 
     {ast, state}
   end
 
-  defp leave_node({node_name, _, _} = ast, state)
-       when node_name in @lexical_scope_nodes and node_name != :defmodule do
+  defp leave_node({node_name, _, _} = ast, state) when node_name in @lexical_scope_nodes do
     {ast, leave_lexical_scope(state, node_name)}
   end
 
