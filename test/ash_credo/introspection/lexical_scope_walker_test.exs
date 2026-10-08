@@ -233,8 +233,8 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
     test "with-construct scopes aliases by default (matches Elixir)" do
       # Verified empirically: a `require`/`alias` declared inside a `with`
       # clause does NOT propagate to expressions after the construct in
-      # Elixir. The walker's default `lexical_scope_nodes: [:with, :for]`
-      # mirrors that, so alias `Q` is gone after the with ends.
+      # Elixir. The walker's default `lexical_scope_nodes` includes `:with`
+      # to mirror that, so alias `Q` is gone after the with ends.
       ast =
         parse!("""
         defmodule Foo do
@@ -268,6 +268,20 @@ defmodule AshCredo.Introspection.LexicalScopeWalkerTest do
       [env_after_for] = walk(ast, [], record_env_at(:mark), noop())
 
       assert resolves?(env_after_for, [:Q], [:Q])
+    end
+
+    test "def scopes default-argument aliases by default (matches Elixir)" do
+      ast =
+        parse!("""
+        defmodule Foo do
+          def first(x \\\\ (alias Ash.Query, as: Q; 1)), do: x
+          def later, do: Probe.mark(Q)
+        end
+        """)
+
+      [env_in_later] = walk(ast, [], record_env_at(:mark), noop())
+
+      assert resolves?(env_in_later, [:Q], [:Q])
     end
 
     test "passing lexical_scope_nodes: [] opts out of with/for scoping" do
