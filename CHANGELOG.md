@@ -1,6 +1,23 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.19.1](https://github.com/leonqadirie/ash_credo/compare/v0.19.0...v0.19.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* confine default-argument aliases in LexicalScopeWalker ([f98a809](https://github.com/leonqadirie/ash_credo/commit/f98a8097624e823170cf64fdfcbd0e4162e6ed9a)) by [@leonqadirie](https://github.com/leonqadirie)
+* match Elixir alias scoping in AshCallScanner ([6ef2680](https://github.com/leonqadirie/ash_credo/commit/6ef26805ee5b7f477c00e490f7466d99aa870645)) by [@leonqadirie](https://github.com/leonqadirie)
+* match macro arity in MissingMacroDirective ([7d805da](https://github.com/leonqadirie/ash_credo/commit/7d805dae7a8e99907aaa657de5ca57c8a4ecd62b)) by [@leonqadirie](https://github.com/leonqadirie)
+* resolve aliases when detecting Ash use statements ([31f4aea](https://github.com/leonqadirie/ash_credo/commit/31f4aeab3319f4fa28e785fe01e6939320aea7da)) by [@leonqadirie](https://github.com/leonqadirie)
+* scope default-argument aliases to the default expression ([2a1245d](https://github.com/leonqadirie/ash_credo/commit/2a1245d032b67e8b9adac5641418136a49a38074)) by [@leonqadirie](https://github.com/leonqadirie)
+
+
+### Performance Improvements
+
+* reuse Credo's source hash for cache keys ([eed6e35](https://github.com/leonqadirie/ash_credo/commit/eed6e35c79c1bbd2c035424064271d0ee0e39542)) by [@leonqadirie](https://github.com/leonqadirie)
+* share one memoized AshCallScanner walk per file ([22e827b](https://github.com/leonqadirie/ash_credo/commit/22e827b0ed873ed139afa32c58601d19c68d82a8)) by [@leonqadirie](https://github.com/leonqadirie)
+
 ## [0.19.0](https://github.com/leonqadirie/ash_credo/compare/v0.18.0...v0.19.0) (2026-10-03)
 
 
