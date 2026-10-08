@@ -25,6 +25,11 @@ defmodule AshCredo.Introspection.AshCallScanner do
   @lexical_scope_nodes ~w(defmodule def defp defmacro defmacrop fn if unless case cond with try receive for)a
   @branch_scope_nodes ~w(if unless case cond with try receive for)a
   @function_scope_nodes ~w(def defp defmacro defmacrop)a
+  # Elixir confines an alias declared in a `with` or `for` clause, or in a
+  # function head's default argument, to the construct, but lets one
+  # declared in a `case`/`if`/`unless`/`cond` subject leak into the
+  # enclosing body.
+  @alias_scope_nodes [:with, :for | @function_scope_nodes]
 
   @doc "Returns true if the AST node is a call to an `Ash.*` module."
   def call?(ast, env \\ nil)
@@ -196,23 +201,35 @@ defmodule AshCredo.Introspection.AshCallScanner do
   defp current_module_segments(%{module_stack: [top | _]}), do: top
   defp current_module_segments(%{module_stack: []}), do: nil
 
-  defp maybe_enter_lexical_scope(%{track_context?: false} = state, _node_name), do: state
+  defp maybe_enter_lexical_scope(%{track_context?: false} = state, node_name),
+    do: maybe_push_alias_frame(state, node_name)
 
   defp maybe_enter_lexical_scope(state, node_name) do
     state
-    |> push_alias_frame()
+    |> maybe_push_alias_frame(node_name)
     |> maybe_push_binding_frame(node_name)
     |> maybe_enter_branch_scope(node_name)
   end
 
-  defp maybe_leave_lexical_scope(%{track_context?: false} = state, _node_name), do: state
+  defp maybe_leave_lexical_scope(%{track_context?: false} = state, node_name),
+    do: maybe_pop_alias_frame(state, node_name)
 
   defp maybe_leave_lexical_scope(state, node_name) do
     state
     |> maybe_leave_branch_scope(node_name)
     |> maybe_pop_binding_frame(node_name)
-    |> pop_alias_frame()
+    |> maybe_pop_alias_frame(node_name)
   end
+
+  defp maybe_push_alias_frame(state, node_name) when node_name in @alias_scope_nodes,
+    do: push_alias_frame(state)
+
+  defp maybe_push_alias_frame(state, _node_name), do: state
+
+  defp maybe_pop_alias_frame(state, node_name) when node_name in @alias_scope_nodes,
+    do: pop_alias_frame(state)
+
+  defp maybe_pop_alias_frame(state, _node_name), do: state
 
   defp maybe_track_pipe_origin(%{track_context?: false} = state, _meta, _left), do: state
 
