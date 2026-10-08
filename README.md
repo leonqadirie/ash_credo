@@ -79,7 +79,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | `AuthorizerWithoutPolicies` | Warning | High | No | Detects resources with `Ash.Policy.Authorizer` but no policies defined. **Requires a compiled project.** |
 | `CompileTimeDefault` | Warning | High | Yes | Flags `default: DateTime.utc_now()` / `Ash.UUID.generate()` (missing the `&.../0` capture) on attributes and arguments. The call runs once at compile time, so every record gets the same frozen value |
 | `EmptyDomain` | Warning | Normal | No | Flags domains with no resources registered |
-| `MissingBuiltinWrapper` | Warning | High | Yes | Flags builtin change/validation/preparation/calculation functions (`set_attribute`, `present`, `build`, `concat`, ...) used without their `change`/`validate`/`prepare`/`calculate` wrapper in action bodies, pipelines, and global sections. The bare call compiles but is silently discarded |
+| `MissingBuiltinWrapper` | Warning | High | Yes | Flags builtin change/validation/preparation/calculation functions (`set_attribute`, `present`, `build`, `concat`, ...) used without their `change`/`validate`/`prepare`/`calculate` wrapper in action bodies, pipelines, and global sections. The bare call compiles but is silently discarded. **Requires a compiled project.** |
 | `MissingDomain` | Warning | Normal | No | Flags non-embedded resources that don't set the `domain:` option |
 | `MissingMacroDirective` | Warning | High | Yes | Flags qualified calls to `Ash.Query`/`Ash.Expr` macros (`filter`, `expr`, ...) when the enclosing module has no matching module-level `require`/`import`. Catches the runtime `UndefinedFunctionError` that slips past the compiler when the macro argument is a bare runtime value. **Requires a compiled project** and **configurable**. |
 | `OverlyPermissivePolicy` | Warning | High | No | Flags unscoped `authorize_if always()` policies |
@@ -109,6 +109,7 @@ Several checks read Ash's runtime introspection (`Ash.Resource.Info`, `Ash.Domai
 They see the fully resolved resource state, including anything Spark transformers or extensions contribute, and catch bugs that pure AST scanning would miss: identities on AshAuthentication-injected `:email` attributes, fragment-spliced actions, extension-added authorizers, and so on.
 
 - `Warning.AuthorizerWithoutPolicies`
+- `Warning.MissingBuiltinWrapper`
 - `Warning.MissingMacroDirective`
 - `Warning.RedundantValidation`
 - `Warning.UnknownAction`

@@ -60,6 +60,8 @@ defmodule AshCredo.Introspection.Compiled do
   @cache_key_tag {__MODULE__, :cache}
   @domain_refs_key_tag {__MODULE__, :domain_refs}
   @macros_key_tag {__MODULE__, :macros}
+  @functions_key_tag {__MODULE__, :functions}
+  @specs_key_tag {__MODULE__, :specs}
   @enclosing_domain_key_tag {__MODULE__, :enclosing_domain}
   @code_interface_bang_key_tag {__MODULE__, :code_interface_bang}
   @ash_available_key {__MODULE__, :ash_available?}
@@ -283,17 +285,28 @@ defmodule AshCredo.Introspection.Compiled do
   """
   @spec macros(module()) :: {:ok, MapSet.t({atom(), arity()})} | {:error, :not_loadable}
   def macros(module) when is_atom(module) do
-    Cache.memoize({@macros_key_tag, module}, fn -> do_macros(module) end)
+    Cache.memoize({@macros_key_tag, module}, fn -> exports(module, :macros) end)
   end
 
-  defp do_macros(module) do
+  @doc """
+  Returns the set of `{name, arity}` function signatures that `module`
+  exports (read from `module.__info__(:functions)`), or
+  `{:error, :not_loadable}` if the module cannot be loaded. Cached per
+  module in the run-scoped `AshCredo.Cache`.
+
+  Like `macros/1`, this works for any compiled Elixir module. Checks use
+  it to read export lists live instead of hardcoding names that drift
+  when upstream adds or renames functions.
+  """
+  @spec functions(module()) :: {:ok, MapSet.t({atom(), arity()})} | {:error, :not_loadable}
+  def functions(module) when is_atom(module) do
+    Cache.memoize({@functions_key_tag, module}, fn -> exports(module, :functions) end)
+  end
+
+  defp exports(module, kind) do
     with {:module, ^module} <- Code.ensure_compiled(module),
          true <- function_exported?(module, :__info__, 1) do
-      macros =
-        module.__info__(:macros)
-        |> MapSet.new()
-
-      {:ok, macros}
+      {:ok, MapSet.new(module.__info__(kind))}
     else
       _ -> {:error, :not_loadable}
     end
@@ -301,6 +314,22 @@ defmodule AshCredo.Introspection.Compiled do
     # TOCTOU: module purged between the `function_exported?` check and the
     # `__info__/1` call.
     UndefinedFunctionError -> {:error, :not_loadable}
+  end
+
+  @doc """
+  Returns the typespecs that `module`'s BEAM file carries, in the shape
+  `Code.Typespec.fetch_specs/1` returns. Returns `[]` when the module
+  cannot be loaded or was compiled without debug info. Cached per module
+  in the run-scoped `AshCredo.Cache`.
+  """
+  @spec specs(module()) :: [tuple()]
+  def specs(module) when is_atom(module) do
+    Cache.memoize({@specs_key_tag, module}, fn ->
+      case Code.Typespec.fetch_specs(module) do
+        {:ok, specs} -> specs
+        :error -> []
+      end
+    end)
   end
 
   @doc "Returns `true` if `module` is an Ash resource loadable in this VM."

@@ -279,7 +279,7 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
   #     twin (`Ash.stream!`, `Ash.Seed.seed!`, ...). Caller emits the
   #     generic bang-only message when `flag_bang_only_apis: true`,
   #     otherwise skips.
-  #   * `:not_loadable`   - `Code.ensure_loaded/1` failed (typo'd
+  #   * `:not_loadable`   - the module failed to load (typo'd
   #     `Ash.NoSuchSubmod.fun!`, alias-expanded path that resolves to a
   #     nonexistent module). Caller skips silently rather than emitting a
   #     suggestion that names a function we can't confirm exists.
@@ -290,15 +290,16 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
   end
 
   defp compute_counterpart(module, bang_name) do
-    case Code.ensure_loaded(module) do
-      {:module, ^module} -> counterpart_state(module, bang_name)
-      _ -> :not_loadable
+    with {:ok, functions} <- CompiledIntrospection.functions(module),
+         {:ok, macros} <- CompiledIntrospection.macros(module) do
+      counterpart_state(module, bang_name, Enum.concat(functions, macros))
+    else
+      {:error, :not_loadable} -> :not_loadable
     end
   end
 
-  defp counterpart_state(module, bang_name) do
+  defp counterpart_state(module, bang_name, exports) do
     target = bang_name |> Atom.to_string() |> String.trim_trailing("!")
-    exports = module.__info__(:functions) ++ module.__info__(:macros)
 
     case Enum.find(exports, fn {n, _} -> Atom.to_string(n) == target end) do
       nil -> :no_counterpart
@@ -313,18 +314,13 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
   # if the alias expands to `{:ok, _} | {:error, _}`. That misses some
   # tuple APIs but never lies about tuple semantics, which is the goal.
   defp tuple_returning?(module, name) do
-    case Code.Typespec.fetch_specs(module) do
-      {:ok, all_specs} ->
-        all_specs
-        |> Enum.flat_map(fn
-          {{^name, _arity}, asts} -> asts
-          _ -> []
-        end)
-        |> Enum.any?(&spec_returns_ok_tuple?/1)
-
-      :error ->
-        false
-    end
+    module
+    |> CompiledIntrospection.specs()
+    |> Enum.flat_map(fn
+      {{^name, _arity}, asts} -> asts
+      _ -> []
+    end)
+    |> Enum.any?(&spec_returns_ok_tuple?/1)
   end
 
   defp spec_returns_ok_tuple?({:type, _, :fun, [_args, return]}), do: contains_ok_tuple?(return)

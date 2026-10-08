@@ -31,6 +31,29 @@ defmodule AshCredo.Introspection.CompiledTest do
     end
   end
 
+  describe "functions/1" do
+    test "returns exported functions, excluding macros" do
+      assert {:ok, functions} = Compiled.functions(AshCredoFixtures.FakeMacros)
+
+      assert MapSet.member?(functions, {:do_thing, 2})
+      refute MapSet.member?(functions, {:do_thing, 1})
+    end
+
+    test "returns :not_loadable for a module that does not exist" do
+      assert Compiled.functions(AshCredoFixtures.DoesNotExist) == {:error, :not_loadable}
+    end
+  end
+
+  describe "specs/1" do
+    test "returns the typespecs compiled into the module" do
+      assert Enum.any?(Compiled.specs(Compiled), &match?({{:specs, 1}, _}, &1))
+    end
+
+    test "returns [] for a module that does not exist" do
+      assert Compiled.specs(AshCredoFixtures.DoesNotExist) == []
+    end
+  end
+
   describe "resource aspect accessors" do
     test "domain/1 returns the declared domain" do
       assert Compiled.domain(@post) == {:ok, AshCredoFixtures.Blog}

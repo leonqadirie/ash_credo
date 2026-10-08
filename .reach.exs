@@ -27,6 +27,15 @@
          "Ash.TypedStruct.Info.*",
          "Ash.Type.NewType.*",
          "Ash.Type.*"
+       ], except: ["AshCredo.Introspection.Compiled"]},
+      # The same gateway owns module loading and BEAM chunk reads, so checks
+      # never load target modules or read their specs on their own.
+      {"AshCredo.*",
+       [
+         "Code.ensure_loaded*",
+         "Code.ensure_compiled*",
+         "Code.Typespec.*",
+         "Code.fetch_docs"
        ], except: ["AshCredo.Introspection.Compiled"]}
     ]
   ],
