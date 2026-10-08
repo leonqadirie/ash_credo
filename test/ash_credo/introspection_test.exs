@@ -704,6 +704,78 @@ defmodule AshCredo.IntrospectionTest do
       calls = AshCallScanner.calls_with_module(source_file(source))
       assert [{{{:., _, [{:__aliases__, _, [:A]}, :read!]}, _, _}, [:Ash]}] = calls
     end
+
+    test "an alias in a case subject stays visible after the case" do
+      source = """
+      defmodule MyApp.Accounts do
+        def list(x) do
+          case (alias Ash, as: A; x) do
+            _ -> :ok
+          end
+
+          A.read!(x)
+        end
+      end
+      """
+
+      assert [{_ast, [:Ash]}] = AshCallScanner.calls_with_module(source_file(source))
+    end
+
+    test "an alias in an if condition shadows an outer alias after the if" do
+      source = """
+      defmodule MyApp.Accounts do
+        alias Ash, as: A
+
+        def list(x) do
+          if (alias MyApp.Other, as: A; x), do: :ok
+          A.read!(x)
+        end
+      end
+      """
+
+      assert [] = AshCallScanner.calls_with_module(source_file(source))
+    end
+
+    test "an alias in a with clause does not leak past the with" do
+      source = """
+      defmodule MyApp.Accounts do
+        def list(x) do
+          with alias(Ash, as: A), do: :ok
+          A.read!(x)
+        end
+      end
+      """
+
+      assert [] = AshCallScanner.calls_with_module(source_file(source))
+    end
+
+    test "an alias in a default argument does not leak into later functions" do
+      source = """
+      defmodule MyApp.Accounts do
+        def first(x \\\\ (alias Ash, as: A; 1)), do: x
+        def later(x), do: A.read!(x)
+      end
+      """
+
+      file = source_file(source)
+      assert [] = AshCallScanner.calls_with_context(file)
+      assert [] = AshCallScanner.calls_with_module(file)
+    end
+
+    test "an alias in a for filter does not shadow an outer alias past the for" do
+      source = """
+      defmodule MyApp.Accounts do
+        alias Ash, as: A
+
+        def list(xs) do
+          for x <- xs, alias(MyApp.Other, as: A), do: x
+          A.read!(xs)
+        end
+      end
+      """
+
+      assert [{_ast, [:Ash]}] = AshCallScanner.calls_with_module(source_file(source))
+    end
   end
 
   describe "ash_api_calls_with_context/1" do
