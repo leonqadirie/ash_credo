@@ -47,15 +47,13 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
   ## Opts
 
   - `:lexical_scope_nodes` - extra atoms for which the walker pushes an
-    alias scope frame on entry and pops it on exit. Defaults to `with`,
-    `for`, and the `def` family because Elixir confines a `require`/`alias`
-    declared in a `with` clause, a `for` generator, or a function head's
-    default argument to that construct. The walker always additionally
-    pushes for `@scope_keys` (`do/else/after/rescue/catch`) and `:->`
-    arrows. Pass `lexical_scope_nodes: []` to opt out, but only with a
-    specific reason: those aliases then leak into the enclosing scope.
-    Elixir also hides a `with` clause alias from the `else` block; the
-    walker does not model that, so `else` resolves it like the `do` block.
+    alias scope frame on entry and pops it on exit. Defaults to
+    `Aliases.alias_scope_nodes/0` (`with`, `for`, and the `def` family),
+    which documents the Elixir scoping rule behind it. The walker always
+    additionally pushes for `Aliases.scope_keys/0`
+    (`do/else/after/rescue/catch`) and `:->` arrows. Pass
+    `lexical_scope_nodes: []` to opt out, but only with a specific
+    reason: those aliases then leak into the enclosing scope.
   - `:track_quote` (default `true`) - track the `{:quote, _, _}` depth.
     When truthy, `in_quote?/1` and `quote_depth/1` reflect it, and
     aliases declared inside `quote` are dropped (see
@@ -76,8 +74,8 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
 
   alias AshCredo.Introspection.Aliases
 
-  @scope_keys ~w(do else after rescue catch)a
-  @default_lexical_scope_nodes ~w(with for def defp defmacro defmacrop)a
+  @scope_keys Aliases.scope_keys()
+  @default_lexical_scope_nodes Aliases.alias_scope_nodes()
 
   defmodule Scope do
     @moduledoc """
