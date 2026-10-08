@@ -46,14 +46,16 @@ defmodule AshCredo.Introspection.LexicalScopeWalker do
 
   ## Opts
 
-  - `:lexical_scope_nodes` - extra atoms for which the walker pushes an
-    alias scope frame on entry and pops it on exit. Defaults to
+  - `:lexical_scope_nodes` - the call forms for which the walker pushes
+    an alias scope frame on entry and pops it on exit, on top of the
+    frames it always pushes for `Aliases.scope_keys/0`
+    (`do/else/after/rescue/catch`) and `:->` arrows. Defaults to
     `Aliases.alias_scope_nodes/0` (`with`, `for`, and the `def` family),
-    which documents the Elixir scoping rule behind it. The walker always
-    additionally pushes for `Aliases.scope_keys/0`
-    (`do/else/after/rescue/catch`) and `:->` arrows. Pass
-    `lexical_scope_nodes: []` to opt out, but only with a specific
-    reason: those aliases then leak into the enclosing scope.
+    which documents the Elixir scoping rule behind it. A passed list
+    replaces the default instead of extending it, so include
+    `Aliases.alias_scope_nodes()` to keep those scopes. Pass `[]` to opt
+    out, but only with a specific reason: those aliases then leak into
+    the enclosing scope.
   - `:track_quote` (default `true`) - track the `{:quote, _, _}` depth.
     When truthy, `in_quote?/1` and `quote_depth/1` reflect it, and
     aliases declared inside `quote` are dropped (see
