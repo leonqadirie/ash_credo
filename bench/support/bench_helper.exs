@@ -14,6 +14,9 @@ defmodule Bench.Helper do
     * `BENCH_TAG` - label for saved results; defaults to the git branch.
     * `BENCH_COMPARE=1` - load every other tag's saved results for the
       suite and print the comparison.
+    * `BENCH_CHECKS=RaisingCall,Warning.UnknownAction` - restrict
+      `bench/checks.exs` to the named checks, by short or `Category.Name`
+      form.
   """
 
   alias Bench.Synthetic
@@ -27,6 +30,31 @@ defmodule Bench.Helper do
   jobs don't glob the filesystem.
   """
   def checks, do: :persistent_term.get({__MODULE__, :checks})
+
+  @doc """
+  The checks `BENCH_CHECKS` names, or `:all` when it is unset. Raises on a
+  name that matches no check, so a typo cannot benchmark nothing.
+  """
+  def selected_checks do
+    System.get_env("BENCH_CHECKS", "")
+    |> String.split(",", trim: true)
+    |> case do
+      [] -> :all
+      names -> names |> Enum.map(&String.trim/1) |> Enum.map(&find_check!/1) |> Enum.uniq()
+    end
+  end
+
+  defp find_check!(name) do
+    Enum.find(checks(), &(name in [check_name(&1), short_name(&1)])) ||
+      raise "BENCH_CHECKS: no check named #{inspect(name)}"
+  end
+
+  @doc """
+  The check's `Category.Name`, e.g. `"Warning.UnknownAction"`.
+  """
+  def check_name(check), do: check |> inspect() |> String.replace_prefix("AshCredo.Check.", "")
+
+  def short_name(check), do: check |> Module.split() |> List.last()
 
   defp load_checks! do
     checks = AshCredo.CheckRegistry.check_modules()
@@ -129,7 +157,7 @@ defmodule Bench.Helper do
   end
 
   defp maybe_load(opts, suite, tag) do
-    paths = Path.wildcard(Path.join(@out_dir, "#{suite}-*.benchee")) -- [saved_path(suite, tag)]
+    paths = Path.wildcard(Path.join(@out_dir, "#{suite}.*.benchee")) -- [saved_path(suite, tag)]
 
     if System.get_env("BENCH_COMPARE") == "1" and paths != [] do
       Keyword.put(opts, :load, paths)
@@ -138,7 +166,9 @@ defmodule Bench.Helper do
     end
   end
 
-  defp saved_path(suite, tag), do: Path.join(@out_dir, "#{suite}-#{tag}.benchee")
+  # `<suite>.<tag>.benchee`: the dot keeps the `checks` wildcard from
+  # matching a filtered `checks+<names>` suite's files.
+  defp saved_path(suite, tag), do: Path.join(@out_dir, "#{suite}.#{tag}.benchee")
 
   defp tag do
     case System.get_env("BENCH_TAG") do
