@@ -16,7 +16,9 @@ defmodule AshCredo.MixProject do
       hex: [cooldown: "7d"],
       elixirc_paths: elixirc_paths(Mix.env()),
       test_ignore_filters: [~r{^test/integration/fixtures/}],
-      test_coverage: [ignore_modules: [~r/AshCredoFixtures\./, AshCredo.CheckCase]],
+      test_coverage: [
+        ignore_modules: [~r/AshCredoFixtures\./, AshCredo.CheckCase, AshCredo.CheckRegistry]
+      ],
       package: package(),
       docs: docs(),
       dialyzer: dialyzer(),
