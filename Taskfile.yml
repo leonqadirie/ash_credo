@@ -8,6 +8,22 @@ tasks:
       - task --list --sort none
     silent: true
 
+  bench:
+    desc: Run the Benchee suites (checks, suite, walks, e2e); pass suite names after -- to pick
+    deps: [deps:get]
+    env:
+      MIX_ENV: test
+    vars:
+      SUITES: '{{default "checks suite walks e2e" .CLI_ARGS}}'
+    cmds:
+      - for: { var: SUITES }
+        cmd: mix run bench/{{.ITEM}}.exs
+
+  bench:quick:
+    desc: Run the Benchee suites with short timings and two inputs; pass suite names after -- to pick
+    cmds:
+      - BENCH_QUICK=1 task bench -- {{.CLI_ARGS}}
+
   ci:
     desc: Run the CI checks that work locally (typos, deps audit, test, lint)
     cmds:

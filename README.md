@@ -291,6 +291,17 @@ A + B + C is observationally identical to A + C alone.
 4. Commit your changes
 5. Open a pull request. PR titles must follow the [Conventional Commits](https://www.conventionalcommits.org) format (e.g. `feat: add check for XY`, `fix: handle XY edge case`)
 
+### Benchmarking
+
+The Benchee suites in `bench/` run under `MIX_ENV=test`, which compiles the fixture resources the compiled checks introspect. To compare a branch against `main`, run them on both and let Benchee load the saved results:
+
+```sh
+git switch main && task bench
+git switch my-branch && BENCH_COMPARE=1 task bench
+```
+
+`task bench:quick` runs a shorter pass, and `task bench -- walks` runs a single suite. Results go to `tmp/bench/`, tagged with the branch name (override with `BENCH_TAG`). Run both sides on an idle machine on AC power; reduction counts vary less between runs than wall-clock times.
+
 ## License
 
 MIT, see [LICENSE](LICENSE) for details.
