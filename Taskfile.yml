@@ -47,7 +47,7 @@ tasks:
       - mix format
 
   lint:
-    desc: Run the mix lint alias (format check, Credo, Credence, Reach, xref cycles, docs)
+    desc: Run the mix lint alias (format check, Credo, Credence, Reach, xref cycles, Dialyzer, docs)
     deps: [deps:get]
     cmds:
       - mix lint

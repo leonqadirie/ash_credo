@@ -19,6 +19,7 @@ defmodule AshCredo.MixProject do
       test_coverage: [ignore_modules: [~r/AshCredoFixtures\./, AshCredo.CheckCase]],
       package: package(),
       docs: docs(),
+      dialyzer: dialyzer(),
       source_url: "https://github.com/leonqadirie/ash_credo",
       homepage_url: "https://github.com/leonqadirie/ash_credo"
     ]
@@ -38,6 +39,7 @@ defmodule AshCredo.MixProject do
         "lint.credence",
         "lint.reach",
         "xref graph --format cycles --fail-above 0",
+        "dialyzer",
         "docs --warnings-as-errors"
       ]
     ]
@@ -53,6 +55,7 @@ defmodule AshCredo.MixProject do
       {:boxart, "~> 0.3", only: [:dev, :test], runtime: false},
       {:credence, "~> 0.5", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
@@ -70,6 +73,15 @@ defmodule AshCredo.MixProject do
       files: ~w(lib .formatter.exs mix.exs README* LICENSE* CHANGELOG* usage-rules.md),
       exclude_patterns: [~r/\.expert/],
       links: %{"GitHub" => "https://github.com/leonqadirie/ash_credo"}
+    ]
+  end
+
+  # The PLTs live under `_build` so the CI `_build` cache keeps them between runs.
+  defp dialyzer do
+    [
+      plt_add_apps: [:mix, :ash, :credence, :credo, :igniter, :reach, :sourceror],
+      plt_core_path: "_build/#{Mix.env()}",
+      flags: [:error_handling, :extra_return, :missing_return]
     ]
   end
 
