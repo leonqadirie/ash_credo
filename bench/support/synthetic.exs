@@ -3,7 +3,7 @@ defmodule Bench.Synthetic do
   Generates deterministic Ash source code for the benchmarks.
 
   Every size is a pure function of its parameters, so `main` and a branch
-  benchmark identical input. The resources are never compiled: AST checks
+  benchmark identical input. Mix never compiles these resources: AST checks
   find matches in them and compiled checks skip them. The trailing caller
   module calls the compiled `AshCredoFixtures` modules, so the compiled
   call-site checks resolve real actions and code interfaces.

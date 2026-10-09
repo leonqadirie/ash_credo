@@ -66,7 +66,4 @@ case Enum.uniq(issue_counts) do
   counts -> raise "e2e preflight: unstable or empty issue counts #{inspect(counts)}"
 end
 
-Benchee.run(
-  %{"credo_run" => credo_run},
-  Helper.run_opts("e2e", timing: {1, if(Helper.quick?(), do: 5, else: 15)})
-)
+Helper.run!("e2e", %{"credo_run" => credo_run}, timing: {1, 15}, quick_timing: {0.5, 5})

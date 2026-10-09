@@ -14,20 +14,16 @@ Code.require_file("support/bench_helper.exs", __DIR__)
 inputs = Helper.inputs()
 Helper.preflight!(inputs)
 
-Benchee.run(
+Helper.run!(
+  "walks",
   %{
     "resource_contexts" => &Introspection.resource_contexts/1,
     "calls_with_context" => &AshCallScanner.calls_with_context/1,
     "sites" => &AshCallResolver.sites/1
   },
-  Helper.run_opts("walks",
-    timing: {1, 3},
-    inputs: inputs,
-    memory_time: 0.5,
-    reduction_time: 0.5,
-    before_each: fn source_file ->
-      Helper.cold!()
-      source_file
-    end
-  )
+  timing: {1, 3},
+  inputs: inputs,
+  memory_time: 0.5,
+  reduction_time: 0.5,
+  before_each: &Helper.cold/1
 )
