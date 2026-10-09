@@ -4,6 +4,7 @@
       name: "default",
       files: %{
         included: [
+          "bench/",
           "dev/",
           "lib/",
           "test/"
@@ -12,7 +13,7 @@
       },
       # ExDNA scans only lib/ by default; extend it to every path Credo lints.
       # normalize_pipes makes `x |> f()` and `f(x)` count as the same code.
-      plugins: [{ExDNA.Credo, [paths: ["dev/", "lib/", "test/"], normalize_pipes: true]}],
+      plugins: [{ExDNA.Credo, [paths: ["bench/", "dev/", "lib/", "test/"], normalize_pipes: true]}],
       requires: [],
       strict: true,
       parse_timeout: 5000,
