@@ -243,7 +243,7 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
   # variant of a read code-interface rejects streaming, so suggesting it
   # would be wrong advice. On write or calculation interfaces, `stream?`
   # is not a recognised option and the bang should still be flagged.
-  defp read_interface?(%{interface: iface, resource: resource}) when is_atom(resource) do
+  defp read_interface?(%{interface: iface, resource: resource}) when not is_nil(resource) do
     case Map.get(iface, :action) || Map.get(iface, :name) do
       action_name when is_atom(action_name) ->
         match?({:ok, %{type: :read}}, CompiledIntrospection.action(resource, action_name))
