@@ -300,7 +300,7 @@ git switch main && task bench
 git switch my-branch && BENCH_COMPARE=1 task bench
 ```
 
-`task bench:quick` runs a shorter pass, and `task bench -- walks` runs a single suite. Results go to `tmp/bench/`, tagged with the branch name (override with `BENCH_TAG`). Run both sides on an idle machine on AC power; reduction counts vary less between runs than wall-clock times.
+`task bench:quick` runs a shorter pass, and `task bench -- walks` runs a single suite. `BENCH_CHECKS=RaisingCall,UnknownAction task bench -- checks` times only the named checks, on every input. Results go to `tmp/bench/`, tagged with the branch name (override with `BENCH_TAG`). Run both sides on an idle machine on AC power; reduction counts vary less between runs than wall-clock times.
 
 ## License
 
