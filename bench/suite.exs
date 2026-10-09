@@ -12,14 +12,10 @@ Code.require_file("support/bench_helper.exs", __DIR__)
 inputs = Helper.inputs()
 Helper.preflight!(inputs)
 
-Benchee.run(
+Helper.run!(
+  "suite",
   %{
-    "suite_cold" =>
-      {&Helper.run_all/1,
-       before_each: fn source_file ->
-         Helper.cold!()
-         source_file
-       end},
+    "suite_cold" => {&Helper.run_all/1, before_each: &Helper.cold/1},
     "suite_warm" =>
       {&Helper.run_all/1,
        before_scenario: fn source_file ->
@@ -28,10 +24,8 @@ Benchee.run(
          source_file
        end}
   },
-  Helper.run_opts("suite",
-    timing: {1, 3},
-    inputs: inputs,
-    memory_time: 0.5,
-    reduction_time: 0.5
-  )
+  timing: {1, 3},
+  inputs: inputs,
+  memory_time: 0.5,
+  reduction_time: 0.5
 )

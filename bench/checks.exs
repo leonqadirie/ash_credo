@@ -11,28 +11,18 @@ alias Bench.Helper
 
 Code.require_file("support/bench_helper.exs", __DIR__)
 
-{checks, suite, inputs} =
+{checks, suite, inputs, selected} =
   case Helper.selected_checks() do
     :all ->
-      {Helper.checks(), "checks", Helper.inputs(["fixtures", "medium"])}
+      {Helper.checks(), "checks", Helper.inputs(["fixtures", "medium"]), []}
 
     selected ->
       names = selected |> Enum.map(&Helper.short_name/1) |> Enum.sort()
-      {selected, Enum.join(["checks" | names], "+"), Helper.inputs()}
+      {selected, Enum.join(["checks" | names], "+"), Helper.inputs(), selected}
   end
 
-Helper.preflight!(inputs)
+Helper.preflight!(inputs, selected)
 
 jobs = Map.new(checks, fn check -> {Helper.check_name(check), &Helper.run_check(check, &1)} end)
 
-Benchee.run(
-  jobs,
-  Helper.run_opts(suite,
-    timing: {0.5, 1},
-    inputs: inputs,
-    before_each: fn source_file ->
-      Helper.cold!()
-      source_file
-    end
-  )
-)
+Helper.run!(suite, jobs, timing: {0.5, 1}, inputs: inputs, before_each: &Helper.cold/1)
