@@ -24,9 +24,11 @@ defmodule AshCredo.CheckRegistry do
   # The check modules themselves, e.g. `AshCredo.Check.Warning.EmptyDomain`,
   # in `discover_check_modules/0` order.
   def check_modules do
-    for {cat, name, _path} <- discover_check_modules(),
-        do: Module.concat([AshCredo.Check, cat, name])
+    for {cat, name, _path} <- discover_check_modules(), do: check_module(cat, name)
   end
+
+  # The module for a `{category, name}` pair from `discover_check_modules/0`.
+  def check_module(cat, name), do: Module.concat([AshCredo.Check, cat, name])
 
   # Converts a snake_case filesystem name ("empty_domain") to a module short
   # name ("EmptyDomain"). Also used for category directory names.

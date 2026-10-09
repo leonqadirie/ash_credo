@@ -1,7 +1,8 @@
 defmodule AshCredoTest do
   use ExUnit.Case
 
-  import AshCredo.CheckRegistry, only: [discover_check_modules: 0, to_module_name: 1]
+  import AshCredo.CheckRegistry,
+    only: [check_module: 2, discover_check_modules: 0, to_module_name: 1]
 
   @check_dir AshCredo.CheckRegistry.check_dir()
   @plugin_file "lib/ash_credo.ex"
@@ -257,7 +258,7 @@ defmodule AshCredoTest do
       # function, returning [] when no params are configured).
       expected_params =
         for {cat, name, _path} <- discover_check_modules(),
-            module = Module.concat([AshCredo.Check, cat, name]),
+            module = check_module(cat, name),
             Code.ensure_loaded?(module),
             {param, _default} <- module.param_defaults() do
           {cat, name, Atom.to_string(param)}
@@ -290,7 +291,7 @@ defmodule AshCredoTest do
 
       param_order_index =
         for {cat, name, _path} <- discover_check_modules(),
-            module = Module.concat([AshCredo.Check, cat, name]),
+            module = check_module(cat, name),
             Code.ensure_loaded?(module),
             {{param, _default}, idx} <- Enum.with_index(module.param_defaults()),
             into: %{} do
@@ -325,7 +326,7 @@ defmodule AshCredoTest do
 
     test "declared category matches directory for all checks" do
       for {cat, name, _path} <- discover_check_modules() do
-        module = Module.concat([AshCredo.Check, cat, name])
+        module = check_module(cat, name)
         assert Code.ensure_loaded?(module), "Could not load #{inspect(module)}"
 
         declared_cat = module.category() |> Atom.to_string() |> to_module_name()
@@ -370,7 +371,7 @@ defmodule AshCredoTest do
 
     test "all checks include the :ash tag" do
       for {cat, name, _path} <- discover_check_modules() do
-        module = Module.concat([AshCredo.Check, cat, name])
+        module = check_module(cat, name)
         assert Code.ensure_loaded?(module), "Could not load #{inspect(module)}"
 
         assert :ash in module.tags(),
@@ -380,7 +381,7 @@ defmodule AshCredoTest do
 
     test ":security tag implies category: :warning" do
       for {cat, name, _path} <- discover_check_modules(),
-          module = Module.concat([AshCredo.Check, cat, name]),
+          module = check_module(cat, name),
           Code.ensure_loaded?(module),
           :security in module.tags() do
         assert module.category() == :warning,
