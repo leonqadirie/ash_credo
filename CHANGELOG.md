@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.19.2](https://github.com/leonqadirie/ash_credo/compare/v0.19.1...v0.19.2) (2026-10-09)
+
+
+### Bug Fixes
+
+* track nested module identity through one shared module stack ([81b34e8](https://github.com/leonqadirie/ash_credo/commit/81b34e83eeceb9949f801c6ee0743049f6c6bff0))
+
 ## [0.19.1](https://github.com/leonqadirie/ash_credo/compare/v0.19.0...v0.19.1) (2026-10-08)
 
 
