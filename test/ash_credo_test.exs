@@ -1,7 +1,9 @@
 defmodule AshCredoTest do
   use ExUnit.Case
 
-  @check_dir "lib/ash_credo/check"
+  import AshCredo.CheckRegistry, only: [discover_check_modules: 0, to_module_name: 1]
+
+  @check_dir AshCredo.CheckRegistry.check_dir()
   @plugin_file "lib/ash_credo.ex"
   @readme_file "README.md"
 
@@ -38,20 +40,6 @@ defmodule AshCredoTest do
   # ` and **configurable**`.
   @compiled_annotation "**Requires a compiled project"
 
-  # Discovers all check modules from the filesystem. Returns a sorted list of
-  # `{category_module, check_module_name, file_path}` tuples - e.g.
-  # `{"Warning", "EmptyDomain", "lib/ash_credo/check/warning/empty_domain.ex"}`.
-  defp discover_check_modules do
-    Path.wildcard("#{@check_dir}/**/*.ex")
-    |> Enum.map(fn path ->
-      relative = Path.relative_to(path, @check_dir)
-      [category | rest] = Path.split(relative)
-      name = rest |> Path.join() |> Path.rootname()
-      {to_module_name(category), to_module_name(name), path}
-    end)
-    |> Enum.sort()
-  end
-
   # Source of truth for "requires a compiled project": every check file whose
   # source aliases `AshCredo.Introspection.Compiled`.
   defp compiled_check_modules do
@@ -59,14 +47,6 @@ defmodule AshCredoTest do
         File.read!(path) =~ @compiled_alias_regex do
       {cat, name}
     end
-  end
-
-  # Converts a snake_case filesystem name ("empty_domain") to a module short
-  # name ("EmptyDomain"). Also used for category directory names.
-  defp to_module_name(snake) do
-    snake
-    |> String.split("_")
-    |> Enum.map_join(&String.capitalize/1)
   end
 
   describe "check registry consistency" do
