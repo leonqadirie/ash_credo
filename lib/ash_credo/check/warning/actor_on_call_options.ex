@@ -75,7 +75,7 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
     with true <- fun_name in @action_funs,
          [subject | _] <- call_info.args,
          keys when keys != [] <- flagged_keys(call_info.args, required_args(fun_name)),
-         true <- builder_subject?(subject, call_info, MapSet.new()) do
+         true <- builder_subject?(subject, call_info, []) do
       Enum.map(keys, &flagged_key_issue(&1, fun_name, meta, issue_meta))
     else
       _ -> []
@@ -118,9 +118,9 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
        when is_atom(name) and (is_atom(ctx) or is_nil(ctx)) do
     key = {name, ctx}
 
-    with false <- MapSet.member?(seen, key),
+    with false <- key in seen,
          %{^key => bound} <- call_info.bindings do
-      builder_subject?(bound, call_info, MapSet.put(seen, key))
+      builder_subject?(bound, call_info, [key | seen])
     else
       _ -> false
     end

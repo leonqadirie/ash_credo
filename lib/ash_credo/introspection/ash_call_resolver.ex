@@ -388,18 +388,18 @@ defmodule AshCredo.Introspection.AshCallResolver do
   defp resource_segments(ast, context, %{trace_record?: false}),
     do: literal_segments(ast, context)
 
-  defp trace_origin_to_literal(ast, context), do: trace_origin(ast, context, MapSet.new())
+  defp trace_origin_to_literal(ast, context), do: trace_origin(ast, context, [])
 
   defp trace_origin({name, _, ctx}, context, seen)
        when is_atom(name) and (is_atom(ctx) or is_nil(ctx)) do
     key = {name, ctx}
 
-    if MapSet.member?(seen, key) do
+    if key in seen do
       :error
     else
       case Map.get(context.bindings, key) do
         nil -> :error
-        bound -> trace_origin(bound, context, MapSet.put(seen, key))
+        bound -> trace_origin(bound, context, [key | seen])
       end
     end
   end
