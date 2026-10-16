@@ -33,7 +33,26 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
       assert issue.message =~ "AshCredoFixtures.Blog.Post"
       assert issue.message =~ "has no code interface"
       assert issue.message =~ "define :"
+      # Without an `actions` block the issue anchors on the `use` line.
+      assert issue.line_no == 2
     end
+  end
+
+  test "anchors the issues on the `actions` block when the source has one" do
+    source = """
+    defmodule AshCredoFixtures.Blog.Post do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+
+      actions do
+        defaults [:read]
+      end
+    end
+    """
+
+    issues = run_check(MissingCodeInterface, source)
+
+    assert issues != []
+    assert Enum.all?(issues, &(&1.line_no == 4))
   end
 
   test "reports issues for every action on a resource with zero interfaces" do
