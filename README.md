@@ -304,7 +304,7 @@ git switch my-branch && BENCH_COMPARE=1 task bench
 
 ### Mutation testing
 
-`task test:mutation CHECK=missing_timestamps` runs [muex](https://hexdocs.pm/muex) on one check against its test file. Muex changes the check's code one mutation at a time and reports each mutant the tests fail to catch. Each mutant recompiles the project, so a single check takes minutes; run it on the checks you touch, not in CI. Pass muex options after `--`, e.g. `task test:mutation CHECK=missing_timestamps -- --mutators function_call,boolean,comparison,conditional` to skip the noisy string-literal mutations.
+`task test:mutation` runs [muex](https://hexdocs.pm/muex) with its default optimizer level. Muex changes the code one mutation at a time and reports each mutant the tests fail to catch. CI runs the same pass with `--optimize-level conservative`, which keeps more mutants. `task test:mutation CHECK=missing_timestamps` narrows the run to one check and its test file. Pass muex options after `--`; they override the task's defaults, e.g. `task test:mutation -- --optimize-level conservative` reproduces the CI run.
 
 ## License
 
