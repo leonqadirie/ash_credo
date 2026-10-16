@@ -25,6 +25,27 @@ defmodule AshCredo.Check.Design.MissingTimestampsTest do
     assert [issue] = run_check(MissingTimestamps, source)
     assert issue.message =~ "no timestamps"
     assert issue.message =~ "timestamps()"
+    assert issue.trigger == "attributes"
+    # Without an `attributes` block the issue anchors on the `use` line.
+    assert issue.line_no == 2
+  end
+
+  test "anchors the issue on the `attributes` block when the source has one" do
+    source = """
+    defmodule AshCredoFixtures.Blog.Post do
+      use Ash.Resource,
+        domain: AshCredoFixtures.Blog,
+        data_layer: AshPostgres.DataLayer
+
+      attributes do
+        uuid_primary_key :id
+      end
+    end
+    """
+
+    assert [issue] = run_check(MissingTimestamps, source)
+    assert issue.trigger == "attributes"
+    assert issue.line_no == 6
   end
 
   test "reports an issue when only `update_timestamp` is present" do
@@ -44,6 +65,8 @@ defmodule AshCredo.Check.Design.MissingTimestampsTest do
     assert issue.message =~ "no create timestamp"
     assert issue.message =~ "create_timestamp :inserted_at"
     refute issue.message =~ "timestamps()"
+    assert issue.trigger == "attributes"
+    assert issue.line_no == 2
   end
 
   test "reports the update side when only `create_timestamp` is present" do
@@ -58,6 +81,8 @@ defmodule AshCredo.Check.Design.MissingTimestampsTest do
     assert [issue] = run_check(MissingTimestamps, source)
     assert issue.message =~ "no update timestamp"
     assert issue.message =~ "update_timestamp :updated_at"
+    assert issue.trigger == "attributes"
+    assert issue.line_no == 2
   end
 
   test "no issue when the resource uses `timestamps()`" do
