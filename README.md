@@ -302,6 +302,10 @@ git switch my-branch && BENCH_COMPARE=1 task bench
 
 `task bench:quick` runs a shorter pass, and `task bench -- walks` runs a single suite. `BENCH_CHECKS=RaisingCall,UnknownAction task bench -- checks` times only the named checks, on every input. Results go to `tmp/bench/` (quick runs to `tmp/bench/quick/`, compared only with each other), tagged with the branch name, or `git describe` output on a detached HEAD (override with `BENCH_TAG`). Run both sides on an idle machine on AC power; reduction counts vary less between runs than wall-clock times.
 
+### Mutation testing
+
+`task test:mutation CHECK=missing_timestamps` runs [muex](https://hexdocs.pm/muex) on one check against its test file. Muex changes the check's code one mutation at a time and reports each mutant the tests fail to catch. Each mutant recompiles the project, so a single check takes minutes; run it on the checks you touch, not in CI. Pass muex options after `--`, e.g. `task test:mutation CHECK=missing_timestamps -- --mutators function_call,boolean,comparison,conditional` to skip the noisy string-literal mutations.
+
 ## License
 
 MIT, see [LICENSE](LICENSE) for details.
