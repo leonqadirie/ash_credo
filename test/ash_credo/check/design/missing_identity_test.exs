@@ -25,6 +25,7 @@ defmodule AshCredo.Check.Design.MissingIdentityTest do
       assert issue.message =~ "AshCredoFixtures.Accounts.Member"
       assert issue.message =~ "uniqueness identity"
       assert issue.message =~ "identity :unique_"
+      assert issue.line_no == 2
     end
   end
 

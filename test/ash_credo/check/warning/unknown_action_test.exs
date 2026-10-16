@@ -25,6 +25,7 @@ defmodule AshCredo.Check.Warning.UnknownActionTest do
       assert issue.message =~ "Did you mean"
       assert issue.message =~ ":published"
       assert issue.trigger == "Ash.read!"
+      assert issue.line_no == 3
     end
 
     test "omits the hint when no close match exists" do

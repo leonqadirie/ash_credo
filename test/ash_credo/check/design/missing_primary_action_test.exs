@@ -66,6 +66,23 @@ defmodule AshCredo.Check.Design.MissingPrimaryActionTest do
     assert issue.trigger == "create"
     assert issue.message =~ "Multiple `create` actions"
     assert issue.message =~ "primary?"
+    # Without an `actions` block the issue anchors on the `use` line.
+    assert issue.line_no == 2
+  end
+
+  test "anchors the issue on the `actions` block when the source has one" do
+    source = """
+    defmodule AshCredoFixtures.Blog.Tag do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+
+      actions do
+        create :create_basic
+      end
+    end
+    """
+
+    assert [issue] = run_check(MissingPrimaryAction, source)
+    assert issue.line_no == 4
   end
 
   test "no issue for multiple generic actions without a primary" do
