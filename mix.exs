@@ -63,6 +63,7 @@ defmodule AshCredo.MixProject do
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
       {:igniter, "~> 0.8", optional: true, runtime: false},
+      {:muex, "~> 0.11", only: :test, runtime: false},
       {:quokka, "~> 2.13", only: [:dev, :test], runtime: false},
       {:reach, "~> 2.7", only: [:dev, :test], runtime: false},
       {:simple_sat, "~> 0.1", only: [:dev, :test], runtime: false},

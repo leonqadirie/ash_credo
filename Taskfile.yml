@@ -81,6 +81,24 @@ tasks:
       - rm -rf _build/*/lib/ash_credo
       - mix test {{.CLI_ARGS}}
 
+  test:mutation:
+    desc: Mutation-test one check against its test file with muex (task test:mutation CHECK=missing_timestamps); pass extra muex args after --
+    deps: [deps:get]
+    requires:
+      vars: [CHECK]
+    env:
+      MIX_ENV: test
+    vars:
+      SOURCE:
+        sh: find lib/ash_credo/check -name '{{.CHECK}}.ex'
+      TEST: '{{.SOURCE | replace "lib/" "test/" | replace ".ex" "_test.exs"}}'
+    preconditions:
+      - sh: test -f "{{.SOURCE}}" && test -f "{{.TEST}}"
+        msg: "No check source and test file for CHECK={{.CHECK}}; pass the snake_case file name, e.g. missing_timestamps"
+    cmds:
+      # muex's file filter skips files below a complexity score, which drops small checks.
+      - mix muex --files {{.SOURCE}} --test-paths {{.TEST}} --no-filter {{.CLI_ARGS}}
+
   typos:
     desc: Check spelling with typos
     preconditions:
