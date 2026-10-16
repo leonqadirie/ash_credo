@@ -111,6 +111,7 @@ jobs:
       - run: mix test
 
   mutation:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -120,6 +121,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         id: beam
         with:
@@ -134,7 +136,12 @@ jobs:
           restore-keys: |
             mix-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
       - run: mix deps.get
-      - run: mix muex --optimize --optimize-level conservative
+      - run: |
+          if git diff --quiet origin/main...HEAD -- lib; then
+            echo "No lib/ changes; skipping mutation testing."
+          else
+            mix muex --optimize --optimize-level conservative --since origin/main --no-filter
+          fi
 
   lint:
     runs-on: ubuntu-latest
