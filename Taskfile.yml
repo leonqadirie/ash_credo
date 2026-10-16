@@ -82,22 +82,22 @@ tasks:
       - mix test {{.CLI_ARGS}}
 
   test:mutation:
-    desc: Mutation-test one check against its test file with muex (task test:mutation CHECK=missing_timestamps); pass extra muex args after --
+    desc: Mutation-test the project with muex; CHECK=missing_timestamps narrows it to one check; pass extra muex args after --
     deps: [deps:get]
-    requires:
-      vars: [CHECK]
     env:
       MIX_ENV: test
     vars:
       SOURCE:
         sh: find lib/ash_credo/check -name '{{.CHECK}}.ex'
       TEST: '{{.SOURCE | replace "lib/" "test/" | replace ".ex" "_test.exs"}}'
+      # muex's file filter skips files below a complexity score, which drops small checks.
+      SCOPE: '{{if .CHECK}}--files {{.SOURCE}} --test-paths {{.TEST}} --no-filter{{end}}'
     preconditions:
-      - sh: test -f "{{.SOURCE}}" && test -f "{{.TEST}}"
+      - sh: test -z "{{.CHECK}}" || (test -f "{{.SOURCE}}" && test -f "{{.TEST}}")
         msg: "No check source and test file for CHECK={{.CHECK}}; pass the snake_case file name, e.g. missing_timestamps"
     cmds:
-      # muex's file filter skips files below a complexity score, which drops small checks.
-      - mix muex --files {{.SOURCE}} --test-paths {{.TEST}} --no-filter {{.CLI_ARGS}}
+      # muex keeps the first value of a repeated flag, so CLI_ARGS come first to override the defaults.
+      - mix muex {{.CLI_ARGS}} {{.SCOPE}} --optimize
 
   typos:
     desc: Check spelling with typos
