@@ -369,17 +369,27 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
     test "suggests the domain function when resource has no matching interface" do
       source = """
       defmodule AshCredoFixtures.Blog do
+        def publish_it(id) do
+          Ash.Changeset.for_update(%AshCredoFixtures.Blog.Post{id: id}, :publish, %{})
+        end
+      end
+      """
+
+      # The resource has no matching interface, so suggest the domain interface.
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "AshCredoFixtures.Blog.changeset_to_publish_post"
+    end
+
+    test "Ash.bulk_update with a literal resource as its first argument is not reported" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
         def publish_it do
           Ash.bulk_update(AshCredoFixtures.Blog.Post, :publish, %{})
         end
       end
       """
 
-      # `:publish` has a domain interface (:publish_post) but no resource
-      # interface. Same-domain caller → same-domain logic picks resource
-      # first, but falls through to domain-level since the resource has none.
-      # NB: Ash.bulk_update with a literal resource arg 0 is not actually flagged
-      # by the check (bulk_update expects a query/stream), so use a different pattern.
+      # `Ash.bulk_update` takes a query, list or stream, not a resource.
       assert run_check(UseCodeInterface, source) == []
     end
   end
@@ -674,6 +684,79 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       assert issue.message =~ "Prefer a code interface on `AshCredoFixtures.Standalone`"
       assert issue.message =~ "inside the resource's `code_interface` block"
       refute issue.message =~ "domain"
+    end
+
+    test "Ash.read does not suggest a get interface" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def accounts do
+          Ash.read!(AshCredoFixtures.Accounts.Account, action: :read)
+        end
+      end
+      """
+
+      # The existing interfaces return a single record, so the collection
+      # read needs a separate interface.
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "define :read"
+      refute issue.message =~ "get_account_by_email"
+      refute issue.message =~ "single_account"
+    end
+
+    test "Ash.get is ignored when its lookup keys cannot be determined" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def get_key(id) do
+          Ash.get!(AshCredoFixtures.Accounts.TenantEmailKey, id)
+        end
+      end
+      """
+
+      # A scalar identifier does not identify the fields of a composite
+      # primary key, so the check cannot select a matching interface.
+      assert [] = run_check(UseCodeInterface, source)
+    end
+
+    test "outside-domain Ash.read_one without any interface suggests a get define on the domain" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def one_draft do
+          Ash.read_one!(AshCredoFixtures.Blog.Post, action: :draft)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "Prefer a get code interface on `AshCredoFixtures.Blog`"
+      assert issue.message =~ "define :some_name, action: :draft, get?: true"
+    end
+
+    test "a get-by suggestion passes the keys in the interface's order" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def get_key(email, tenant_id) do
+          Ash.get!(AshCredoFixtures.Accounts.TenantEmailKey, %{email: email, tenant_id: tenant_id})
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+
+      assert issue.message =~
+               "get_by_tenant_and_email!(tenant_id, email, not_found_error?: false)"
+    end
+
+    test "a get-by define for a non-:read action names the action" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def get_draft(id) do
+          Ash.get!(AshCredoFixtures.Blog.Post, id, action: :draft)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "define :get_draft_by_id, action: :draft, get_by: [:id]"
     end
   end
 
@@ -1186,6 +1269,19 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       defmodule AshCredoFixtures.Accounts do
         def list_published do
           Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+        end
+      end
+      """
+
+      assert [] =
+               run_check(UseCodeInterface, source, enforce_code_interface_outside_domain: false)
+    end
+
+    test "false silences a domainless caller of a domainless resource" do
+      source = """
+      defmodule MyApp.Web.StandaloneController do
+        def list do
+          Ash.read!(AshCredoFixtures.Standalone)
         end
       end
       """
