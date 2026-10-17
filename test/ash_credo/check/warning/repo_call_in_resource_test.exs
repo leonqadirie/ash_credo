@@ -283,6 +283,21 @@ defmodule AshCredo.Check.Warning.RepoCallInResourceTest do
     assert issue.trigger == "__MODULE__.Repo.query!"
   end
 
+  test "no issue for a Repo reference behind a variable" do
+    source = """
+    defmodule MyApp.Order.Changes.AssignStops do
+      use Ash.Resource.Change
+
+      def change(changeset, _opts, %{app: app}) do
+        app.Repo.query!("UPDATE orders SET x = 1", [])
+        changeset
+      end
+    end
+    """
+
+    assert [] = run_check(RepoCallInResource, source)
+  end
+
   test "protocol and implementation bodies do not inherit the outer resource label" do
     source = """
     defmodule MyApp.Order do
