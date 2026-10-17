@@ -489,6 +489,21 @@ defmodule AshCredo.Check.Warning.MissingMacroDirectiveTest do
       assert issue.message =~ "FakeMacros.do_thing/1"
     end
 
+    test "accepts a single module instead of a list" do
+      source = """
+      defmodule MyApp.Caller do
+        def a, do: AshCredoFixtures.FakeMacros.do_thing(1)
+      end
+      """
+
+      assert [issue] =
+               run_check(MissingMacroDirective, source,
+                 macro_modules: AshCredoFixtures.FakeMacros
+               )
+
+      assert issue.message =~ "FakeMacros.do_thing/1"
+    end
+
     test "uses the piped argument when distinguishing macro and function arities" do
       source = """
       defmodule MyApp.Caller do
