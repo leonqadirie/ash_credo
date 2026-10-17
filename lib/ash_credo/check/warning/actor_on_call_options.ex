@@ -1,5 +1,5 @@
 defmodule AshCredo.Check.Warning.ActorOnCallOptions do
-  use Credo.Check,
+  use AshCredo.CompiledCheck,
     base_priority: :high,
     category: :warning,
     tags: [:ash, :security],
@@ -29,14 +29,28 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
       `for_*` builder. Forms without a pre-built subject are fine, such as
       `Ash.read!(Post, actor: actor)` or a code interface call like
       `MyApp.Blog.list_posts!(actor: actor)`: there Ash builds the action
-      context with the given actor itself. The check is purely syntactic:
-      it follows pipes and simple variable bindings, but it cannot see a
-      builder hidden behind a function call.
+      context with the given actor itself.
+
+      The check follows pipes, simple variable bindings, and `Ash.Query`,
+      `Ash.Changeset` and `Ash.ActionInput` calls that return the query,
+      changeset or input they receive, such as `Ash.Query.limit/2`. It
+      reads that list from Ash's typespecs, so it stops at calls that
+      return something else (`Ash.ActionInput.get_argument/2`,
+      `Ash.create!/2`) and cannot see a builder hidden behind any other
+      function call.
+
+      ## Requirements
+
+      The check reads Ash's typespecs at runtime. If Ash is not available
+      in the VM running Credo, the check is a no-op and emits a single
+      diagnostic.
       """
     ]
 
+  alias AshCredo.Cache
   alias AshCredo.Introspection.Aliases
   alias AshCredo.Introspection.AshCallScanner
+  alias AshCredo.Introspection.Compiled, as: CompiledIntrospection
 
   # Ash action functions that take a query/changeset/input subject plus an
   # options list. The aggregate and bulk families belong here too: their
@@ -60,8 +74,10 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
   # legitimate way to inherit actor/tenant from a context.
   @flagged_keys [:actor, :tenant]
 
-  @impl true
-  def run(%SourceFile{} = source_file, params) do
+  @subject_funs_key_tag {__MODULE__, :subject_funs}
+
+  @impl AshCredo.CompiledCheck
+  def run_compiled(%SourceFile{} = source_file, params) do
     issue_meta = IssueMeta.for(source_file, params)
 
     source_file
@@ -107,11 +123,12 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
   defp flagged_keys(_args, _required_args), do: []
 
   # True when the call subject visibly went through a `for_*` builder:
-  # directly, anywhere in a pipe chain, or through simple variable bindings.
-  # A cycle guard protects the trace, mirroring AshCallResolver's origin
-  # tracing.
+  # directly, through pipe stages and first arguments of calls that return
+  # their subject, or through simple variable bindings. A cycle guard
+  # protects the trace, mirroring AshCallResolver's origin tracing.
   defp builder_subject?({:|>, _, [left, right]}, call_info, seen) do
-    builder_call?(right, call_info) or builder_subject?(left, call_info, seen)
+    builder_call?(right, call_info) or
+      (returns_subject?(right, call_info) and builder_subject?(left, call_info, seen))
   end
 
   defp builder_subject?({name, _, ctx}, call_info, seen)
@@ -126,6 +143,11 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
     end
   end
 
+  defp builder_subject?({{:., _, _}, _, [subject | _]} = call, call_info, seen) do
+    builder_call?(call, call_info) or
+      (returns_subject?(call, call_info) and builder_subject?(subject, call_info, seen))
+  end
+
   defp builder_subject?(ast, call_info, _seen), do: builder_call?(ast, call_info)
 
   defp builder_call?({{:., _, [module_ast, fun_name]}, _, _}, call_info)
@@ -134,6 +156,48 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptions do
   end
 
   defp builder_call?(_, _), do: false
+
+  # `Ash.Query.limit(query, 10)` returns the query it receives, so the
+  # trace continues into its subject. A getter such as
+  # `Ash.ActionInput.get_argument/2` returns something else and ends it.
+  defp returns_subject?({{:., _, [module_ast, fun_name]}, _, _}, call_info)
+       when is_atom(fun_name) do
+    case Aliases.resolved_module_ref(module_ast, call_info) do
+      segments when segments in @builder_modules ->
+        fun_name in subject_funs(Module.concat(segments))
+
+      _ ->
+        false
+    end
+  end
+
+  defp returns_subject?(_ast, _call_info), do: false
+
+  # The builder module's functions whose every spec returns the module's
+  # own `t()`. Ash adds refiners over time, so the list comes from its
+  # typespecs instead of a hardcoded copy.
+  defp subject_funs(module) do
+    Cache.memoize({@subject_funs_key_tag, module}, fn ->
+      module
+      |> CompiledIntrospection.specs()
+      |> Enum.group_by(fn {{name, _arity}, _asts} -> name end, fn {_, asts} -> asts end)
+      |> Enum.filter(fn {_name, asts} ->
+        asts |> List.flatten() |> Enum.all?(&returns_own_type?(&1, module))
+      end)
+      |> MapSet.new(fn {name, _asts} -> name end)
+    end)
+  end
+
+  defp returns_own_type?({:type, _, :fun, [_args, return]}, module), do: own_type?(return, module)
+
+  defp returns_own_type?({:type, _, :bounded_fun, [fun, _constraints]}, module),
+    do: returns_own_type?(fun, module)
+
+  defp returns_own_type?(_spec, _module), do: false
+
+  defp own_type?({:user_type, _, :t, []}, _module), do: true
+  defp own_type?({:remote_type, _, [{:atom, _, module}, {:atom, _, :t}, []]}, module), do: true
+  defp own_type?(_type, _module), do: false
 
   defp flagged_key_issue(key, fun_name, meta, issue_meta) do
     format_issue(issue_meta,

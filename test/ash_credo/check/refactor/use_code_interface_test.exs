@@ -1000,6 +1000,22 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       assert issue.message =~ "return_records?"
     end
 
+    test "Ash.bulk_update traces a query variable through its rebinding" do
+      source = """
+      defmodule AshCredoFixtures.Blog do
+        def archive_all do
+          query = Ash.Query.for_read(AshCredoFixtures.Blog.Post, :published)
+          query = Ash.Query.limit(query, 10)
+          Ash.bulk_update(query, :archive, %{})
+        end
+      end
+      """
+
+      issue = find_by_trigger(run_check(UseCodeInterface, source), "Ash.bulk_update")
+      assert issue
+      assert issue.message =~ "AshCredoFixtures.Blog.Post.archive`"
+    end
+
     test "Ash.bulk_update traces query variable back to a literal resource" do
       source = """
       defmodule AshCredoFixtures.Blog do

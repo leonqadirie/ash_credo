@@ -105,7 +105,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
   end
 
   defp enter_node({node_name, _, _} = ast, state) when node_name in @lexical_scope_nodes do
-    {ast, enter_lexical_scope(state, node_name)}
+    {ast, enter_lexical_scope(state, ast)}
   end
 
   # `require ..., as:` sets up an alias too; `apply_directive/3` records
@@ -198,10 +198,10 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   defp current_module_segments(state), do: ModuleStack.current(state.module_stack)
 
-  defp enter_lexical_scope(state, node_name) do
+  defp enter_lexical_scope(state, {node_name, _, _} = ast) do
     state
     |> maybe_push_alias_frame(node_name)
-    |> maybe_push_binding_frame(node_name)
+    |> maybe_push_binding_frame(ast)
     |> maybe_enter_branch_scope(node_name)
   end
 
@@ -266,15 +266,19 @@ defmodule AshCredo.Introspection.AshCallScanner do
 
   defp expanded_call_module(_module_ast, _env), do: []
 
-  defp maybe_push_binding_frame(state, node_name) when node_name in @function_scope_nodes do
+  defp maybe_push_binding_frame(state, {node_name, _, _})
+       when node_name in @function_scope_nodes do
     update_in(state.binding_frames, &[%{} | &1])
   end
 
-  defp maybe_push_binding_frame(state, :fn) do
-    update_in(state.binding_frames, &[current_bindings(state) | &1])
+  # A `fn` sees the enclosing bindings except the names its parameters
+  # shadow, so `fn query -> ... end` does not trace `query` to the outer one.
+  defp maybe_push_binding_frame(state, {:fn, _, clauses}) when is_list(clauses) do
+    params = for {:->, _, [args, _body]} <- clauses, key <- binding_keys(args), do: key
+    update_in(state.binding_frames, &[Map.drop(current_bindings(state), params) | &1])
   end
 
-  defp maybe_push_binding_frame(state, _node_name), do: state
+  defp maybe_push_binding_frame(state, _ast), do: state
 
   defp maybe_pop_binding_frame(%{binding_frames: [_current | frames]} = state, :fn) do
     %{state | binding_frames: frames}
@@ -319,7 +323,7 @@ defmodule AshCredo.Introspection.AshCallScanner do
       [bindings | rest] ->
         new_bindings =
           Enum.reduce(binding_keys, bindings, fn key, acc ->
-            Map.put(acc, key, rhs)
+            Map.put(acc, key, inline_previous_binding(rhs, key, acc))
           end)
 
         [new_bindings | rest]
@@ -328,6 +332,51 @@ defmodule AshCredo.Introspection.AshCallScanner do
         []
     end)
   end
+
+  # A variable used in its own reassignment, as in
+  # `query = query |> Ash.Query.limit(10)`, refers to its previous value.
+  # The scanner substitutes that value so origin tracing reaches the
+  # original builder. It inlines only a single reference, so each
+  # rebinding adds one value to the binding instead of copying it per
+  # reference, and it leaves `fn` bodies and `->`/`<-` clauses as written
+  # because their patterns can shadow the name.
+  @shadowing_scopes [:fn, :->, :<-]
+
+  defp inline_previous_binding(rhs, key, bindings) do
+    with {:ok, previous} <- Map.fetch(bindings, key),
+         {inlined, 1} <- replace_ref(rhs, key, previous) do
+      inlined
+    else
+      _ -> rhs
+    end
+  end
+
+  # Returns the AST with every reference replaced and the reference count.
+  defp replace_ref({scope, _meta, _clauses} = ast, _key, _previous)
+       when scope in @shadowing_scopes, do: {ast, 0}
+
+  defp replace_ref({name, _meta, ctx}, {name, ctx}, previous) when is_atom(ctx), do: {previous, 1}
+
+  defp replace_ref({form, meta, args}, key, previous) when is_list(args) do
+    {form, form_count} = replace_ref(form, key, previous)
+    {args, args_count} = replace_ref(args, key, previous)
+    {{form, meta, args}, form_count + args_count}
+  end
+
+  defp replace_ref({left, right}, key, previous) do
+    {left, left_count} = replace_ref(left, key, previous)
+    {right, right_count} = replace_ref(right, key, previous)
+    {{left, right}, left_count + right_count}
+  end
+
+  defp replace_ref(list, key, previous) when is_list(list) do
+    Enum.map_reduce(list, 0, fn ast, count ->
+      {ast, ast_count} = replace_ref(ast, key, previous)
+      {ast, count + ast_count}
+    end)
+  end
+
+  defp replace_ref(ast, _key, _previous), do: {ast, 0}
 
   defp binding_keys(lhs) do
     lhs
