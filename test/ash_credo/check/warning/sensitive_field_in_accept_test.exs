@@ -312,6 +312,21 @@ defmodule AshCredo.Check.Warning.SensitiveFieldInAcceptTest do
 
         actions do
           default_accept :all
+          create :create
+        end
+      end
+      """
+
+      assert [] = run_check(SensitiveFieldInAccept, source)
+    end
+
+    test "non-list `defaults` accept values (e.g. `create: :*`) are ignored" do
+      source = """
+      defmodule MyApp.Post do
+        use Ash.Resource, domain: MyApp.Blog
+
+        actions do
+          defaults [:read, :destroy, create: :*, update: :*]
         end
       end
       """
