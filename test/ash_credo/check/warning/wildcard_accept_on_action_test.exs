@@ -129,6 +129,21 @@ defmodule AshCredo.Check.Warning.WildcardAcceptOnActionTest do
     assert [] = run_check(WildcardAcceptOnAction, source)
   end
 
+  test "no issue for an explicit default_accept list inherited by an action" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        default_accept [:title, :body]
+        create :create
+      end
+    end
+    """
+
+    assert [] = run_check(WildcardAcceptOnAction, source)
+  end
+
   test "reports issue for wildcard writable default actions" do
     source = """
     defmodule MyApp.Post do
