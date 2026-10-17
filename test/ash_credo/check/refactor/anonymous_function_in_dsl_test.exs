@@ -486,6 +486,68 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDslTest do
     assert [] = run_check(AnonymousFunctionInDsl, source)
   end
 
+  test "no issue for fn passed to a local call in an option value" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      import MyApp.DslHelpers
+
+      attributes do
+        attribute :slug, :string, default: slug_default(fn -> "post" end)
+        attribute :tags, {:array, :string}, default: [tag_default(fn -> "new" end)]
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "reports fn in an option value's data under the option, not the inner key" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      attributes do
+        attribute :status, :term, default: {:ok, fn -> :draft end}
+      end
+    end
+    """
+
+    assert [issue] = run_check(AnonymousFunctionInDsl, source)
+    assert issue.trigger == "default"
+    assert issue.message =~ "Spark lifts it"
+  end
+
+  test "no issue for a remote capture under a wrapped name inside an option value" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      attributes do
+        attribute :status, :term, default: {:validate, &MyApp.Status.check/1}
+        attribute :slug, :string, constraints: [change: &MyApp.Slug.make/1]
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "no issue for fn at the end of a block in an option value" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      attributes do
+        attribute :slug, :string, default: (setup_slugs(); fn -> "post" end)
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
   test "no issue for a capture under a key of its own" do
     source = """
     defmodule MyApp.Post do
@@ -543,6 +605,24 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDslTest do
     assert sorted_lines(issues) == [6, 7, 8]
   end
 
+  test "reads a bare 2-tuple entity argument as data, not as an option" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      calculations do
+        calculate :plain, :string, {:change, &MyApp.Calculations.run/2}
+        calculate :inline, :string, {:change, fn _records, _context -> [] end}
+      end
+    end
+    """
+
+    assert [issue] = run_check(AnonymousFunctionInDsl, source)
+    assert issue.trigger == "calculate"
+    assert issue.line_no == 6
+    assert issue.message =~ "Spark lifts it"
+  end
+
   test "no issue for a remote capture nested in a wrapped option's value" do
     source = """
     defmodule MyApp.Post do
@@ -566,6 +646,21 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDslTest do
         create :create do
           change {MyApp.Changes.Slugify, holder: build_holder(fn -> "a" end)}
         end
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "no issue for a bare tuple or map inside a section" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        {"transform", fn value -> value end}
+        %{transform: fn value -> value end}
       end
     end
     """
