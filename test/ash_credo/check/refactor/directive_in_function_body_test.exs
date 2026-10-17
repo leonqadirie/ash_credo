@@ -236,6 +236,77 @@ defmodule AshCredo.Check.Refactor.DirectiveInFunctionBodyTest do
       assert issue.trigger == "Ash.Query"
     end
 
+    test "flags `require Ash.Query` inside a `defmacrop` body" do
+      source = """
+      defmodule MyApp.QueryMacros do
+        defmacrop published_filter do
+          require Ash.Query
+          :ok
+        end
+      end
+      """
+
+      assert [issue] = run_check(DirectiveInFunctionBody, source)
+      assert issue.trigger == "Ash.Query"
+    end
+
+    test "no issue for a module-level directive that follows a function" do
+      source = """
+      defmodule MyApp.PostQueries do
+        def published, do: :ok
+
+        require Ash.Query
+      end
+      """
+
+      assert [] = run_check(DirectiveInFunctionBody, source)
+    end
+
+    test "flags a directive that follows a `quote` block in the same function body" do
+      source = """
+      defmodule MyApp.QueryMacros do
+        defmacro published_filter do
+          ast = quote do: :ok
+          require Ash.Query
+          ast
+        end
+      end
+      """
+
+      assert [issue] = run_check(DirectiveInFunctionBody, source)
+      assert issue.line_no == 4
+    end
+
+    test "flags a directive that follows a nested defmodule in the same function body" do
+      source = """
+      defmodule Outer do
+        def build do
+          defmodule Inner do
+            def run, do: :ok
+          end
+
+          require Ash.Query
+        end
+      end
+      """
+
+      assert [issue] = run_check(DirectiveInFunctionBody, source)
+      assert issue.line_no == 7
+    end
+
+    test "no issue for a `__MODULE__`-relative alias inside a function body" do
+      source = """
+      defmodule MyApp.PostQueries do
+        def published do
+          alias __MODULE__.Helpers
+          Helpers.run()
+        end
+      end
+      """
+
+      assert [] = run_check(DirectiveInFunctionBody, source)
+    end
+
     test "ignores non-Ash modules entirely" do
       source = """
       defmodule MyApp.Utils do
@@ -299,6 +370,20 @@ defmodule AshCredo.Check.Refactor.DirectiveInFunctionBodyTest do
       """
 
       assert [issue] = run_check(DirectiveInFunctionBody, source, directive_modules: [Logger])
+      assert issue.trigger == "Logger"
+    end
+
+    test "accepts a single module instead of a list" do
+      source = """
+      defmodule MyApp.Service do
+        def log do
+          require Logger
+          Logger.info("hello")
+        end
+      end
+      """
+
+      assert [issue] = run_check(DirectiveInFunctionBody, source, directive_modules: Logger)
       assert issue.trigger == "Logger"
     end
   end
