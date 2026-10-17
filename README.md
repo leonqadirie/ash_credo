@@ -74,7 +74,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 
 | Check | Category | Priority | Default | Description |
 |---|---|---|---|---|
-| `ActorOnCallOptions` | Warning | High | No | Flags `actor:`/`tenant:` passed in the options of `Ash.read!`/`Ash.create!`/... when the subject visibly went through a `for_*` builder. Per Ash's authorization usage rules, these options belong on the query, changeset, or input |
+| `ActorOnCallOptions` | Warning | High | No | Flags `actor:`/`tenant:` passed in the options of `Ash.read!`/`Ash.create!`/... when the subject visibly went through a `for_*` builder. Per Ash's authorization usage rules, these options belong on the query, changeset, or input. **Requires a compiled project.** |
 | `AuthorizeFalse` | Warning | High | No | Flags literal `authorize?: false` in Ash calls, action DSL, and (by default) any other call site |
 | `AuthorizerWithoutPolicies` | Warning | High | No | Detects resources with `Ash.Policy.Authorizer` but no policies defined. **Requires a compiled project.** |
 | `CompileTimeDefault` | Warning | High | Yes | Flags `default: DateTime.utc_now()` / `Ash.UUID.generate()` (missing the `&.../0` capture) on attributes and arguments. The call runs once at compile time, so every record gets the same frozen value |
@@ -107,7 +107,9 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 
 Several checks read Ash's runtime introspection (`Ash.Resource.Info`, `Ash.Domain.Info`, and `Ash.Policy.Info`) rather than the source AST.
 They see the fully resolved resource state, including anything Spark transformers or extensions contribute, and catch bugs that pure AST scanning would miss: identities on AshAuthentication-injected `:email` attributes, fragment-spliced actions, extension-added authorizers, and so on.
+`Warning.ActorOnCallOptions` instead reads Ash's own typespecs to learn which `Ash.Query`/`Ash.Changeset`/`Ash.ActionInput` functions return their subject.
 
+- `Warning.ActorOnCallOptions`
 - `Warning.AuthorizerWithoutPolicies`
 - `Warning.MissingBuiltinWrapper`
 - `Warning.MissingMacroDirective`

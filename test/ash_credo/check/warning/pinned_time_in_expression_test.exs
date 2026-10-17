@@ -44,7 +44,7 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpressionTest do
     """
 
     assert [issue] = run_check(PinnedTimeInExpression, source)
-    assert issue.message =~ "now()"
+    assert issue.message =~ "Use `now()` instead of `^DateTime.utc_now()`"
     assert issue.trigger =~ "^DateTime.utc_now()"
   end
 
@@ -352,6 +352,27 @@ defmodule AshCredo.Check.Warning.PinnedTimeInExpressionTest do
     """
 
     assert [] = run_check(PinnedTimeInExpression, source)
+  end
+
+  test "reports a nested resource's pinned time once, under the nested resource" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      defmodule Archive do
+        use Ash.Resource, domain: MyApp.Blog
+
+        actions do
+          read :stale do
+            filter expr(inserted_at >= ^DateTime.utc_now())
+          end
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(PinnedTimeInExpression, source)
+    assert issue.line_no == 9
   end
 
   test "flags pinned Time.utc_now with pass-the-value advice" do

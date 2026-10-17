@@ -172,14 +172,19 @@ end
 
 defmodule AshCredoFixtures.Accounts.TenantEmailKey do
   @moduledoc """
-  `MissingIdentity` composite-primary-key fixture: `:email` is one member
-  of a composite key - only the tuple is unique, so the identity
-  suggestion still applies to the attribute.
+  A composite-primary-key fixture for identity and code-interface checks.
+  Individual key fields are not unique on their own, so an identity
+  suggestion still applies to a single field. The lookup interface also
+  verifies that suggested arguments follow the interface's key order.
   """
 
   use Ash.Resource,
     domain: AshCredoFixtures.Accounts,
     validate_domain_inclusion?: false
+
+  code_interface do
+    define :get_by_tenant_and_email, action: :read, get_by: [:tenant_id, :email]
+  end
 
   actions do
     defaults [:read]

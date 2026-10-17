@@ -27,7 +27,7 @@ defmodule AshCredo.Check.Warning.RedundantValidationTest do
     assert issue.trigger == "present"
     assert issue.line_no == 6
     assert issue.message =~ "allow_nil? false"
-    assert issue.message =~ ":name"
+    assert issue.message =~ "`validate present(:name)` is redundant"
   end
 
   test "reports redundant present in an update action" do
@@ -94,6 +94,75 @@ defmodule AshCredo.Check.Warning.RedundantValidationTest do
 
     assert [issue] = run_check(RedundantValidation, source)
     assert issue.trigger == "present"
+  end
+
+  test "reports redundant present on several non-nullable attributes" do
+    source = """
+    defmodule AshCredoFixtures.Blog.Contact do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+
+      actions do
+        create :create do
+          accept [:name, :handle]
+          validate present([:name, :handle], at_least: 1)
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(RedundantValidation, source)
+    assert issue.line_no == 7
+    assert issue.message =~ "on :name, :handle is redundant"
+  end
+
+  test "no issue when at_least exceeds the field count or comes with another counting option" do
+    source = """
+    defmodule AshCredoFixtures.Blog.Contact do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+
+      actions do
+        create :create do
+          validate present(:name, at_least: 2)
+          validate present(:name, at_least: 1, at_most: 1)
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(RedundantValidation, source)
+  end
+
+  test "reports a global validation whose on stays within changeset actions" do
+    source = """
+    defmodule AshCredoFixtures.Blog.Contact do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+
+      validations do
+        validate present(:handle), on: [:create]
+        validate present(:handle), on: [:create, :read]
+      end
+    end
+    """
+
+    assert [issue] = run_check(RedundantValidation, source)
+    assert issue.line_no == 5
+  end
+
+  test "no issue for a global validation whose do-block on targets read actions" do
+    source = """
+    defmodule AshCredoFixtures.Blog.Contact do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+
+      validations do
+        validate present(:handle) do
+          message "Handle is required"
+          on [:read]
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(RedundantValidation, source)
   end
 
   test "no issue for present on a nullable attribute" do
@@ -290,6 +359,22 @@ defmodule AshCredo.Check.Warning.RedundantValidationTest do
       actions do
         create :create do
           validate present(@required_field)
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(RedundantValidation, source)
+  end
+
+  test "no issue for non-literal present options" do
+    source = """
+    defmodule AshCredoFixtures.Blog.Contact do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+
+      actions do
+        create :create do
+          validate present(:name, @present_opts)
         end
       end
     end

@@ -320,6 +320,36 @@ defmodule AshCredo.Check.Warning.CompileTimeDefaultTest do
     assert [] = run_check(CompileTimeDefault, source)
   end
 
+  test "no issue for a default option outside the attribute, action and calculation sections" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      attributes do
+        uuid_primary_key :id
+      end
+
+      def schedule_opts, do: [default: DateTime.utc_now()]
+    end
+    """
+
+    assert [] = run_check(CompileTimeDefault, source)
+  end
+
+  test "no issue for a module the aliases cannot resolve" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      attributes do
+        attribute :scheduled_at, :utc_datetime, default: __MODULE__.Clock.utc_now()
+      end
+    end
+    """
+
+    assert [] = run_check(CompileTimeDefault, source)
+  end
+
   test "ignores non-Ash modules" do
     source = """
     defmodule MyApp.Config do
