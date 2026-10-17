@@ -552,6 +552,36 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDslTest do
     assert issue.message =~ "atomic"
   end
 
+  test "reports a remote capture given to calculate" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      calculations do
+        calculate :full_name, :string, &MyApp.Calculations.full_name/2
+      end
+    end
+    """
+
+    assert [issue] = run_check(AnonymousFunctionInDsl, source)
+    assert issue.trigger == "calculate"
+    assert issue.line_no == 5
+  end
+
+  test "no issue for anonymous functions inside a Kernel function call" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      attributes do
+        attribute :name, :string, default: apply(fn -> "anonymous" end, [])
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
   test "reports an inline default under its own name" do
     source = """
     defmodule MyApp.Post do
