@@ -410,27 +410,27 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       source = """
       defmodule AshCredoFixtures.Accounts do
         def publish_it do
-          Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+          Ash.Changeset.for_update(%AshCredoFixtures.Blog.Post{}, :publish, %{})
         end
       end
       """
 
       assert [issue] = run_check(UseCodeInterface, source)
-      assert issue.message =~ "AshCredoFixtures.Blog.publish_post!"
-      assert issue.message =~ "Ash.read!"
+      assert issue.message =~ "AshCredoFixtures.Blog.changeset_to_publish_post"
+      assert issue.message =~ "Ash.Changeset.for_update"
     end
 
     test "caller is a plain module (no domain) with resource domain interface" do
       source = """
       defmodule SomeController do
         def publish_it do
-          Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+          Ash.Changeset.for_update(%AshCredoFixtures.Blog.Post{}, :publish, %{})
         end
       end
       """
 
       assert [issue] = run_check(UseCodeInterface, source)
-      assert issue.message =~ "AshCredoFixtures.Blog.publish_post!"
+      assert issue.message =~ "AshCredoFixtures.Blog.changeset_to_publish_post"
     end
   end
 
@@ -1002,7 +1002,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       outside_domain = """
       defmodule AshCredoFixtures.Accounts do
         def list_published do
-          Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+          Ash.Changeset.for_update(%AshCredoFixtures.Blog.Post{}, :publish, %{})
         end
       end
       """
@@ -1185,7 +1185,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       source = """
       defmodule AshCredoFixtures.Accounts do
         def list_published do
-          Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+          Ash.Changeset.for_update(%AshCredoFixtures.Blog.Post{}, :publish, %{})
         end
       end
       """
@@ -1198,7 +1198,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       source = """
       defmodule SomeController do
         def list do
-          Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+          Ash.Changeset.for_update(%AshCredoFixtures.Blog.Post{}, :publish, %{})
         end
       end
       """
@@ -1309,7 +1309,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
       source = """
       defmodule AshCredoFixtures.Blog do
         def run do
-          Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+          Ash.Changeset.for_update(%AshCredoFixtures.Blog.Post{}, :publish, %{})
         end
       end
       """
@@ -1353,7 +1353,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
         """
         defmodule AshCredoFixtures.Accounts do
           def a do
-            Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+            Ash.Changeset.for_update(%AshCredoFixtures.Blog.Post{}, :publish, %{})
           end
         end
         """,
@@ -1361,7 +1361,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
         """
         defmodule SomeController do
           def a do
-            Ash.read!(AshCredoFixtures.Blog.Post, action: :publish)
+            Ash.Changeset.for_update(%AshCredoFixtures.Blog.Post{}, :publish, %{})
           end
         end
         """,
