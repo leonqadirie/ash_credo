@@ -502,6 +502,89 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDslTest do
     assert [] = run_check(AnonymousFunctionInDsl, source)
   end
 
+  test "reports fn in the opts of a module change under the change option" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        create :create do
+          change {MyApp.Changes.Slugify, callback: fn -> "slug" end}
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(AnonymousFunctionInDsl, source)
+    assert issue.trigger == "change"
+    assert issue.line_no == 6
+    assert issue.message =~ "Spark lifts it"
+    refute issue.message =~ "atomic"
+  end
+
+  test "reports fn inside a map or a 2-tuple in an option value under that option" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        create :create do
+          change {MyApp.Changes.Slugify, holder: %{format: fn -> "a" end}}
+          change {MyApp.Changes.Slugify, holder: {"b", fn -> "b" end}}
+          change {MyApp.Changes.Slugify, holder: {:c, fn -> "c" end}}
+        end
+      end
+    end
+    """
+
+    issues = run_check(AnonymousFunctionInDsl, source)
+
+    assert sorted_triggers(issues) == ["change", "change", "change"]
+    assert sorted_lines(issues) == [6, 7, 8]
+  end
+
+  test "no issue for a remote capture nested in a wrapped option's value" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      calculations do
+        calculate :full_name, :string, {MyApp.Calculations.Join, %{"with" => &MyApp.Text.join/1}}
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "no issue for fn passed to a call inside an option value's opts" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      actions do
+        create :create do
+          change {MyApp.Changes.Slugify, holder: build_holder(fn -> "a" end)}
+        end
+      end
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
+  test "no issue for anonymous functions inside a tuple in the module body" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource, domain: MyApp.Blog
+
+      {"transform", fn value -> value end}
+    end
+    """
+
+    assert [] = run_check(AnonymousFunctionInDsl, source)
+  end
+
   test "no issue for a capture passed to a builtin through its module" do
     source = """
     defmodule MyApp.Post do

@@ -76,12 +76,11 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
             transform &MyApp.Chat.Notification.message/1
           end
 
-      Spark lifts a function in three positions only: the direct value of
-      an entity argument, the direct value of an option, and a value in a
-      keyword list under its key. It returns every other value unchanged,
-      so the check reports those three positions and stops everywhere
-      else. A function the compiler evaluates before Spark sees it, such
-      as `default: Enum.map([:read], fn t -> t end)`, is ordinary code.
+      Spark lifts functions supplied as entity arguments or option values,
+      including functions nested in lists, maps and two-element tuples.
+      The check traverses these containers, but stops at calls evaluated
+      by the compiler. Spark does not lift functions passed as arguments
+      to those calls.
 
       Bodies that run after compilation are ordinary code as well: Spark
       does not lift and the check does not flag an anonymous function
@@ -157,10 +156,14 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
   # A do block holds entities. Each entity names its own option.
   defp issues({:__block__, _meta, body}, option, issue_meta), do: issues(body, option, issue_meta)
 
-  # Spark lifts a function only as the direct value of an entity argument,
-  # an option or a keyword-list value. The compiler evaluates a Kernel
-  # macro, an operator, a special form and a remote call as ordinary code,
-  # so the walk stops there.
+  # Spark also lifts functions nested in option data. Traverse these
+  # containers while keeping the enclosing option name.
+  defp issues({:%{}, _meta, pairs}, option, issue_meta) when not is_nil(option),
+    do: nested(pairs, option, issue_meta)
+
+  # Stop at Kernel calls, operators and special forms, which the compiler
+  # evaluates. Treat other local calls as DSL entities and visit their arguments.
+  # Remote calls do not match this clause and fall through without traversal.
   defp issues({name, _meta, args}, _option, issue_meta) when is_atom(name) and is_list(args) do
     if elixir?(name, length(args)),
       do: [],
@@ -170,10 +173,29 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
   defp issues({key, value}, _option, issue_meta) when is_atom(key),
     do: issues(value, key, issue_meta)
 
+  defp issues({left, right}, option, issue_meta) when not is_nil(option),
+    do: nested([left, right], option, issue_meta)
+
   defp issues(list, option, issue_meta) when is_list(list),
     do: Enum.flat_map(list, &issues(&1, option, issue_meta))
 
   defp issues(_other, _option, _issue_meta), do: []
+
+  # Attribute functions in nested data to the enclosing DSL option, even
+  # when they appear under a keyword key. Match Spark's traversal: visit
+  # containers, preserve remote captures and stop at calls.
+  defp nested({:fn, meta, _clauses}, option, issue_meta),
+    do: [nested_issue(option, meta, issue_meta)]
+
+  defp nested({:&, _, [{:/, _, [{{:., _, _}, _, _}, _arity]}]}, _option, _issue_meta), do: []
+  defp nested({:&, meta, _body}, option, issue_meta), do: [nested_issue(option, meta, issue_meta)]
+  defp nested({:%{}, _meta, pairs}, option, issue_meta), do: nested(pairs, option, issue_meta)
+  defp nested({left, right}, option, issue_meta), do: nested([left, right], option, issue_meta)
+
+  defp nested(list, option, issue_meta) when is_list(list),
+    do: Enum.flat_map(list, &nested(&1, option, issue_meta))
+
+  defp nested(_other, _option, _issue_meta), do: []
 
   defp elixir?(name, arity) do
     Macro.special_form?(name, arity) or Macro.operator?(name, arity) or
@@ -188,6 +210,16 @@ defmodule AshCredo.Check.Refactor.AnonymousFunctionInDsl do
       message:
         "`#{trigger}` is passed an anonymous function - " <>
           "#{Map.get(@advice, canonical, @generic_advice)}.",
+      trigger: trigger,
+      line_no: meta[:line]
+    )
+  end
+
+  defp nested_issue(option, meta, issue_meta) do
+    trigger = to_string(canonical(option))
+
+    format_issue(issue_meta,
+      message: "`#{trigger}` holds an anonymous function in its value - #{@generic_advice}.",
       trigger: trigger,
       line_no: meta[:line]
     )
