@@ -171,6 +171,20 @@ defmodule AshCredo.Check.Refactor.RaisingCallTest do
       refute issue.message =~ "{:ok, _}"
     end
 
+    test "a counterpart without a typespec gets the generic message" do
+      # Without a typespec, the check cannot assume the non-raising
+      # counterpart returns a tagged success or error tuple.
+      source = """
+      defmodule MyApp.Worker do
+        def list(resource), do: Ash.CodeInterface.read_list_act!(resource, :read)
+      end
+      """
+
+      assert [issue] = run_check(RaisingCall, source)
+      assert issue.message =~ "handle the returned value explicitly"
+      refute issue.message =~ "{:ok, _}"
+    end
+
     test "non-tuple helper still flagged - the check detects the raise, not the shape" do
       # Even with the generic wording, the diagnostic should fire: the
       # whole point is to call out that the bang raises on the "no result"
