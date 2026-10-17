@@ -43,6 +43,7 @@ defmodule AshCredo.Check.Warning.EmptyDomainTest do
 
     assert [issue] = run_check(EmptyDomain, source)
     assert issue.message =~ "empty"
+    assert issue.line_no == 4
   end
 
   test "no issue when resources are registered" do
