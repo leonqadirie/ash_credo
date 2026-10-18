@@ -67,6 +67,65 @@ defmodule AshCredo.Check.Warning.ActorOnCallOptionsTest do
     assert issue.trigger == "actor"
   end
 
+  test "reports actor: when the query passes through a variable chain" do
+    source = """
+    defmodule MyApp.Posts do
+      def list(current_user) do
+        built = Ash.Query.for_read(MyApp.Post, :read, %{})
+        query = built
+        Ash.read!(query, actor: current_user)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "actor"
+  end
+
+  test "reports actor: when the builder is not the last pipe stage" do
+    source = """
+    defmodule MyApp.Posts do
+      def list(current_user) do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.Query.limit(10)
+        |> Ash.read!(actor: current_user)
+      end
+    end
+    """
+
+    assert [issue] = run_check(ActorOnCallOptions, source)
+    assert issue.trigger == "actor"
+  end
+
+  test "no issue when the subject is built without a builder" do
+    source = """
+    defmodule MyApp.Posts do
+      def list(current_user) do
+        MyApp.Post
+        |> Ash.Query.limit(10)
+        |> Ash.read!(actor: current_user)
+      end
+    end
+    """
+
+    assert [] = run_check(ActorOnCallOptions, source)
+  end
+
+  test "no issue when the options are a variable" do
+    source = """
+    defmodule MyApp.Posts do
+      def list(opts) do
+        MyApp.Post
+        |> Ash.Query.for_read(:read, %{})
+        |> Ash.read!(opts)
+      end
+    end
+    """
+
+    assert [] = run_check(ActorOnCallOptions, source)
+  end
+
   test "reports actor: on create after a for_create changeset" do
     source = """
     defmodule MyApp.Posts do
