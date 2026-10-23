@@ -140,7 +140,7 @@ jobs:
           if git diff --quiet origin/main...HEAD -- lib; then
             echo "No lib/ changes; skipping mutation testing."
           else
-            mix muex --optimize --optimize-level conservative --since origin/main --no-filter
+            mix muex --optimize --optimize-level conservative --since origin/main --no-filter --timeout 30000
           fi
 
   lint:
