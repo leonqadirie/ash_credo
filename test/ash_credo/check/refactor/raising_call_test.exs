@@ -556,6 +556,32 @@ defmodule AshCredo.Check.Refactor.RaisingCallTest do
       assert issue.trigger == "AshCredoFixtures.Blog.WithCalcInterface.upcased_title!"
     end
 
+    test "still flags `stream?: true` on a domain calculation interface named like a read action" do
+      # The domain defines `define_calculation :draft` next to a `:draft`
+      # read action on the same resource.
+      source = """
+      defmodule MyApp.Worker do
+        def draft_total, do: AshCredoFixtures.Blog.draft!(1, stream?: true)
+      end
+      """
+
+      assert [issue] = run_check(RaisingCall, source)
+      assert issue.trigger == "AshCredoFixtures.Blog.draft!"
+    end
+
+    test "still flags `stream?: true` on a resource calculation interface named like a read action" do
+      # `AshCredoFixtures.Blog.Figure` defines `define_calculation :draft`
+      # in its own `code_interface` next to its `:draft` read action.
+      source = """
+      defmodule MyApp.Worker do
+        def draft_total, do: AshCredoFixtures.Blog.Figure.draft!(1, stream?: true)
+      end
+      """
+
+      assert [issue] = run_check(RaisingCall, source)
+      assert issue.trigger == "AshCredoFixtures.Blog.Figure.draft!"
+    end
+
     test "trigger reflects source spelling under an alias" do
       source = """
       defmodule MyApp.Worker do
