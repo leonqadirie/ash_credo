@@ -1,6 +1,15 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.19.2](https://github.com/leonqadirie/ash_credo/compare/v0.19.1...v0.19.2) (2026-10-23)
+
+
+### Bug Fixes
+
+* flag stream?: true on calculation interfaces named like read actions ([0145e84](https://github.com/leonqadirie/ash_credo/commit/0145e84f46cd57550932ccf05dd147ff4ec5c5bf)) by [@leonqadirie](https://github.com/leonqadirie)
+* skip calculation interfaces in domain-level action lookups ([70543ab](https://github.com/leonqadirie/ash_credo/commit/70543ab05ce3810b0bc85bdf819e2324892fdf91)) by [@leonqadirie](https://github.com/leonqadirie)
+* track nested module identity through one shared module stack ([81b34e8](https://github.com/leonqadirie/ash_credo/commit/81b34e83eeceb9949f801c6ee0743049f6c6bff0)) by [@leonqadirie](https://github.com/leonqadirie)
+
 ## [0.19.1](https://github.com/leonqadirie/ash_credo/compare/v0.19.0...v0.19.1) (2026-10-08)
 
 

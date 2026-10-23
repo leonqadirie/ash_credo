@@ -1,7 +1,7 @@
 defmodule AshCredo.MixProject do
   use Mix.Project
 
-  @version "0.19.1"
+  @version "0.19.2"
   @description "Credo checks for Ash Framework"
 
   def project do
