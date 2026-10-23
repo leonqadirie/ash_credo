@@ -242,14 +242,16 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
   # `stream?: true` is only meaningful on read interfaces - the non-bang
   # variant of a read code-interface rejects streaming, so suggesting it
   # would be wrong advice. On write or calculation interfaces, `stream?`
-  # is not a recognised option and the bang should still be flagged.
+  # is not a recognised option and the check still flags the bang. A
+  # calculation interface resolves to no action, so one that shares its
+  # name with a read action does not inherit the exemption.
   defp read_interface?(%{interface: iface, resource: resource}) when not is_nil(resource) do
-    case Map.get(iface, :action) || Map.get(iface, :name) do
-      action_name when is_atom(action_name) ->
-        match?({:ok, %{type: :read}}, CompiledIntrospection.action(resource, action_name))
-
-      _ ->
+    case CompiledIntrospection.interface_action_name(iface) do
+      nil ->
         false
+
+      action_name ->
+        match?({:ok, %{type: :read}}, CompiledIntrospection.action(resource, action_name))
     end
   end
 

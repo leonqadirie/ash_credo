@@ -66,7 +66,9 @@ defmodule AshCredoFixtures.Blog.Figure do
   and `%Ash.Resource.CalculationInterface{}` entries:
 
     * `:read`  - domain-level interface `list_figures`.
-    * `:draft` - action exists, no interface anywhere.
+    * `:draft` - action exists, no action interface anywhere. A
+      resource-level and a domain-level calculation interface share its
+      name.
 
   This module precedes `AshCredoFixtures.Blog` because the domain's
   `define_calculation` reads the compiled resource's calculations.
@@ -75,6 +77,10 @@ defmodule AshCredoFixtures.Blog.Figure do
   use Ash.Resource,
     domain: AshCredoFixtures.Blog,
     validate_domain_inclusion?: false
+
+  code_interface do
+    define_calculation :draft, calculation: :total_value, args: [{:ref, :nav}]
+  end
 
   actions do
     default_accept []
@@ -126,6 +132,7 @@ defmodule AshCredoFixtures.Blog do
     # Keep the calculation interface first; see the moduledoc.
     resource AshCredoFixtures.Blog.Figure do
       define_calculation :figure_total_value, calculation: :total_value, args: [{:ref, :nav}]
+      define_calculation :draft, calculation: :total_value, args: [{:ref, :nav}]
       define :list_figures, action: :read
     end
   end

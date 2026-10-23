@@ -172,6 +172,15 @@ defmodule AshCredo.Introspection.CompiledTest do
                 resource: @figure
               }} = Compiled.code_interface_bang(AshCredoFixtures.Blog, :figure_total_value!)
     end
+
+    test "code_interface_bang/2 resolves a define_calculation named like an action" do
+      for module <- [AshCredoFixtures.Blog, @figure] do
+        assert {:ok, %{interface: %Ash.Resource.CalculationInterface{name: :draft} = iface}} =
+                 Compiled.code_interface_bang(module, :draft!)
+
+        assert Compiled.interface_action_name(iface) == nil
+      end
+    end
   end
 
   describe "error propagation through the accessors" do
