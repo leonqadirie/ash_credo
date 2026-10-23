@@ -144,6 +144,16 @@ defmodule AshCredo.Introspection.CompiledTest do
       assert Compiled.domain_interface(AshCredoFixtures.Blog, @figure, :draft) == nil
     end
 
+    test "find_interface/2 rejects the nil action name of a calculation interface" do
+      definitions = Compiled.domain_interfaces(AshCredoFixtures.Blog, @figure)
+      calc_iface = Enum.find(definitions, &match?(%Ash.Resource.CalculationInterface{}, &1))
+      action_name = Compiled.interface_action_name(calc_iface)
+
+      assert_raise FunctionClauseError, fn ->
+        Compiled.find_interface(definitions, action_name)
+      end
+    end
+
     test "interface_action_name/1 prefers the explicit action over the name" do
       {:ok, interfaces} = Compiled.interfaces(@post)
 
