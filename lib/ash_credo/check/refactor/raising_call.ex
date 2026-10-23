@@ -243,16 +243,12 @@ defmodule AshCredo.Check.Refactor.RaisingCall do
   # variant of a read code-interface rejects streaming, so suggesting it
   # would be wrong advice. On write or calculation interfaces, `stream?`
   # is not a recognised option and the check still flags the bang. A
-  # calculation interface resolves to no action, so one that shares its
-  # name with a read action does not inherit the exemption.
+  # calculation interface resolves to a nil action name, which no Ash
+  # action carries, so one that shares its name with a read action does
+  # not inherit the exemption.
   defp read_interface?(%{interface: iface, resource: resource}) when not is_nil(resource) do
-    case CompiledIntrospection.interface_action_name(iface) do
-      nil ->
-        false
-
-      action_name ->
-        match?({:ok, %{type: :read}}, CompiledIntrospection.action(resource, action_name))
-    end
+    action_name = CompiledIntrospection.interface_action_name(iface)
+    match?({:ok, %{type: :read}}, CompiledIntrospection.action(resource, action_name))
   end
 
   defp read_interface?(_), do: false
