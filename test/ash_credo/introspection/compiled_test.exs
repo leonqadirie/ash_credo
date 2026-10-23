@@ -123,6 +123,57 @@ defmodule AshCredo.Introspection.CompiledTest do
     end
   end
 
+  describe "domain-level interface lookups" do
+    @figure AshCredoFixtures.Blog.Figure
+
+    test "domain_interfaces/2 returns both action and calculation interfaces" do
+      definitions = Compiled.domain_interfaces(AshCredoFixtures.Blog, @figure)
+
+      assert Enum.any?(definitions, &match?(%Ash.Resource.Interface{name: :list_figures}, &1))
+
+      assert Enum.any?(
+               definitions,
+               &match?(%Ash.Resource.CalculationInterface{name: :figure_total_value}, &1)
+             )
+    end
+
+    test "domain_interface/3 skips calculation interfaces" do
+      assert %Ash.Resource.Interface{name: :list_figures} =
+               Compiled.domain_interface(AshCredoFixtures.Blog, @figure, :read)
+
+      assert Compiled.domain_interface(AshCredoFixtures.Blog, @figure, :draft) == nil
+    end
+
+    test "interface_action_name/1 prefers the explicit action over the name" do
+      {:ok, interfaces} = Compiled.interfaces(@post)
+
+      assert interfaces
+             |> Enum.find(&(&1.name == :published_posts))
+             |> Compiled.interface_action_name() == :published
+
+      assert interfaces |> Enum.find(&(&1.name == :archive)) |> Compiled.interface_action_name() ==
+               :archive
+    end
+
+    test "interface_action_name/1 returns nil for a calculation interface" do
+      calc_iface =
+        AshCredoFixtures.Blog
+        |> Compiled.domain_interfaces(@figure)
+        |> Enum.find(&match?(%Ash.Resource.CalculationInterface{}, &1))
+
+      assert Compiled.interface_action_name(calc_iface) == nil
+    end
+
+    test "code_interface_bang/2 resolves a domain define_calculation" do
+      assert {:ok,
+              %{
+                scope: :domain,
+                interface: %Ash.Resource.CalculationInterface{name: :figure_total_value},
+                resource: @figure
+              }} = Compiled.code_interface_bang(AshCredoFixtures.Blog, :figure_total_value!)
+    end
+  end
+
   describe "error propagation through the accessors" do
     test "a non-resource module yields :not_a_resource" do
       assert Compiled.interfaces(@plain) == {:error, :not_a_resource}

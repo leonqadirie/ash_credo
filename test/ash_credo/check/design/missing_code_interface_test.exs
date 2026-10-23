@@ -99,6 +99,18 @@ defmodule AshCredo.Check.Design.MissingCodeInterfaceTest do
     refute MapSet.member?(trigger_set(issues), "publish")
   end
 
+  test "skips domain-level calculation interfaces when matching actions" do
+    source = """
+    defmodule AshCredoFixtures.Blog.Figure do
+      use Ash.Resource, domain: AshCredoFixtures.Blog
+    end
+    """
+
+    issues = run_check(MissingCodeInterface, source)
+
+    assert MapSet.equal?(trigger_set(issues), MapSet.new(~w(draft)))
+  end
+
   test "no issue for embedded resources" do
     source = """
     defmodule AshCredoFixtures.Accounts.EmbeddedContact do

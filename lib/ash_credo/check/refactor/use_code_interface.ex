@@ -238,13 +238,9 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
   defp matching_interface(interfaces, action_name, action, site, info) do
     Enum.find(interfaces, fn iface ->
-      interface_action?(iface, action_name) and
+      CompiledIntrospection.interface_action_name(iface) == action_name and
         interface_matches_site?(iface, action, site, info)
     end)
-  end
-
-  defp interface_action?(iface, action_name) do
-    (iface.action || iface.name) == action_name
   end
 
   defp interface_matches_site?(iface, _action, %{call_kind: :get_one, lookup_keys: keys}, info) do

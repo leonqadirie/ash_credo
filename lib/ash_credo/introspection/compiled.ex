@@ -404,28 +404,47 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   @doc """
-  Given a resource's `interfaces` list (as returned by `interfaces/1`)
-  and an action name, returns the `%Ash.Resource.Interface{}` whose
-  action matches, either via the explicit `:action` field or by name
-  equality when the interface uses its own name as the action. Returns
-  `nil` when there is no match.
+  Given a list of resource- or domain-level interface definitions and an
+  action name, returns the `%Ash.Resource.Interface{}` whose action
+  matches, either via the explicit `:action` field or by name equality
+  when the interface uses its own name as the action. Skips calculation
+  interfaces. Returns `nil` when there is no match.
   """
   @spec find_interface([struct()], atom()) :: struct() | nil
-  def find_interface(interfaces, action_name) when is_list(interfaces) and is_atom(action_name) do
-    Enum.find(interfaces, fn iface ->
-      (iface.action || iface.name) == action_name
-    end)
+  def find_interface(interfaces, action_name)
+      when is_list(interfaces) and is_atom(action_name) and not is_nil(action_name) do
+    Enum.find(interfaces, &(interface_action_name(&1) == action_name))
   end
+
+  @doc """
+  Returns the action an `%Ash.Resource.Interface{}` targets: its explicit
+  `:action`, or its own `:name` when it has none. Returns `nil` for every
+  other struct, including `%Ash.Resource.CalculationInterface{}`, which
+  has no `:action` field. Read an interface's action only through this
+  function: it is the one place that tells the structs apart, so callers
+  can pass mixed lists without filtering them first.
+
+  The match is on `__struct__` rather than a struct literal because Ash
+  is a dev/test-only dependency: the literal fails to compile wherever
+  AshCredo compiles without Ash.
+  """
+  @spec interface_action_name(struct()) :: atom() | nil
+  def interface_action_name(%{__struct__: Ash.Resource.Interface} = iface),
+    do: iface.action || iface.name
+
+  def interface_action_name(_iface), do: nil
 
   @doc """
   Returns `{:ok, info}` if `Mod.fun!` resolves to an Ash code-interface
   bang, i.e. `Mod` is either a resource whose `code_interface` defines
   `fun` without the trailing `!`, or a domain whose `resources` block
-  declares a matching `define`. `info` is
-  `%{scope: :resource | :domain, interface: struct(), resource: module()}`,
-  where `:resource` is the resource the interface acts on: the same as
-  `Mod` for the `:resource` scope, the domain-referenced target for the
-  `:domain` scope.
+  declares a matching `define` or `define_calculation`. `info` is
+  `%{scope: :resource | :domain, interface: struct(), resource: module()}`.
+  `:interface` holds an `%Ash.Resource.Interface{}` for a `define` or an
+  `%Ash.Resource.CalculationInterface{}` for a `define_calculation`; only
+  the former has an `:action` field. `:resource` is the resource the interface
+  acts on: the same as `Mod` for the `:resource` scope, the
+  domain-referenced target for the `:domain` scope.
 
   Returns `{:error, :not_code_interface}` for everything else, including
   non-bang function names, modules that aren't Ash resources or domains,
@@ -510,22 +529,17 @@ defmodule AshCredo.Introspection.Compiled do
 
   def domain_interface(domain, resource, action_name)
       when is_atom(domain) and is_atom(resource) and is_atom(action_name) do
-    with true <- ash_available?(),
-         {:module, _} <- Code.ensure_compiled(domain),
-         ref when not is_nil(ref) <- resource_reference(domain, resource) do
-      Enum.find(ref.definitions, fn def ->
-        (def.action || def.name) == action_name
-      end)
-    else
-      _ -> nil
-    end
+    domain
+    |> domain_interfaces(resource)
+    |> find_interface(action_name)
   end
 
   @doc """
-  Returns all domain-level interface definitions (as
-  `%Ash.Resource.Interface{}`) declared for `resource` in `domain`'s
-  `resources do ... end` block, or `[]` if the domain doesn't reference
-  the resource.
+  Returns all interface definitions declared for `resource` in
+  `domain`'s `resources do ... end` block, or `[]` if the domain doesn't
+  reference the resource. The list mixes `%Ash.Resource.Interface{}`
+  (`define`) with `%Ash.Resource.CalculationInterface{}`
+  (`define_calculation`), and only the former has an `:action` field.
   """
   @spec domain_interfaces(module() | nil, module()) :: [struct()]
   def domain_interfaces(nil, _resource), do: []

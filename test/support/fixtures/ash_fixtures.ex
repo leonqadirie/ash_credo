@@ -58,10 +58,50 @@ defmodule AshCredoFixtures.Blog.Post do
   end
 end
 
+defmodule AshCredoFixtures.Blog.Figure do
+  @moduledoc """
+  Fixture resource whose domain-level `resources` entry mixes a
+  `define_calculation` with a `define`. Covers lookups over a domain
+  reference's `definitions`, which hold both `%Ash.Resource.Interface{}`
+  and `%Ash.Resource.CalculationInterface{}` entries:
+
+    * `:read`  - domain-level interface `list_figures`.
+    * `:draft` - action exists, no interface anywhere.
+
+  This module precedes `AshCredoFixtures.Blog` because the domain's
+  `define_calculation` reads the compiled resource's calculations.
+  """
+
+  use Ash.Resource,
+    domain: AshCredoFixtures.Blog,
+    validate_domain_inclusion?: false
+
+  actions do
+    default_accept []
+
+    read :read, primary?: true
+    read :draft
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :nav, :integer, public?: true
+  end
+
+  calculations do
+    calculate :total_value, :integer, expr(nav * 2)
+  end
+end
+
 defmodule AshCredoFixtures.Blog do
   @moduledoc """
   Fixture domain hosting `AshCredoFixtures.Blog.Post`. Defines a couple of
   domain-level code interfaces to exercise cross-domain message variants.
+
+  The `AshCredoFixtures.Blog.Figure` entry mixes `define_calculation` with
+  `define`. Its calculation interface comes first, so every action lookup
+  has to skip past it; the domain-level regression tests for calculation
+  interfaces depend on that order.
   """
 
   use Ash.Domain, validate_config_inclusion?: false
@@ -82,6 +122,12 @@ defmodule AshCredoFixtures.Blog do
     resource AshCredoFixtures.Blog.WithAuthorizer
     resource AshCredoFixtures.Blog.WithAuthorizerAndPolicies
     resource AshCredoFixtures.Blog.WithCalcInterface
+
+    # Keep the calculation interface first; see the moduledoc.
+    resource AshCredoFixtures.Blog.Figure do
+      define_calculation :figure_total_value, calculation: :total_value, args: [{:ref, :nav}]
+      define :list_figures, action: :read
+    end
   end
 end
 
