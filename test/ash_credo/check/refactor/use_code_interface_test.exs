@@ -468,6 +468,34 @@ defmodule AshCredo.Check.Refactor.UseCodeInterfaceTest do
     end
   end
 
+  describe "domain with a calculation interface" do
+    test "skips the calculation interface and suggests the domain action interface" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def figures do
+          Ash.read!(AshCredoFixtures.Blog.Figure)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "AshCredoFixtures.Blog.list_figures!"
+    end
+
+    test "suggests defining an interface for an uncovered action in a domain with calculation interfaces" do
+      source = """
+      defmodule AshCredoFixtures.Accounts do
+        def drafts do
+          Ash.read!(AshCredoFixtures.Blog.Figure, action: :draft)
+        end
+      end
+      """
+
+      assert [issue] = run_check(UseCodeInterface, source)
+      assert issue.message =~ "define :some_name, action: :draft"
+    end
+  end
+
   # ── Builder calls ──────────────────────────────────────────────────────────
 
   describe "builder calls" do

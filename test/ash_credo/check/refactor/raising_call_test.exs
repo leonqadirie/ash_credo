@@ -473,6 +473,18 @@ defmodule AshCredo.Check.Refactor.RaisingCallTest do
       assert issue.message =~ "Prefer `AshCredoFixtures.Blog.WithCalcInterface.upcased_title`"
     end
 
+    test "flags a domain-level calculation-interface bang" do
+      source = """
+      defmodule MyApp.Worker do
+        def total, do: AshCredoFixtures.Blog.figure_total_value!(1)
+      end
+      """
+
+      assert [issue] = run_check(RaisingCall, source)
+      assert issue.trigger == "AshCredoFixtures.Blog.figure_total_value!"
+      assert issue.message =~ "Prefer `AshCredoFixtures.Blog.figure_total_value`"
+    end
+
     test "ignores non-Ash module bang calls" do
       source = """
       defmodule MyApp.Worker do
