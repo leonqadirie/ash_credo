@@ -80,7 +80,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
       Enum.map(lines, fn line ->
         format_issue(issue_meta,
           message:
-            "`authorize?: false` bypasses authorization. Pass the caller's actor instead; use a system actor with a bypass policy only when no user is acting.",
+            "`authorize?: false` bypasses authorization. Pass the caller's scope instead; use a system actor with a bypass policy only when no user is acting.",
           trigger: "authorize?: false",
           line_no: line
         )
