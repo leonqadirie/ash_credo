@@ -9,6 +9,10 @@ defmodule Mix.Tasks.Lint.Credence do
   Files under any `fixtures/` directory are skipped: they intentionally
   contain code that violates Ash conventions so the plugin's own checks can
   detect them, which would otherwise trip Credence's semantic rules.
+
+  `test/test_helper.exs` is skipped too: Credence compiles each file
+  in-process, which executes a script's top-level code, so analysing the
+  helper would start ExUnit and print an empty test run at exit.
   """
 
   use Mix.Task
@@ -16,6 +20,7 @@ defmodule Mix.Tasks.Lint.Credence do
   @source_dirs ["lib", "test"]
   @extensions [".ex", ".exs"]
   @excluded_segments ["fixtures"]
+  @excluded_files ["test/test_helper.exs"]
 
   @impl true
   def run(_args) do
@@ -54,9 +59,10 @@ defmodule Mix.Tasks.Lint.Credence do
   end
 
   defp excluded?(path) do
-    path
-    |> Path.split()
-    |> Enum.any?(&(&1 in @excluded_segments))
+    path in @excluded_files or
+      path
+      |> Path.split()
+      |> Enum.any?(&(&1 in @excluded_segments))
   end
 
   defp analyze_file(path) do
