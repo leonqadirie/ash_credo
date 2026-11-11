@@ -31,7 +31,7 @@ defmodule AshCredo.Introspection.Compiled do
       that doesn't depend on Ash. Callers should treat this as
       "Ash-aware checks are a no-op in this project" and emit a single
       diagnostic.
-    * `{:error, :not_loadable}` - `Code.ensure_compiled/1` returned an
+    * `{:error, :not_loadable}` - `Code.ensure_loaded/1` returned an
       error, typically because the host project hasn't been compiled
       yet. The caller should surface a "run `mix compile` first" hint.
     * `{:error, :not_a_resource}` - the module loaded successfully but
@@ -241,7 +241,7 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   defp ensure_loadable(module) do
-    case Code.ensure_compiled(module) do
+    case Code.ensure_loaded(module) do
       {:module, _} -> :ok
       _ -> {:error, :not_loadable}
     end
@@ -304,7 +304,7 @@ defmodule AshCredo.Introspection.Compiled do
   end
 
   defp exports(module, kind) do
-    with {:module, ^module} <- Code.ensure_compiled(module),
+    with {:module, ^module} <- Code.ensure_loaded(module),
          true <- function_exported?(module, :__info__, 1) do
       {:ok, MapSet.new(module.__info__(kind))}
     else
@@ -353,7 +353,7 @@ defmodule AshCredo.Introspection.Compiled do
 
   Determined by the `spark_is/0` function that Spark DSL modules inject.
   Cached per module, so only the first probe of a given module pays the
-  `Code.ensure_compiled/1` filesystem search on negative results.
+  `Code.ensure_loaded/1` filesystem search on negative results.
   """
   @spec domain?(module()) :: boolean()
   def domain?(module) when is_atom(module) do
@@ -362,7 +362,7 @@ defmodule AshCredo.Introspection.Compiled do
 
   defp compute_domain?(module) do
     ash_available?() and
-      match?({:module, _}, Code.ensure_compiled(module)) and
+      match?({:module, _}, Code.ensure_loaded(module)) and
       function_exported?(module, :spark_is, 0) and
       module.spark_is() == Ash.Domain
   end
@@ -375,7 +375,7 @@ defmodule AshCredo.Introspection.Compiled do
   Detected by inspecting the module's `:behaviour` attribute, which
   `use Ash.Resource.Change` and its siblings populate at compile time.
   Cached per module, so only the first probe pays the
-  `Code.ensure_compiled/1` cost.
+  `Code.ensure_loaded/1` cost.
   """
   @spec ash_callback_module?(module()) :: boolean()
   def ash_callback_module?(module) when is_atom(module) do
@@ -386,7 +386,7 @@ defmodule AshCredo.Introspection.Compiled do
 
   defp compute_ash_callback_module?(module) do
     with true <- ash_available?(),
-         {:module, _} <- Code.ensure_compiled(module) do
+         {:module, _} <- Code.ensure_loaded(module) do
       module_behaviours(module)
       |> Enum.any?(&(&1 in @ash_callback_behaviours))
     else
@@ -399,7 +399,7 @@ defmodule AshCredo.Introspection.Compiled do
     |> Keyword.get_values(:behaviour)
     |> List.flatten()
   rescue
-    # TOCTOU: module purged after the caller's `Code.ensure_compiled/1`.
+    # TOCTOU: module purged after the caller's `Code.ensure_loaded/1`.
     UndefinedFunctionError -> []
   end
 
@@ -450,7 +450,7 @@ defmodule AshCredo.Introspection.Compiled do
   non-bang function names, modules that aren't Ash resources or domains,
   and modules whose interfaces don't declare a matching name. Results
   (negatives included) are cached per `{module, fun}`, so repeated
-  probes of non-Ash modules don't re-run `Code.ensure_compiled/1` on
+  probes of non-Ash modules don't re-run `Code.ensure_loaded/1` on
   every call.
 
   The match is by interface `:name`, i.e. the generated function name,
@@ -546,7 +546,7 @@ defmodule AshCredo.Introspection.Compiled do
 
   def domain_interfaces(domain, resource) when is_atom(domain) and is_atom(resource) do
     with true <- ash_available?(),
-         {:module, _} <- Code.ensure_compiled(domain),
+         {:module, _} <- Code.ensure_loaded(domain),
          ref when not is_nil(ref) <- resource_reference(domain, resource) do
       ref.definitions
     else
@@ -697,7 +697,7 @@ defmodule AshCredo.Introspection.Compiled do
   # ── Private ──
 
   defp do_inspect(module) do
-    case Code.ensure_compiled(module) do
+    case Code.ensure_loaded(module) do
       {:module, ^module} ->
         if ResourceInfo.resource?(module) do
           {:ok,

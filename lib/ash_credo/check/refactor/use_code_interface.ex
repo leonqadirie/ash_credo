@@ -85,7 +85,7 @@ defmodule AshCredo.Check.Refactor.UseCodeInterface do
 
       ## Requirements
 
-      The check calls `Code.ensure_compiled/1` on every referenced resource
+      The check calls `Code.ensure_loaded/1` on every referenced resource
       to query Ash's introspection API. This means **your project must be
       compiled before running `mix credo`** - typically `mix compile && mix
       credo` or a Mix alias that chains the two.
