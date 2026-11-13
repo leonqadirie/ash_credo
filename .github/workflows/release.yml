@@ -13,6 +13,9 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
@@ -55,3 +58,33 @@ jobs:
           git add README.md
           git commit -m "docs: update README version"
           git push
+
+  # Publishes the package and its docs to Hex when merging the release PR
+  # made release-please tag a release. The job builds from that tag.
+  #
+  # No Hex API key is stored: with `id-token: write` and no `HEX_API_KEY`,
+  # `mix hex.publish` exchanges the job's OIDC token for a short-lived token
+  # that can only publish this package. The package's workload identity on
+  # hex.pm must name this repository, this workflow file, and the `hex`
+  # environment; hex.pm requires an environment for a public repository.
+  publish:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    environment: hex
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          persist-credentials: false
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          otp-version: "29"
+          elixir-version: "1.20"
+      - run: mix deps.get
+      # ex_doc is a `:dev` dependency, so the default environment builds
+      # the docs that `hex.publish` uploads with the package.
+      - run: mix hex.publish --yes

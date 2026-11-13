@@ -166,3 +166,6 @@ jobs:
             mix-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
       - run: mix deps.get
       - run: mix lint
+      # Fails when the package would not build, before a release tries to
+      # publish it.
+      - run: mix hex.build
