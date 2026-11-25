@@ -75,7 +75,7 @@ If you have any compiled-introspection checks enabled, run `mix compile` before 
 | Check | Category | Priority | Default | Description |
 |---|---|---|---|---|
 | `ActorOnCallOptions` | Warning | High | No | Flags `actor:`/`tenant:` passed in the options of `Ash.read!`/`Ash.create!`/... when the subject visibly went through a `for_*` builder. Per Ash's authorization usage rules, these options belong on the query, changeset, or input |
-| `AuthorizeFalse` | Warning | High | No | Flags literal `authorize?: false` in Ash calls, action DSL, and (by default) any other call site |
+| `AuthorizeFalse` | Warning | High | No | Flags literal `authorize?: false` in Ash calls, action DSL, and (by default) anywhere else in the source |
 | `AuthorizerWithoutPolicies` | Warning | High | No | Detects resources with `Ash.Policy.Authorizer` but no policies defined. **Requires a compiled project.** |
 | `CompileTimeDefault` | Warning | High | Yes | Flags `default: DateTime.utc_now()` / `Ash.UUID.generate()` (missing the `&.../0` capture) on attributes and arguments. The call runs once at compile time, so every record gets the same frozen value |
 | `EmptyDomain` | Warning | Normal | No | Flags domains with no resources registered |

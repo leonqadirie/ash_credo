@@ -422,11 +422,11 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     assert issue.line_no == 1
   end
 
-  test "reports issue for authorize?: false in the receiver of a chained call" do
+  test "reports issue for authorize?: false in a call whose result is accessed" do
     source = """
     defmodule MyApp.Accounts do
       def list_users do
-        MyApp.Reader.new(authorize?: false).run()
+        MyApp.Accounts.list_users!(page: [limit: 10], authorize?: false).results
       end
     end
     """
@@ -435,10 +435,10 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     assert issue.line_no == 3
   end
 
-  test "reports issue for authorize?: false in the first element of a tuple" do
+  test "reports issue for authorize?: false in a call in the first element of a tuple" do
     source = """
     defmodule MyApp.Accounts do
-      def system_opts, do: {[authorize?: false], :system}
+      def users_and_count(count), do: {MyApp.Accounts.list_users!(authorize?: false), count}
     end
     """
 
