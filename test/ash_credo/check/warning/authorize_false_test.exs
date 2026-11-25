@@ -413,6 +413,39 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     assert issue.line_no == 2
   end
 
+  test "reports line 1 for a literal with no enclosing call" do
+    source = """
+    [authorize?: false]
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.line_no == 1
+  end
+
+  test "reports issue for authorize?: false in the receiver of a chained call" do
+    source = """
+    defmodule MyApp.Accounts do
+      def list_users do
+        MyApp.Reader.new(authorize?: false).run()
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.line_no == 3
+  end
+
+  test "reports issue for authorize?: false in the first element of a tuple" do
+    source = """
+    defmodule MyApp.Accounts do
+      def system_opts, do: {[authorize?: false], :system}
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.line_no == 2
+  end
+
   test "skips nested literals outside Ash calls when include_non_ash_calls is false" do
     source = """
     defmodule MyApp.Accounts do

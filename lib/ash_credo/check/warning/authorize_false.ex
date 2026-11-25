@@ -127,7 +127,7 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
   # (`{MyChange, authorize?: false}`).
   defp literal_lines({:authorize?, false}, line, acc), do: [line | acc]
 
-  defp literal_lines({name, meta, args}, line, acc) when is_list(meta) do
+  defp literal_lines({name, meta, args}, line, acc) do
     line = meta[:line] || line
     literal_lines(args, line, literal_lines(name, line, acc))
   end
