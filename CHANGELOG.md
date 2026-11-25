@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.19.3](https://github.com/leonqadirie/ash_credo/compare/v0.19.2...v0.19.3) (2026-11-25)
+
+
+### Bug Fixes
+
+* flag nested authorize?: false literals in AuthorizeFalse ([5895ccf](https://github.com/leonqadirie/ash_credo/commit/5895ccff67b1992ef1b4622845027f6d66d3691d))
+
 ## [0.19.2](https://github.com/leonqadirie/ash_credo/compare/v0.19.1...v0.19.2) (2026-10-23)
 
 
