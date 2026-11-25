@@ -331,6 +331,98 @@ defmodule AshCredo.Check.Warning.AuthorizeFalseTest do
     assert issue.trigger == "authorize?: false"
   end
 
+  test "reports issue for authorize?: false returned from a keyword-form function" do
+    source = """
+    defmodule MyApp.Accounts do
+      def system_opts, do: [authorize?: false]
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.trigger == "authorize?: false"
+    assert issue.line_no == 2
+  end
+
+  test "reports issue for authorize?: false returned from a do-block function" do
+    source = """
+    defmodule MyApp.Accounts do
+      def system_opts do
+        [authorize?: false]
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.line_no == 2
+  end
+
+  test "reports issue for authorize?: false in an if branch" do
+    source = """
+    defmodule MyApp.Accounts do
+      def opts(admin?) do
+        if admin?, do: [authorize?: false], else: []
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.line_no == 3
+  end
+
+  test "reports issue for authorize?: false nested under another option key" do
+    source = """
+    defmodule MyApp.Accounts do
+      def list_users(query) do
+        MyApp.Reader.read(query, ash_opts: [authorize?: false])
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.line_no == 3
+  end
+
+  test "reports issue for authorize?: false in a module-and-options tuple" do
+    source = """
+    defmodule MyApp.Post do
+      use Ash.Resource
+
+      actions do
+        update :publish do
+          change {MyApp.Changes.Publish, authorize?: false}
+        end
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.line_no == 6
+  end
+
+  test "reports the enclosing line when the last statement of a body is the literal" do
+    source = """
+    defmodule MyApp.Accounts do
+      def system_opts do
+        log()
+        [authorize?: false]
+      end
+    end
+    """
+
+    assert [issue] = run_check(AuthorizeFalse, source)
+    assert issue.line_no == 2
+  end
+
+  test "skips nested literals outside Ash calls when include_non_ash_calls is false" do
+    source = """
+    defmodule MyApp.Accounts do
+      def system_opts, do: [authorize?: false]
+    end
+    """
+
+    assert [] = run_check(AuthorizeFalse, source, include_non_ash_calls: false)
+  end
+
   describe "excluded_paths" do
     test "skips files under test/ by default" do
       source = """

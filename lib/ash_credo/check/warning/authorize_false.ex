@@ -113,25 +113,34 @@ defmodule AshCredo.Check.Warning.AuthorizeFalse do
   end
 
   defp all_authorize_false_lines(source_file) do
-    literal_lines =
-      Credo.Code.prewalk(
-        source_file,
-        fn
-          {_name, meta, args} = ast, acc when is_list(args) and is_list(meta) ->
-            if has_authorize_false?(args) do
-              {ast, [meta[:line] | acc]}
-            else
-              {ast, acc}
-            end
-
-          ast, acc ->
-            {ast, acc}
-        end,
-        []
-      )
+    literal_lines = literal_lines(SourceFile.ast(source_file), 1, [])
 
     Enum.sort(Enum.uniq(ash_authorize_false_lines(source_file) ++ literal_lines))
   end
+
+  # Keyword pairs and 2-tuples carry no metadata in the AST, so each
+  # literal takes the line of its nearest enclosing node that has one.
+  # The walk descends through nested keyword values and 2-tuples, which
+  # reaches a literal returned from a function body
+  # (`def opts, do: [authorize?: false]`), nested under another key
+  # (`ash_opts: [authorize?: false]`), or paired with a module
+  # (`{MyChange, authorize?: false}`).
+  defp literal_lines({:authorize?, false}, line, acc), do: [line | acc]
+
+  defp literal_lines({name, meta, args}, line, acc) when is_list(meta) do
+    line = meta[:line] || line
+    literal_lines(args, line, literal_lines(name, line, acc))
+  end
+
+  defp literal_lines({left, right}, line, acc) do
+    literal_lines(right, line, literal_lines(left, line, acc))
+  end
+
+  defp literal_lines(list, line, acc) when is_list(list) do
+    Enum.reduce(list, acc, &literal_lines(&1, line, &2))
+  end
+
+  defp literal_lines(_other, _line, acc), do: acc
 
   defp has_authorize_false?(args) do
     Enum.any?(args, fn
